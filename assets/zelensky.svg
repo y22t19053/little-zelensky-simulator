@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1080" role="img" aria-labelledby="title desc">
+  <title id="title">疲惫而坚定的泽连斯基肖像</title>
+  <desc id="desc">克制严肃的政治漫画风半身像。泽连斯基穿军绿色抓绒外套，眼下带着疲态，目光直视前方；深灰背景与低饱和琥珀色光晕衬托面部。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#292e2b"/>
+      <stop offset="1" stop-color="#171b19"/>
+    </linearGradient>
+    <linearGradient id="skin" x1="0.18" y1="0" x2="0.82" y2="1">
+      <stop offset="0" stop-color="#c69a78"/>
+      <stop offset="0.58" stop-color="#ad7f61"/>
+      <stop offset="1" stop-color="#8d624d"/>
+    </linearGradient>
+    <linearGradient id="fleece" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#657057"/>
+      <stop offset="1" stop-color="#3d4838"/>
+    </linearGradient>
+    <clipPath id="frame">
+      <rect width="960" height="1080" rx="28"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="960" height="1080" fill="url(#background)"/>
+    <circle cx="482" cy="403" r="323" fill="#b18a50" opacity="0.12"/>
+    <circle cx="482" cy="403" r="270" fill="none" stroke="#c19a5d" stroke-width="2" opacity="0.22"/>
+    <path d="M0 823L960 640V1080H0Z" fill="#222824"/>
+    <path d="M75 183H255M705 183H885" stroke="#8c967f" stroke-width="3" opacity="0.25"/>
+    <path d="M110 213H205M755 213H850" stroke="#b18a50" stroke-width="3" opacity="0.32"/>
+
+    <!-- Shoulders and fleece: restrained, field-worn geometry. -->
+    <path d="M133 1080L151 914Q166 813 300 775L390 746H570L660 775Q794 813 809 914L827 1080Z" fill="url(#fleece)"/>
+    <path d="M151 914Q166 813 300 775L349 760L301 1080H133Z" fill="#505c47"/>
+    <path d="M809 914Q794 813 660 775L611 760L659 1080H827Z" fill="#354032"/>
+    <path d="M300 775L390 746H570L660 775L596 850L524 813L480 883L436 813L364 850Z" fill="#2e382d"/>
+    <path d="M365 766L397 710H563L595 766L526 823L480 879L434 823Z" fill="#78816a"/>
+    <path d="M393 759L417 705H543L567 759L519 795L480 848L441 795Z" fill="#414b3c"/>
+    <path d="M480 848V1080" stroke="#242d24" stroke-width="12"/>
+    <path d="M480 866V1080" stroke="#8a917a" stroke-width="3" opacity="0.65"/>
+    <path d="M207 937L314 914M646 914L753 937" stroke="#7b856e" stroke-width="4" opacity="0.35"/>
+    <path d="M237 968L312 953M648 953L723 968" stroke="#2e382d" stroke-width="5" opacity="0.7"/>
+    <path d="M332 1080L350 923M628 1080L610 923" stroke="#303a2f" stroke-width="5" opacity="0.55"/>
+
+    <!-- Neck and ears. -->
+    <path d="M381 605L390 735Q480 797 570 735L579 605Z" fill="#93664f"/>
+    <path d="M393 650Q480 715 567 650L570 735Q480 797 390 735Z" fill="#7d5544" opacity="0.55"/>
+    <path d="M294 379Q259 363 254 411L265 495Q274 537 313 516L325 449Z" fill="#9f7157"/>
+    <path d="M666 379Q701 363 706 411L695 495Q686 537 647 516L635 449Z" fill="#8f624e"/>
+    <path d="M279 411Q294 397 307 424L298 477Q281 465 279 411Z" fill="#735043" opacity="0.65"/>
+    <path d="M681 411Q666 397 653 424L662 477Q679 465 681 411Z" fill="#704c3e" opacity="0.65"/>
+
+    <!-- Face: asymmetric planes retain an editorial, not cartoon, character. -->
+    <path d="M308 312Q320 180 480 167Q640 180 652 312L642 493Q630 614 558 673Q516 706 480 709Q444 706 402 673Q330 614 318 493Z" fill="url(#skin)"/>
+    <path d="M308 312Q320 180 480 167L456 708Q428 697 402 673Q330 614 318 493Z" fill="#d0a17c" opacity="0.17"/>
+    <path d="M480 167Q640 180 652 312L642 493Q630 614 558 673Q516 706 480 709L510 552L534 451L527 311Z" fill="#694a3e" opacity="0.12"/>
+    <path d="M323 346Q303 237 367 177Q422 125 506 140Q617 145 650 249L646 349L617 290Q563 271 524 229Q444 285 342 280Z" fill="#33352f"/>
+    <path d="M338 278Q369 180 478 166Q570 159 626 238Q551 189 502 196Q421 206 338 278Z" fill="#4b4b40" opacity="0.65"/>
+    <path d="M323 346L342 280Q444 285 524 229Q563 271 617 290L646 349L627 311Q566 302 520 263Q431 316 339 309Z" fill="#252925" opacity="0.7"/>
+
+    <!-- Brow, eyes and lower lids carry fatigue without exaggeration. -->
+    <path d="M348 381Q394 350 443 376L438 393Q393 375 351 399Z" fill="#443c32"/>
+    <path d="M517 376Q566 350 612 381L609 399Q567 375 522 393Z" fill="#3d372f"/>
+    <path d="M352 420Q393 390 439 419Q397 446 352 420Z" fill="#d0b093"/>
+    <path d="M521 419Q567 390 608 420Q563 446 521 419Z" fill="#c6a488"/>
+    <path d="M365 418Q395 402 426 418Q396 431 365 418Z" fill="#e0c3a4" opacity="0.55"/>
+    <path d="M534 418Q565 402 595 418Q565 431 534 418Z" fill="#d8b99a" opacity="0.45"/>
+    <ellipse cx="399" cy="417" rx="13" ry="15" fill="#454b40"/>
+    <ellipse cx="561" cy="417" rx="13" ry="15" fill="#42483e"/>
+    <circle cx="399" cy="418" r="6" fill="#1c211e"/>
+    <circle cx="561" cy="418" r="6" fill="#1c211e"/>
+    <circle cx="395" cy="412" r="2.5" fill="#d6c5aa"/>
+    <circle cx="557" cy="412" r="2.5" fill="#d6c5aa"/>
+    <path d="M352 420Q393 390 439 419M521 419Q567 390 608 420" fill="none" stroke="#3c352e" stroke-width="7" stroke-linecap="round"/>
+    <path d="M360 452Q399 468 435 450M525 450Q561 468 600 452" fill="none" stroke="#79594a" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
+    <path d="M367 469Q400 480 428 467M532 467Q560 480 593 469" fill="none" stroke="#d0a17c" stroke-width="3" opacity="0.34"/>
+
+    <!-- Nose, set mouth, short beard. -->
+    <path d="M475 398L451 514Q449 539 480 544Q511 539 509 514L485 398" fill="#9c6e55" opacity="0.6"/>
+    <path d="M475 424L464 513Q466 527 480 529" fill="none" stroke="#d3a47e" stroke-width="7" stroke-linecap="round" opacity="0.5"/>
+    <path d="M445 541Q462 530 480 541Q498 530 515 541" fill="none" stroke="#6d4b3e" stroke-width="6" stroke-linecap="round"/>
+    <path d="M399 586Q439 569 480 582Q521 569 561 586Q522 590 480 594Q438 590 399 586Z" fill="#704d40"/>
+    <path d="M405 588Q443 593 480 594Q517 593 555 588Q523 616 480 614Q437 616 405 588Z" fill="#8d5f4d"/>
+    <path d="M420 588H540" stroke="#3c332d" stroke-width="6" stroke-linecap="round"/>
+    <path d="M339 492Q349 610 410 668Q449 704 480 709Q511 704 550 668Q611 610 621 492Q601 582 559 620Q524 650 480 654Q436 650 401 620Q359 582 339 492Z" fill="#363a32" opacity="0.8"/>
+    <path d="M362 547Q379 613 420 650M598 547Q581 613 540 650" fill="none" stroke="#55564a" stroke-width="5" opacity="0.6"/>
+    <path d="M411 668Q480 695 549 668Q520 706 480 709Q440 706 411 668Z" fill="#292e29"/>
+    <path d="M390 570L379 555M407 627L394 615M570 627L583 615M570 570L581 555M448 665L442 677M512 665L518 677" stroke="#777365" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+
+    <rect x="22" y="22" width="916" height="1036" rx="18" fill="none" stroke="#a5ad96" stroke-width="2" opacity="0.13"/>
+  </g>
+</svg>

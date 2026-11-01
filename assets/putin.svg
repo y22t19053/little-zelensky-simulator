@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">长桌尽头的普京</title>
+  <desc id="desc">冷灰色调的克制政治漫画。普京独自坐在空旷大厅的长桌远端，人物很小，桌面透视线向观者延伸，强调距离与疏离感。</desc>
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#343b40"/>
+      <stop offset="1" stop-color="#1e2428"/>
+    </linearGradient>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#687076"/>
+      <stop offset="0.45" stop-color="#454d52"/>
+      <stop offset="1" stop-color="#272e32"/>
+    </linearGradient>
+    <linearGradient id="tableEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#30383d"/>
+      <stop offset="1" stop-color="#151a1d"/>
+    </linearGradient>
+    <radialGradient id="coldLight" cx="50%" cy="30%" r="62%">
+      <stop offset="0" stop-color="#aab2b5" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#aab2b5" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="frame">
+      <rect width="1200" height="900" rx="24"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="900" fill="url(#wall)"/>
+    <rect width="1200" height="690" fill="url(#coldLight)"/>
+    <path d="M0 593H1200V900H0Z" fill="#171d20"/>
+    <path d="M0 593H1200" stroke="#7b8589" stroke-width="3" opacity="0.24"/>
+
+    <!-- A severe, empty hall; no emblems or slogans. -->
+    <path d="M85 0V593M1115 0V593" stroke="#151b1e" stroke-width="34" opacity="0.65"/>
+    <path d="M104 0V593M1096 0V593" stroke="#7b8589" stroke-width="3" opacity="0.22"/>
+    <path d="M214 0V556M986 0V556" stroke="#232b2f" stroke-width="12"/>
+    <path d="M231 0V556M969 0V556" stroke="#778186" stroke-width="2" opacity="0.18"/>
+    <rect x="356" y="78" width="488" height="353" rx="3" fill="#20272b" stroke="#626c71" stroke-width="3" opacity="0.8"/>
+    <rect x="377" y="99" width="446" height="311" fill="#293136"/>
+    <path d="M600 99V410M377 254H823" stroke="#161d20" stroke-width="9"/>
+    <path d="M391 112H809V397H391Z" fill="none" stroke="#818b8f" stroke-width="2" opacity="0.15"/>
+    <path d="M0 676L480 548M1200 676L720 548M0 808L480 548M1200 808L720 548" stroke="#697379" stroke-width="2" opacity="0.12"/>
+
+    <!-- Distant chair and isolated figure. -->
+    <path d="M535 371Q535 337 568 337H632Q665 337 665 371V539H535Z" fill="#12181b" stroke="#5f696e" stroke-width="3"/>
+    <path d="M550 365Q550 352 566 352H634Q650 352 650 365V507H550Z" fill="#252d31"/>
+    <path d="M533 523L520 624M667 523L680 624" stroke="#11171a" stroke-width="12"/>
+    <path d="M547 500Q557 462 581 449H619Q643 462 653 500L660 552H540Z" fill="#20272b"/>
+    <path d="M565 467L582 449H618L635 467L622 530H578Z" fill="#313a3f"/>
+    <path d="M582 449L600 477L618 449L612 511H588Z" fill="#a4a6a1"/>
+    <path d="M596 474H604L609 514L600 526L591 514Z" fill="#3c454a"/>
+    <path d="M575 420L580 458Q600 475 620 458L625 420Z" fill="#9c8878"/>
+    <path d="M552 344Q557 296 600 291Q643 296 648 344L641 405Q632 442 600 451Q568 442 559 405Z" fill="#b3a08d"/>
+    <path d="M552 344Q557 296 600 291Q643 296 648 344L638 326Q614 319 600 305Q583 324 561 329Z" fill="#a8a69b"/>
+    <path d="M555 337Q566 302 600 300Q634 302 645 337Q627 314 601 315Q575 314 555 337Z" fill="#c0bdb0" opacity="0.55"/>
+    <path d="M560 363Q578 351 591 362M609 362Q622 351 640 363" fill="none" stroke="#6c6259" stroke-width="4" stroke-linecap="round"/>
+    <path d="M565 374H587M613 374H635" stroke="#333b3e" stroke-width="4" stroke-linecap="round"/>
+    <path d="M600 370L592 401Q600 407 608 401" fill="none" stroke="#806f62" stroke-width="3" stroke-linecap="round"/>
+    <path d="M580 421Q600 416 620 421" fill="none" stroke="#64584f" stroke-width="4" stroke-linecap="round"/>
+    <path d="M565 401Q570 433 600 451Q630 433 635 401Q625 430 600 435Q575 430 565 401Z" fill="#8f7d6e" opacity="0.38"/>
+    <path d="M552 491Q526 500 503 523L511 537L567 526M648 491Q674 500 697 523L689 537L633 526" fill="#242c30" stroke="#1a2023" stroke-width="3"/>
+    <path d="M503 523Q494 526 498 537Q506 545 520 535L511 527Z" fill="#a38f7d"/>
+    <path d="M697 523Q706 526 702 537Q694 545 680 535L689 527Z" fill="#a38f7d"/>
+
+    <!-- The long table dominates the composition and separates viewer from figure. -->
+    <path d="M480 535H720L1118 833H82Z" fill="url(#table)"/>
+    <path d="M82 833H1118V900H82Z" fill="url(#tableEdge)"/>
+    <path d="M82 833H1118" stroke="#8a9295" stroke-width="5" opacity="0.5"/>
+    <path d="M480 535L82 833M720 535L1118 833" stroke="#a2aaac" stroke-width="4" opacity="0.45"/>
+    <path d="M600 535V833" stroke="#899296" stroke-width="2" opacity="0.16"/>
+    <path d="M453 565H747M391 618H809M294 697H906" stroke="#b0b6b7" stroke-width="2" opacity="0.12"/>
+    <path d="M502 550H698L956 760H244Z" fill="none" stroke="#bbc0c0" stroke-width="2" opacity="0.1"/>
+    <path d="M160 857H1040" stroke="#111719" stroke-width="6" opacity="0.55"/>
+    <path d="M0 899H1200" stroke="#8b743f" stroke-width="4" opacity="0.28"/>
+    <rect x="20" y="20" width="1160" height="860" rx="15" fill="none" stroke="#a1aaad" stroke-width="2" opacity="0.13"/>
+  </g>
+</svg>
