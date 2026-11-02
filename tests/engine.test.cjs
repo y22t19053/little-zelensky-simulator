@@ -414,6 +414,7 @@ test('固定策略可以从头玩到结局，且结局数据完整', function ()
   assert.ok(state.ending && state.ending.title);
   assert.equal(state.ending.finalStats.safety, state.stats.safety);
   assert.equal(state.ending.keyChoices.length, state.choices.length);
+  assert.ok(Array.isArray(state.ending.commandChains) && state.ending.commandChains.length >= 1, '结局必须带可追溯的关键命令链');
   assert.ok(state.ending.epilogue.length >= 1);
   assert.ok(state.ending.reasons.length >= 1);
   assert.ok(state.log.length >= 7);
@@ -578,6 +579,249 @@ test('v1 存档迁移为 v2 台账，保留旧决策且不重复结算', functio
   assert.equal(loaded.state.commands[0].status, 'completed');
   assert.equal(loaded.state.choices.length, 1);
   assert.deepEqual(loaded.state.stats, old.stats, '迁移不得重算旧状态');
+});
+
+console.log('\n[v0.4.1 决策重量与执行约束]');
+test('1 AP 单项工作自行排队，不占机构优先席位；2 AP 命令占用席位', function () {
+  const state = fresh();
+  const routine = L.issueCommand(state, 'address');
+  assert.equal(routine.ok, true);
+  assert.equal(routine.command.slotRequired, false);
+  assert.equal(L.authorizeCommand(state, routine.command.id).ok, true);
+  assert.equal(state.agencies[routine.command.agency].workload, 0, '常规工作不应占用优先席位');
+
+  const priority = L.issueCommand(state, 'mobilize');
+  assert.equal(priority.command.slotRequired, true);
+  const authorized = L.authorizeCommand(state, priority.command.id);
+  assert.equal(authorized.ok, true);
+  assert.equal(state.agencies.general_staff.workload, 1, '2 AP 跨部门命令应占用一个优先席位');
+});
+
+test('没有新签发命令但 AP 已用于其他事务时允许结束回合', function () {
+  const state = fresh();
+  state.ap = 0;
+  assert.equal(state.executed.length, 0);
+  const result = L.endRound(state);
+  assert.equal(result.ok, true, '把注意力用于追问或协调后不应卡死在结束回合');
+  assert.equal(state.phase, 'interlude');
+});
+
+test('机构容量满时命令阻塞；总统介入越过排队但透支协调且只结算一次', function () {
+  const state = fresh();
+  state.agencies.general_staff.workload = 3;
+  const issued = L.issueCommand(state, 'mobilize');
+  assert.equal(issued.ok, true);
+  const authorized = L.authorizeCommand(state, issued.command.id);
+  assert.equal(authorized.blocked, true);
+  assert.equal(issued.command.status, 'blocked');
+  assert.equal(issued.command.blockedCode, 'CAPACITY');
+  assert.equal(state.agencies.general_staff.workload, 3, '阻塞命令不应凭空占用名额');
+  assert.equal(state.stats.gov, L.meta.initialStats.gov, '阻塞时不得提前结算');
+
+  const follow = L.followUpCommand(state, issued.command.id);
+  assert.equal(follow.ok, true);
+  assert.equal(state.ap, 0, '亲自介入必须支付 1 AP');
+  assert.equal(state.agencies.general_staff.workload, 4, '介入会越过容量上限，留下机构透支');
+  assert.equal(state.agencies.general_staff.coordination, 45, '介入透支 5 点协调余量');
+  assert.equal(state.stats.gov, L.meta.initialStats.gov - 2);
+  state.ap = 1;
+  assert.equal(L.followUpCommand(state, issued.command.id).code, 'DUPLICATE');
+  const govAfter = state.stats.gov;
+  const night = L.endRound(state);
+  assert.equal(night.ok, true);
+  assert.equal(state.stats.gov <= govAfter, true, '夜间侵蚀可以继续扣减，但命令效果不能重复增加');
+});
+
+test('委派不耗 AP，但交接延迟一夜；目标满载时拒绝且原执行责任不变', function () {
+  const full = fresh();
+  const blocked = L.issueCommand(full, 'mobilize');
+  L.authorizeCommand(full, blocked.command.id);
+  full.agencies.office.workload = 3;
+  const refused = L.delegateCommand(full, blocked.command.id, 'office');
+  assert.equal(refused.ok, false);
+  assert.equal(refused.code, 'CAPACITY');
+  assert.equal(blocked.command.agency, 'general_staff', '拒绝后不应丢失原执行机构');
+  assert.equal(full.ap, 1, '失败的委派不应改变 AP');
+
+  const state = fresh();
+  const issued = L.issueCommand(state, 'mobilize');
+  L.authorizeCommand(state, issued.command.id);
+  const apBefore = state.ap;
+  const delegated = L.delegateCommand(state, issued.command.id, 'office');
+  assert.equal(delegated.ok, true);
+  assert.equal(state.ap, apBefore, '委派本身不消耗总统 AP');
+  assert.equal(issued.command.delegated, true);
+  assert.equal(issued.command.handoffRound, 2);
+  assert.equal(state.agencies.general_staff.coordination, 47);
+  assert.equal(state.agencies.office.coordination, 47);
+
+  const firstNight = L.endRound(state);
+  assert.equal(firstNight.ok, true);
+  assert.equal(issued.command.effectsApplied, false, '交接夜不执行');
+  assert.equal(issued.command.blockedCode, 'HANDOFF');
+  L.continueFromInterlude(state);
+  state.executed = ['test-marker'];
+  const secondNight = L.endRound(state);
+  assert.equal(secondNight.ok, true);
+  assert.equal(issued.command.effectsApplied, true, '第二夜才执行');
+  assert.equal(issued.command.status, 'awaiting_feedback', '执行后先等待反馈，不把执行中当成已完成');
+  assert.equal(L.continueFromInterlude(state).ok, true);
+  state.executed = ['test-marker'];
+  assert.equal(L.endRound(state).ok, true);
+  assert.equal(issued.command.status, 'completed', '下一夜核验反馈后才归档为完成');
+});
+
+test('接受延误会使命令超过窗口失效，而不是无限期晚执行', function () {
+  const state = fresh();
+  state.agencies.general_staff.workload = 3;
+  const issued = L.issueCommand(state, 'mobilize');
+  L.authorizeCommand(state, issued.command.id);
+  assert.equal(issued.command.deadlineRound, 2);
+  const govBefore = state.stats.gov;
+  const first = L.endRound(state);
+  assert.equal(first.ok, true);
+  assert.equal(issued.command.status, 'blocked');
+  L.continueFromInterlude(state);
+  state.executed = ['test-marker'];
+  const second = L.endRound(state);
+  assert.equal(second.ok, true);
+  assert.equal(issued.command.status, 'expired', '最后窗口仍无法执行时应失效');
+  assert.equal(issued.command.effectsApplied, false);
+  assert.equal(state.choices[0].deltas.gov, undefined, '失效命令不得结算原效果');
+  assert.equal(state.stats.gov <= govBefore, true);
+  assert.equal(state.agencies.general_staff.workload, 3, '失效只释放已占名额，不应改动虚构的在办负载');
+});
+
+test('最后执行窗口不能再委派，也不能授权已经超过窗口的 issued 命令', function () {
+  const state = fresh();
+  state.agencies.general_staff.workload = 3;
+  const issued = L.issueCommand(state, 'mobilize');
+  L.authorizeCommand(state, issued.command.id);
+  const first = L.endRound(state);
+  assert.equal(first.ok, true);
+  assert.equal(issued.command.status, 'blocked');
+  L.continueFromInterlude(state);
+  state.executed = ['test-marker'];
+  const apBefore = state.ap;
+  const delegated = L.delegateCommand(state, issued.command.id, 'office');
+  assert.equal(delegated.ok, false);
+  assert.equal(delegated.code, 'WINDOW', '最后窗口委派来不及，应被拒绝');
+  assert.equal(state.ap, apBefore, '拒绝委派不应扣 AP');
+  assert.equal(issued.command.agency, 'general_staff', '拒绝委派后不应改变原执行机构');
+  issued.command.status = 'issued';
+  issued.command.deadlineRound = 1;
+  const authorized = L.authorizeCommand(state, issued.command.id);
+  assert.equal(authorized.ok, false);
+  assert.equal(authorized.code, 'EXPIRED', '超过窗口的 issued 命令不可再授权');
+});
+
+test('跨日未授权的 issued 命令会在最后窗口失效，不会永久悬空', function () {
+  const state = fresh();
+  const issued = L.issueCommand(state, 'mobilize');
+  assert.equal(issued.command.status, 'issued');
+  issued.command.round = 1;
+  issued.command.deadlineRound = 2;
+  state.round = 2;
+  state.lastSettledRound = 1;
+  state.ap = 0;
+  state.executed = [];
+  const night = L.endRound(state);
+  assert.equal(night.ok, true);
+  assert.equal(issued.command.status, 'expired', '跨日未授权命令到窗口结束应失效');
+  assert.equal(issued.command.effectsApplied, false, '失效命令不得结算效果');
+  assert.equal(state.agencies.general_staff.workload, 0, '未占用的席位不应留下虚构负载');
+});
+
+test('低可信度的高投入命令必须先追问总参，换机构或催办不能替代', function () {
+  const state = fresh();
+  state.round = 5;
+  state.lastSettledRound = 4;
+  state.ap = 3;
+  const preview = L.getCommandPreview(state, 'south');
+  assert.equal(preview.requiresIntel, true);
+  assert.equal(preview.intelSatisfied, false);
+  const issued = L.issueCommand(state, 'south');
+  assert.equal(issued.ok, true);
+  const blocked = L.authorizeCommand(state, issued.command.id);
+  assert.equal(blocked.blocked, true);
+  assert.equal(issued.command.blockedCode, 'INFO');
+  assert.equal(state.ap, 1);
+  const follow = L.followUpCommand(state, issued.command.id);
+  assert.equal(follow.ok, false);
+  assert.equal(follow.code, 'INFO');
+  assert.equal(state.ap, 1, '缺情报时催办不应扣 AP');
+  const delegate = L.delegateCommand(state, issued.command.id, 'office');
+  assert.equal(delegate.ok, false);
+  assert.equal(delegate.code, 'INFO');
+  assert.equal(state.ap, 1);
+  const inquiry = L.inquireIntel(state, 'e5:military');
+  assert.equal(inquiry.ok, true);
+  assert.equal(state.ap, 0);
+  assert.equal(issued.command.status, 'issued', '追问后回到待授权，而不是自动执行');
+  const retry = L.authorizeCommand(state, issued.command.id);
+  assert.equal(retry.ok, true);
+  assert.equal(retry.blocked, undefined);
+  assert.equal(issued.command.status, 'executing');
+});
+
+test('路线差异在首日命令状态、次日 AP 与机构负载上可观察', function () {
+  function endAndContinue(state) {
+    const result = L.endRound(state);
+    assert.equal(result.ok, true);
+    if (state.phase === 'interlude') L.continueFromInterlude(state);
+    return result;
+  }
+
+  const intervene = fresh();
+  intervene.agencies.general_staff.workload = 3;
+  const interventionCommand = L.issueCommand(intervene, 'mobilize').command;
+  L.authorizeCommand(intervene, interventionCommand.id);
+  intervene.ap = 1;
+  L.followUpCommand(intervene, interventionCommand.id);
+  const interveneApAfterDay1 = intervene.ap;
+  endAndContinue(intervene);
+  const interveneLoadAfterDay1 = intervene.agencies.general_staff.workload;
+  const interveneGovAfterDay1 = intervene.stats.gov;
+  const interveneCoordAfterDay1 = intervene.agencies.general_staff.coordination;
+  intervene.executed = ['test-marker'];
+  endAndContinue(intervene);
+
+  const delegate = fresh();
+  const delegatedCommand = L.issueCommand(delegate, 'mobilize').command;
+  L.authorizeCommand(delegate, delegatedCommand.id);
+  const delegateApAfterDay1 = delegate.ap;
+  L.delegateCommand(delegate, delegatedCommand.id, 'office');
+  endAndContinue(delegate);
+  const delegateLoadAfterDay1 = delegate.agencies.general_staff.workload;
+  const delegateGovAfterDay1 = delegate.stats.gov;
+  const delegateCoordAfterDay1 = delegate.agencies.general_staff.coordination;
+  delegate.executed = ['test-marker'];
+  endAndContinue(delegate);
+  const delegateGovAfterDay2 = delegate.stats.gov;
+
+  const delay = fresh();
+  delay.agencies.general_staff.workload = 3;
+  const delayedCommand = L.issueCommand(delay, 'mobilize').command;
+  L.authorizeCommand(delay, delayedCommand.id);
+  endAndContinue(delay);
+  const delayLoadAfterDay1 = delay.agencies.general_staff.workload;
+  delay.executed = ['test-marker'];
+  endAndContinue(delay);
+
+  assert.notEqual(interveneGovAfterDay1, delegateGovAfterDay1, '介入与委派在次日应产生不同国家状态');
+  assert.notEqual(delegateGovAfterDay2, delay.stats.gov, '委派与接受延误在两夜后应产生不同国家状态');
+  assert.equal(intervene.commands[0].status, 'completed');
+  assert.equal(delegate.commands[0].status, 'awaiting_feedback', '委派路线到第二夜才执行，仍需等待反馈');
+  assert.equal(delay.commands[0].status, 'expired');
+  assert.equal(interveneLoadAfterDay1, 4, '首日介入后机构以越限负载留下可观察的代价');
+  assert.equal(delegateLoadAfterDay1, 0, '首日委派释放原机构，目标机构到次夜才接收');
+  assert.equal(delayLoadAfterDay1, 3, '接受延误不新增负载，但命令继续排队');
+  assert.equal(interveneApAfterDay1, 0, '亲自介入把当天注意力用尽');
+  assert.equal(delegateApAfterDay1, 1, '委派保留 1 点注意力，但把结果推后');
+  assert.equal(interveneCoordAfterDay1, 45);
+  assert.equal(delegateCoordAfterDay1, 47);
+  assert.equal(intervene.ap, 3);
+  assert.equal(delegate.ap, 3);
 });
 
 console.log('\n----------------------------------------');

@@ -15,10 +15,16 @@
   const BACKUP_KEY = 'lzs_save_v1_legacy_backup';
   const AP_MAX = META.apPerRound || 3;
   const FINAL_ROUND = EVENTS.length;
-  const COMMAND_STATUSES = ['issued', 'executing', 'blocked', 'awaiting_feedback', 'completed'];
+  const COMMAND_STATUSES = ['issued', 'executing', 'blocked', 'awaiting_feedback', 'completed', 'cancelled', 'expired'];
   const COMMAND_LABELS = {
     issued: '已签发', executing: '已接收 · 执行中', blocked: '遇到阻塞',
-    awaiting_feedback: '等待反馈', completed: '已完成'
+    awaiting_feedback: '等待反馈', completed: '已完成', cancelled: '已撤回', expired: '已失效 · 错过窗口'
+  };
+  const STRATEGY = {
+    windowRounds: 1,
+    agencyCoordinationFloor: 35,
+    interventionCoordinationCost: 5,
+    handoffCoordinationCost: 3
   };
   const CHOICE_AGENCY = {
     address: 'communications', mobilize: 'general_staff', aid_call: 'foreign', disperse: 'office',
@@ -179,14 +185,98 @@
     return CHOICE_AGENCY[choice.id] || 'office';
   }
 
-  function needsCoordination(choice) {
+  function getAgencyLoad(state, agencyId) {
+    const spec = getAgency(agencyId);
+    const record = state && state.agencies ? state.agencies[agencyId] : null;
+    const capacity = spec ? spec.capacity : 3;
+    const agency = record || { coordination: 50, workload: 0, lastActionRound: null };
+    return {
+      id: agencyId,
+      label: spec ? spec.label : agencyId,
+      short: spec ? spec.short : agencyId,
+      capacity: capacity,
+      workload: Number(agency.workload) || 0,
+      available: Math.max(0, capacity - (Number(agency.workload) || 0)),
+      coordination: Number(agency.coordination) == null ? 50 : Number(agency.coordination),
+      overloaded: (Number(agency.workload) || 0) >= capacity,
+      strained: (Number(agency.coordination) == null ? 50 : Number(agency.coordination)) < STRATEGY.agencyCoordinationFloor
+    };
+  }
+
+  function getAgencyLoads(state) {
+    return (INTEL.agencies || []).map(function (agency) { return getAgencyLoad(state, agency.id); });
+  }
+
+  /*
+   * 协调要求不仅来自命令本身，也来自国家机器的当前状态：
+   * 政府连续性告警会让办公/内务/沟通命令必须由总统亲自协调；
+   * 外交或储备告警会提高相关承诺的协调门槛。全部是可见状态，不是暗改规则。
+   */
+  function needsCoordination(stateOrChoice, maybeChoice, agencyId) {
+    const state = maybeChoice ? stateOrChoice : null;
+    const choice = maybeChoice || stateOrChoice;
+    if (!choice) return false;
+    const agency = agencyId || agencyForChoice(choice);
     const affected = STAT_KEYS.filter(function (key) { return !!choice.effects && !!choice.effects[key]; }).length;
-    return choice.ap >= 2 || affected >= 5;
+    let required = choice.ap >= 2 || affected >= 5;
+    if (!state) return required;
+    if (state.stats.gov <= 35 && ['office', 'interior', 'communications'].indexOf(agency) !== -1) required = true;
+    if (state.stats.intl <= 28 && agency === 'foreign' && (choice.effects.intl || 0) > 0) required = true;
+    if (state.stats.reserve <= 24 && (choice.effects.reserve || 0) <= -4) required = true;
+    return required;
+  }
+
+  function requiresIntelClarification(state, event, choice) {
+    if (!event || !event.intel || event.intel.level !== '低') return false;
+    return choice.ap >= 2 && (Math.abs(choice.effects.army || 0) + Math.abs(choice.effects.kyiv || 0) >= 5);
+  }
+
+  function isIntelSatisfied(state, command) {
+    if (!command || !command.requiresIntel) return true;
+    const record = state.intelState && state.intelState[command.intelReportId];
+    return !!(record && record.inquired);
+  }
+
+  function getExecutionRisks(state, choice) {
+    const agencyId = agencyForChoice(choice);
+    const load = getAgencyLoad(state, agencyId);
+    const event = getEvent(state);
+    const risks = [];
+    const usesPrioritySlot = needsCoordination(state, choice, agencyId) || choice.ap >= 2;
+    if (usesPrioritySlot && load.overloaded) risks.push('执行机构优先席位已满（' + load.workload + '/' + load.capacity + '），今晚只能阻塞等待容量。');
+    if (usesPrioritySlot && load.strained) risks.push('机构协调余量低于 ' + STRATEGY.agencyCoordinationFloor + '，需先召集协调会。');
+    if (needsCoordination(state, choice, agencyId)) risks.push('跨部门或高负荷行动：需要总统召集协调，或改由其他机构接手。');
+    if (requiresIntelClarification(state, event, choice) && !isIntelSatisfied(state, { requiresIntel: true, intelReportId: event.id + ':military' })) {
+      risks.push('情报可信度低：先追问总参（1 AP），确认方向后才能授权这项高投入行动。');
+    }
+    return risks;
+  }
+
+  function getCommandPreview(state, choiceId) {
+    const event = getEvent(state);
+    const choice = getChoice(event, choiceId);
+    if (!choice) return null;
+    const agency = agencyForChoice(choice);
+    return {
+      agency: agency,
+      agencyLabel: getAgency(agency) ? getAgency(agency).label : agency,
+      load: getAgencyLoad(state, agency),
+      requiresCoordination: needsCoordination(state, choice, agency),
+      slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2,
+      requiresIntel: requiresIntelClarification(state, event, choice),
+      intelSatisfied: isIntelSatisfied(state, { requiresIntel: requiresIntelClarification(state, event, choice), intelReportId: event.id + ':military' }),
+      deadlineRound: Math.min(FINAL_ROUND, state.round + STRATEGY.windowRounds),
+      risks: getExecutionRisks(state, choice)
+    };
+  }
+
+  function isTerminalCommand(command) {
+    return ['completed', 'cancelled', 'expired'].indexOf(command.status) !== -1;
   }
 
   function activeCommands(state) {
     return (state.commands || []).filter(function (command) {
-      return command.status !== 'completed';
+      return !isTerminalCommand(command);
     });
   }
 
@@ -196,7 +286,47 @@
 
   function addCommandLog(state, command, title, text) {
     addLog(state, 'command', title, text);
-    if (command) command.lastNote = title;
+    if (command) {
+      command.lastNote = title;
+      if (!command.history) command.history = [];
+      command.history.push({ round: state.round, dateLabel: getEvent(state) ? getEvent(state).dateLabel : '', title: title, text: text });
+      if (command.history.length > 12) command.history.shift();
+    }
+  }
+
+  function setCommandBlocked(state, command, code, reason) {
+    command.status = 'blocked';
+    command.blockedCode = code;
+    command.blockedReason = reason;
+    if (command.record) command.record.status = command.status;
+    addCommandLog(state, command, '阻塞：' + command.title, reason);
+  }
+
+  function clearCommandBlock(command) {
+    command.blockedCode = null;
+    command.blockedReason = null;
+  }
+
+  function reserveAgencySlot(state, command, options) {
+    const load = getAgencyLoad(state, command.executorId);
+    if (command.slotRequired === false) return { ok: true, load: load, routine: true };
+    if (command.accepted) return { ok: true, load: load };
+    if (load.overloaded && !(options && options.force)) {
+      setCommandBlocked(state, command, 'CAPACITY', '执行机构在办已满（' + load.workload + '/' + load.capacity + '）：任务已排队，今晚无法接收；可改由其他机构接手、撤回，或接受延误。');
+      return { ok: false, load: load };
+    }
+    state.agencies[command.executorId].workload = load.workload + 1;
+    state.agencies[command.executorId].lastActionRound = state.round;
+    command.accepted = true;
+    command.overCapacity = load.overloaded;
+    return { ok: true, load: load };
+  }
+
+  function releaseAgencySlot(state, command) {
+    if (!command.accepted) return;
+    const agency = state.agencies[command.executorId];
+    if (agency && agency.workload > 0) agency.workload -= 1;
+    command.accepted = false;
   }
 
   function getIntelReports(state) {
@@ -409,12 +539,27 @@
       executorId: agency,
       status: 'issued',
       authorizedAt: null,
-      requiredCoordination: needsCoordination(choice),
+      requiredCoordination: needsCoordination(state, choice, agency),
+      /* 只有高投入或跨部门命令占用总统优先席位；1 AP 单项工作由机构在授权内自行排队。 */
+      slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2,
       coordinated: !!state.coordinationThisRound[agency],
+      requiresIntel: requiresIntelClarification(state, event, choice),
+      intelReportId: event.id + ':military',
+      infoCode: null,
       delegated: false,
+      delegatedRound: null,
+      handoffRound: null,
+      accepted: false,
       effectsApplied: false,
       blockedReason: null,
+      blockedCode: null,
+      deadlineRound: Math.min(FINAL_ROUND, state.round + STRATEGY.windowRounds),
+      windowRounds: STRATEGY.windowRounds,
+      expedited: false,
+      cancelledRound: null,
+      expiredRound: null,
       followedRounds: [],
+      history: [],
       createdAt: new Date().toISOString()
     };
     state.ap -= choice.ap;
@@ -444,34 +589,51 @@
     const command = findCommand(state, commandId);
     if (!command) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
     if (command.status !== 'issued') return { ok: false, error: '这项命令不在待授权状态。', code: 'STATUS' };
+    if (command.deadlineRound && state.round > command.deadlineRound) {
+      return { ok: false, error: '这项命令已经超过第 ' + command.deadlineRound + ' 夜的执行窗口，不能再授权。', code: 'EXPIRED' };
+    }
     const executor = executorId && getAgency(executorId) ? executorId : command.agency;
     command.executorId = executor;
     command.agency = executor;
-    command.status = 'executing';
     command.authorizedAt = new Date().toISOString();
-    if (state.agencies[executor]) {
-      state.agencies[executor].workload += 1;
-      state.agencies[executor].lastActionRound = state.round;
+    command.status = 'executing';
+    if (command.requiresIntel && !isIntelSatisfied(state, command)) {
+      setCommandBlocked(state, command, 'INFO', '情报可信度低，方向尚未确认：先在情报桌追问总参（1 AP），再授权这项高投入命令。');
+      return { ok: true, command: command, blocked: true };
     }
-    addCommandLog(state, command, '授权：' + command.title, '总统授权由' + (getAgency(executor) ? getAgency(executor).label : executor) + '执行。本夜将回报接收与执行情况。');
+    const slot = reserveAgencySlot(state, command);
+    if (!slot.ok) {
+      return { ok: true, command: command, blocked: true };
+    }
+    if (command.requiredCoordination && !command.coordinated && !state.coordinationThisRound[executor] && getAgencyLoad(state, executor).coordination < STRATEGY.agencyCoordinationFloor) {
+      setCommandBlocked(state, command, 'COORDINATION', '机构协调余量低于 ' + STRATEGY.agencyCoordinationFloor + '：需要总统先召集协调会，或改派其他机构。');
+      return { ok: true, command: command, blocked: true };
+    }
+    addCommandLog(state, command, '授权：' + command.title, '总统授权由' + (getAgency(executor) ? getAgency(executor).label : executor) + '执行，占用该机构 1 个在办名额。本夜将回报接收与执行情况。');
     return { ok: true, command: command };
   }
 
   function completeCommand(command, state) {
-    if (command.status === 'completed') return;
+    if (!command || command.status === 'completed') return;
     command.status = 'completed';
     command.completedRound = state.round;
-    if (state.agencies[command.executorId] && state.agencies[command.executorId].workload > 0) {
-      state.agencies[command.executorId].workload -= 1;
-    }
+    releaseAgencySlot(state, command);
+    clearCommandBlock(command);
+    if (command.record) command.record.status = command.status;
   }
 
   function executeCommandNow(state, command, source) {
     if (!command || command.effectsApplied) return { ok: true, command: command, deltas: {}, pressureDelta: 0 };
+    if (isTerminalCommand(command)) return { ok: false, error: '这项命令已经结束。', code: 'STATUS' };
+    const slot = reserveAgencySlot(state, command);
+    if (!slot.ok) return { ok: true, command: command, blocked: true, deltas: {}, pressureDelta: 0 };
+    const agencyLoad = getAgencyLoad(state, command.agency);
+    if (agencyLoad.coordination < STRATEGY.agencyCoordinationFloor) {
+      setCommandBlocked(state, command, 'COORDINATION', '机构协调余量仅 ' + agencyLoad.coordination + '，低于 ' + STRATEGY.agencyCoordinationFloor + '：命令无法安全跨部门执行。');
+      return { ok: true, command: command, blocked: true, deltas: {}, pressureDelta: 0 };
+    }
     if (command.requiredCoordination && !command.coordinated && !state.coordinationThisRound[command.agency]) {
-      command.status = 'blocked';
-      command.blockedReason = '跨部门执行条件未满足：需要总统召集' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '，或把任务委派出去。';
-      addCommandLog(state, command, '阻塞：' + command.title, command.blockedReason);
+      setCommandBlocked(state, command, 'COORDINATION', '跨部门执行条件未满足：需要总统召集' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '，或把任务委派出去。');
       return { ok: true, command: command, blocked: true, deltas: {}, pressureDelta: 0 };
     }
     const event = EVENTS.filter(function (item) { return item.id === command.eventId; })[0];
@@ -481,18 +643,21 @@
     const scheduled = scheduleDelayed(state, event, choice, command.id);
     command.effectsApplied = true;
     command.status = 'awaiting_feedback';
+    command.executedRound = state.round;
+    command.executedLate = state.round > command.round;
     command.result = { deltas: result.deltas, pressureDelta: result.pressureDelta, scheduled: scheduled.map(function (item) { return item.label; }) };
-    command.lastNote = '执行完成，等待总统跟进或下一日反馈。';
+    clearCommandBlock(command);
     const record = state.choices.filter(function (item) { return item.commandId === command.id; })[0];
     if (record) {
+      command.record = record;
       record.deltas = result.deltas;
       record.pressureDelta = result.pressureDelta;
       record.scheduled = command.result.scheduled;
       record.status = command.status;
     }
-    addLog(state, 'execution', (source === 'followup' ? '跟进执行：' : '执行回报：') + command.title,
-      '执行机构：' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '。' + formatDeltaText(result.deltas, result.pressureDelta));
-    return result;
+    addCommandLog(state, command, (command.expedited ? '介入执行：' : '执行回报：') + command.title,
+      '执行机构：' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '。' + formatDeltaText(result.deltas, result.pressureDelta) + (command.executedLate ? ' 已超过原定执行窗口，但仍保留了本次效果。' : ''));
+    return Object.assign({ ok: true, command: command }, result);
   }
 
   function followUpCommand(state, commandId) {
@@ -503,20 +668,31 @@
     if (command.status === 'completed') return { ok: false, error: '这项命令已经完成。', code: 'STATUS' };
     if (command.followedRounds.indexOf(state.round) !== -1) return { ok: false, error: '这项命令本回合已经跟进过。', code: 'DUPLICATE' };
     if (command.status === 'issued') return { ok: false, error: '命令尚未授权或委派，无法检查执行。', code: 'STATUS' };
+    if (command.requiresIntel && !isIntelSatisfied(state, command)) {
+      return { ok: false, error: '这项命令缺的是一条已确认的情报，不是总统催办。先追问总参，再决定是否投入推进。', code: 'INFO' };
+    }
     state.ap -= 1;
     command.followedRounds.push(state.round);
     let result = { deltas: {}, pressureDelta: 0 };
     if (command.status === 'blocked' || command.status === 'executing') {
+      const previousAgency = command.agency;
       command.status = 'executing';
-      command.blockedReason = null;
       command.coordinated = true;
+      command.expedited = true;
+      const forced = reserveAgencySlot(state, command, { force: true });
+      if (!forced.ok) return { ok: false, error: '介入失败：无法占用执行机构。', code: 'AGENCY' };
+      if (state.agencies[previousAgency]) {
+        state.agencies[previousAgency].coordination = clamp(state.agencies[previousAgency].coordination - STRATEGY.interventionCoordinationCost, 0, 100);
+      }
       result = executeCommandNow(state, command, 'followup');
       if (result.ok && !result.blocked) {
-        addCommandLog(state, command, '跟进放行：' + command.title, '总统亲自跟进后，阻塞被解除，命令开始执行。');
+        addCommandLog(state, command, '总统介入：' + command.title, '总统亲自催办并越过排队，命令立即执行；这占用了本可用于另一项事务的注意力，并向执行机构透支了 ' + STRATEGY.interventionCoordinationCost + ' 点协调余量。');
+      } else if (!result.ok) {
+        return result;
       }
     } else if (command.status === 'awaiting_feedback') {
       completeCommand(command, state);
-      addCommandLog(state, command, '跟进完成：' + command.title, '执行反馈已核验，命令归档为已完成；不会重复结算原效果。');
+      addCommandLog(state, command, '跟进完成：' + command.title, '执行反馈已核验，命令归档为已完成并释放机构在办名额；不会重复结算原效果。');
     }
     const collapse = checkCollapse(state);
     return { ok: true, command: command, deltas: result.deltas || {}, pressureDelta: result.pressureDelta || 0, ending: collapse ? finalizeEnding(state, collapse) : null };
@@ -524,23 +700,51 @@
 
   function delegateCommand(state, commandId, agencyId) {
     if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能委派。', code: 'PHASE' };
-    if (state.ap < 1) return { ok: false, error: '委派需要 1 AP。', code: 'AP' };
     const command = findCommand(state, commandId);
     if (!command) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
     if (['issued', 'blocked', 'executing'].indexOf(command.status) === -1) return { ok: false, error: '这项命令当前不能委派。', code: 'STATUS' };
     if (!agencyId || !getAgency(agencyId)) return { ok: false, error: '没有选择接收机构。', code: 'AGENCY' };
-    state.ap -= 1;
+    if (command.effectsApplied) return { ok: false, error: '命令已经执行，不能再改变执行责任。', code: 'STATUS' };
+    if (command.requiresIntel && !isIntelSatisfied(state, command)) {
+      return { ok: false, error: '这项命令缺的是敌情确认，换执行机构不能替代追问总参。', code: 'INFO' };
+    }
+    if (command.deadlineRound && state.round + 1 > command.deadlineRound) {
+      return { ok: false, error: '委派需要一整个夜晚交接，已经超过这项命令的执行窗口；请总统介入、接受延误，或撤回。', code: 'WINDOW' };
+    }
+    if (agencyId === command.executorId && command.accepted) return { ok: false, error: '这项任务已在该机构执行。', code: 'DUPLICATE' };
+    const targetLoad = getAgencyLoad(state, agencyId);
+    if (targetLoad.overloaded) return { ok: false, error: '目标机构在办已满（' + targetLoad.workload + '/' + targetLoad.capacity + '），无法接手。', code: 'CAPACITY' };
+    const previousAgency = command.executorId;
+    releaseAgencySlot(state, command);
+    if (state.agencies[previousAgency]) state.agencies[previousAgency].coordination = clamp(state.agencies[previousAgency].coordination - STRATEGY.handoffCoordinationCost, 0, 100);
+    if (state.agencies[agencyId]) state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination - STRATEGY.handoffCoordinationCost, 0, 100);
     command.delegated = true;
+    command.delegatedRound = state.round;
+    command.handoffRound = state.round + 1;
     command.coordinated = true;
     command.executorId = agencyId;
     command.agency = agencyId;
-    if (command.status !== 'executing') command.status = 'executing';
-    command.blockedReason = null;
-    if (state.agencies[agencyId]) {
-      state.agencies[agencyId].workload += 1;
-      state.agencies[agencyId].lastActionRound = state.round;
-    }
-    addCommandLog(state, command, '委派：' + command.title, '任务改由' + (getAgency(agencyId) ? getAgency(agencyId).label : agencyId) + '持续处理，总统保留跟进权。');
+    command.status = 'executing';
+    clearCommandBlock(command);
+    addCommandLog(state, command, '委派交接：' + command.title,
+      '任务改由' + (getAgency(agencyId) ? getAgency(agencyId).label : agencyId) + '接手。总统不支付额外注意力，但交接需要一整个夜晚：本夜不会执行，次夜才可能开始；双方机构各损失 ' + STRATEGY.handoffCoordinationCost + ' 点协调余量。');
+    return { ok: true, command: command };
+  }
+
+  function cancelCommand(state, commandId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能撤回命令。', code: 'PHASE' };
+    const command = findCommand(state, commandId);
+    if (!command) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
+    if (isTerminalCommand(command)) return { ok: false, error: '这项命令已经结束。', code: 'STATUS' };
+    if (command.effectsApplied) return { ok: false, error: '命令效果已经发生，不能撤回。', code: 'STATUS' };
+    releaseAgencySlot(state, command);
+    command.status = 'cancelled';
+    command.cancelledRound = state.round;
+    command.records = null;
+    clearCommandBlock(command);
+    const record = state.choices.filter(function (item) { return item.commandId === command.id; })[0];
+    if (record) record.status = 'cancelled';
+    addCommandLog(state, command, '撤回命令：' + command.title, '总统撤回尚未执行的命令，释放机构在办名额；已支付的 ' + command.ap + ' AP 不会退还，原定效果与本可争取的时间窗口一并放弃。');
     return { ok: true, command: command };
   }
 
@@ -554,7 +758,14 @@
     state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination + 8, 0, 100);
     state.agencies[agencyId].lastActionRound = state.round;
     state.commands.forEach(function (command) {
-      if (command.round === state.round && command.agency === agencyId && ['issued', 'executing'].indexOf(command.status) !== -1) command.coordinated = true;
+      if (command.round !== state.round || command.agency !== agencyId || command.effectsApplied) return;
+      if (['issued', 'executing'].indexOf(command.status) !== -1) command.coordinated = true;
+      if (command.status === 'blocked' && command.blockedCode === 'COORDINATION') {
+        command.coordinated = true;
+        command.status = command.accepted ? 'executing' : 'issued';
+        clearCommandBlock(command);
+        addCommandLog(state, command, '协调已恢复：' + command.title, '总统召集后，跨部门协调条件已满足；命令可继续授权或等待夜间执行。');
+      }
     });
     addLog(state, 'coordination', '召集协调：' + getAgency(agencyId).label, '总统亲自主持跨部门协调，相关命令本回合不再因协调条件阻塞；机构协调余量 +8。');
     return { ok: true, agencyId: agencyId };
@@ -614,20 +825,56 @@
     state.ap -= 1;
     state.intelState[reportId].inquired = true;
     state.intelState[reportId].read = true;
+    (state.commands || []).forEach(function (command) {
+      if (command.intelReportId !== reportId || command.effectsApplied || command.blockedCode !== 'INFO') return;
+      command.status = 'issued';
+      clearCommandBlock(command);
+      addCommandLog(state, command, '情报已确认：' + command.title, '总统追问总参后，敌军方向的确认已补入情报桌；这项命令可以重新授权，但仍占用签发时支付的 AP。');
+    });
     addLog(state, 'intel', '追问：' + report.label, report.source + '提交补充说明；额外信息进入情报桌，未直接改变国家数值。');
     return { ok: true, report: getIntelReport(state, reportId) };
   }
 
   function getCommandCounts(state) {
-    const counts = { total: 0, active: 0, blocked: 0, awaiting: 0, completed: 0 };
+    const counts = { total: 0, active: 0, blocked: 0, awaiting: 0, completed: 0, cancelled: 0, expired: 0 };
     (state.commands || []).forEach(function (command) {
       counts.total += 1;
-      if (command.status === 'completed') counts.completed += 1;
-      else counts.active += 1;
+      if (isTerminalCommand(command)) {
+        if (command.status === 'completed') counts.completed += 1;
+        if (command.status === 'cancelled') counts.cancelled += 1;
+        if (command.status === 'expired') counts.expired += 1;
+      } else {
+        counts.active += 1;
+      }
       if (command.status === 'blocked') counts.blocked += 1;
       if (command.status === 'awaiting_feedback') counts.awaiting += 1;
     });
     return counts;
+  }
+
+  function getCommandChains(state, limit) {
+    const commands = (state.commands || []).filter(function (command) {
+      return command.kind !== 'communication' && command.history && command.history.length;
+    });
+    const priority = { expired: 0, blocked: 1, cancelled: 2, awaiting_feedback: 3, executing: 4, completed: 5, issued: 6 };
+    commands.sort(function (a, b) {
+      const pa = priority[a.status] == null ? 9 : priority[a.status];
+      const pb = priority[b.status] == null ? 9 : priority[b.status];
+      if (pa !== pb) return pa - pb;
+      return b.round - a.round;
+    });
+    return commands.slice(0, limit || 3).map(function (command) {
+      return {
+        commandId: command.id,
+        title: command.title,
+        agency: command.agency,
+        status: command.status,
+        deadlineRound: command.deadlineRound,
+        delegated: !!command.delegated,
+        expedited: !!command.expedited,
+        history: command.history.slice()
+      };
+    });
   }
 
   function applyChoice(state, choiceId) {
@@ -656,6 +903,7 @@
     const issued = issueCommand(state, choiceId);
     if (!issued.ok) return issued;
     issued.command.coordinated = true;
+    issued.command.requiresIntel = false;
     const authorized = authorizeCommand(state, issued.command.id);
     if (!authorized.ok) return authorized;
     const result = executeCommandNow(state, issued.command, 'legacy');
@@ -761,12 +1009,102 @@
     return alarms;
   }
 
+  function commandResult(command, extra) {
+    return Object.assign({
+      commandId: command.id,
+      title: command.title,
+      agency: command.agency,
+      ap: command.ap,
+      status: command.status,
+      blockedReason: command.blockedReason || null,
+      blockedCode: command.blockedCode || null,
+      deadlineRound: command.deadlineRound,
+      delegated: !!command.delegated,
+      expedited: !!command.expedited,
+      deltas: {},
+      pressureDelta: 0
+    }, extra || {});
+  }
+
+  function expireCommand(state, command) {
+    releaseAgencySlot(state, command);
+    command.status = 'expired';
+    command.expiredRound = state.round;
+    command.blockedReason = '超过第 ' + command.deadlineRound + ' 日的执行窗口：任务已失去执行机会，原定效果不会结算。';
+    const record = state.choices.filter(function (item) { return item.commandId === command.id; })[0];
+    if (record) record.status = 'expired';
+    addCommandLog(state, command, '失效：' + command.title, command.blockedReason + ' 已占用的注意力与机构排队时间无法追回。');
+  }
+
+  function processNightCommand(state, command) {
+    if (command.kind === 'communication') {
+      if (command.status === 'awaiting_feedback' && command.round < state.round) completeCommand(command, state);
+      return null;
+    }
+    if (command.effectsApplied || isTerminalCommand(command)) return null;
+    const atDeadline = command.deadlineRound && state.round >= command.deadlineRound;
+    if (command.requiresIntel && !isIntelSatisfied(state, command)) {
+      setCommandBlocked(state, command, 'INFO', '情报可信度低：缺少总参对敌军方向的确认，命令不能在夜间安全执行。');
+      const blockedInfo = commandResult(command, { blocked: true, note: '等待情报确认' });
+      if (atDeadline) {
+        expireCommand(state, command);
+        blockedInfo.status = 'expired';
+        blockedInfo.note = '情报未确认，错过执行窗口';
+      }
+      return blockedInfo;
+    }
+    if (command.deadlineRound && state.round > command.deadlineRound) {
+      expireCommand(state, command);
+      return commandResult(command, { status: 'expired', blocked: true, note: '错过执行窗口' });
+    }
+    if (command.handoffRound && state.round < command.handoffRound) {
+      command.status = 'blocked';
+      command.blockedCode = 'HANDOFF';
+      command.blockedReason = '委派交接需要一整个夜晚：第 ' + command.handoffRound + ' 夜才会开始执行；今晚不占用目标机构名额。';
+      return commandResult(command, { blocked: true, note: '委派交接中' });
+    }
+    if (command.status === 'blocked' && command.blockedCode === 'COORDINATION' && !command.coordinated && !state.coordinationThisRound[command.agency]) {
+      const blockedCoord = commandResult(command, { blocked: true, note: '协调条件仍未满足' });
+      if (atDeadline) {
+        expireCommand(state, command);
+        blockedCoord.status = 'expired';
+        blockedCoord.note = '协调未完成，错过执行窗口';
+      }
+      return blockedCoord;
+    }
+    if (command.status === 'issued') {
+      const blockedIssued = commandResult(command, { blocked: true, note: '尚未授权' });
+      if (atDeadline) {
+        expireCommand(state, command);
+        blockedIssued.status = 'expired';
+        blockedIssued.note = '未完成授权，错过执行窗口';
+      }
+      return blockedIssued;
+    }
+    const outcome = executeCommandNow(state, command, command.round < state.round ? 'late-night' : 'night');
+    if (!outcome.ok || outcome.blocked || command.status === 'blocked') {
+      const blockedOutcome = commandResult(command, { blocked: true, note: outcome.error || command.blockedReason || '夜间无法执行' });
+      if (atDeadline) {
+        expireCommand(state, command);
+        blockedOutcome.status = 'expired';
+        blockedOutcome.note = '执行条件不足，错过最后窗口';
+      }
+      return blockedOutcome;
+    }
+    return commandResult(command, {
+      blocked: command.status === 'blocked',
+      deltas: outcome.deltas || {},
+      pressureDelta: outcome.pressureDelta || 0,
+      executedLate: !!command.executedLate
+    });
+  }
+
   function endRound(state) {
     if (!state || state.phase !== 'briefing') {
       return { ok: false, error: '当前阶段不能结束回合。', code: 'PHASE' };
     }
-    if (!state.executed.length) {
-      return { ok: false, error: '至少签发一项命令，才能结束本回合。', code: 'NO_CHOICE' };
+    if (!state.executed.length && state.ap >= AP_MAX) {
+      return { ok: false, error: '至少签发一项命令，或把本轮注意力全部用于处理既有命令，才能结束本回合。', code: 'NO_CHOICE' };
     }
     if (state.lastSettledRound >= state.round) {
       return { ok: false, error: '本回合已经结算过，不能重复。', code: 'DUPLICATE' };
@@ -786,21 +1124,19 @@
     }
 
     const commandResults = [];
+    /* 旧一日已执行、等待反馈的命令先归档并释放机构名额；跨日占用不会无限延续。 */
+    (state.commands || []).forEach(function (command) {
+      if (command.kind !== 'communication' && command.status === 'awaiting_feedback' && command.round < state.round) {
+        completeCommand(command, state);
+        commandResults.push(commandResult(command, { archived: true, note: '旧命令反馈核验，释放机构名额' }));
+      }
+    });
     const currentCommands = (state.commands || []).filter(function (command) {
-      return command.round === state.round && ['executing', 'blocked'].indexOf(command.status) !== -1;
+      return command.kind !== 'communication' && ['issued', 'executing', 'blocked'].indexOf(command.status) !== -1 && !command.effectsApplied;
     });
     for (let i = 0; i < currentCommands.length; i += 1) {
-      const command = currentCommands[i];
-      if (command.status === 'blocked') {
-        commandResults.push({ commandId: command.id, title: command.title, agency: command.agency, status: command.status, blockedReason: command.blockedReason, deltas: {}, pressureDelta: 0 });
-        continue;
-      }
-      const outcome = executeCommandNow(state, command, 'night');
-      commandResults.push({
-        commandId: command.id, title: command.title, agency: command.agency,
-        status: command.status, blockedReason: command.blockedReason,
-        deltas: outcome.deltas || {}, pressureDelta: outcome.pressureDelta || 0
-      });
+      const result = processNightCommand(state, currentCommands[i]);
+      if (result) commandResults.push(result);
     }
     state.lastSettledRound = state.round;
     const pressureBefore = state.pressure;
@@ -897,9 +1233,6 @@
     if (!state || state.phase !== 'interlude') {
       return { ok: false, error: '当前没有待确认的夜间态势。', code: 'PHASE' };
     }
-    (state.commands || []).forEach(function (command) {
-      if (command.status === 'awaiting_feedback') completeCommand(command, state);
-    });
     state.phase = 'briefing';
     state.interlude = null;
     return { ok: true, event: getEvent(state) };
@@ -953,6 +1286,7 @@
     ending.commands = (state.commands || []).map(function (command) { return Object.assign({}, command); });
     ending.commandSummary = getCommandCounts(state);
     ending.agencies = JSON.parse(JSON.stringify(state.agencies || {}));
+    ending.commandChains = getCommandChains(state, 3);
     ending.chain = state.resolved.slice();
     ending.disclaimer = META.disclaimer;
     ending.meta = {
@@ -1221,6 +1555,14 @@
       if (COMMAND_STATUSES.indexOf(copy.status) === -1) copy.status = copy.effectsApplied ? 'awaiting_feedback' : 'issued';
       if (!Array.isArray(copy.followedRounds)) copy.followedRounds = [];
       if (copy.requiredCoordination === undefined) copy.requiredCoordination = false;
+      if (copy.accepted === undefined) copy.accepted = ['executing', 'blocked', 'awaiting_feedback'].indexOf(copy.status) !== -1 && copy.kind !== 'communication';
+      if (copy.deadlineRound === undefined) copy.deadlineRound = Math.min(FINAL_ROUND, copy.round + STRATEGY.windowRounds);
+      if (copy.windowRounds === undefined) copy.windowRounds = STRATEGY.windowRounds;
+      if (copy.blockedCode === undefined) copy.blockedCode = null;
+      if (copy.delegatedRound === undefined) copy.delegatedRound = null;
+      if (copy.handoffRound === undefined) copy.handoffRound = null;
+      if (!Array.isArray(copy.history)) copy.history = [];
+      if (copy.slotRequired === undefined) copy.slotRequired = !!copy.requiredCoordination || Number(copy.ap) >= 2;
       return copy;
     }) : choices.map(function (record, index) {
       const id = record.commandId || ('legacy:' + record.round + ':' + record.choiceId + ':' + index);
@@ -1228,7 +1570,9 @@
         id: id, kind: 'authorization', round: record.round, eventId: record.eventId,
         choiceId: record.choiceId, title: record.label, ap: record.ap, agency: record.agency || 'office',
         executorId: record.agency || 'office', status: 'completed', authorizedAt: null,
-        requiredCoordination: false, coordinated: true, delegated: false, effectsApplied: true,
+        requiredCoordination: false, coordinated: true, delegated: false, delegateRound: null, effectsApplied: true,
+        accepted: false, deadlineRound: Math.min(FINAL_ROUND, record.round + STRATEGY.windowRounds),
+        windowRounds: STRATEGY.windowRounds, blockedCode: null, history: [],
         blockedReason: null, followedRounds: [], completedRound: record.round,
         result: { deltas: record.deltas || {}, pressureDelta: record.pressureDelta || 0 }
       };
@@ -1245,6 +1589,12 @@
         if (agencies[id]) agencies[id] = Object.assign(agencies[id], input.agencies[id]);
       });
     }
+    Object.keys(agencies).forEach(function (id) { agencies[id].workload = 0; });
+    uniqueCommands.forEach(function (command) {
+      if (command.accepted && !isTerminalCommand(command) && agencies[command.executorId]) {
+        agencies[command.executorId].workload += 1;
+      }
+    });
     const state = {
       version: VERSION,
       schemaVersion: 2,
@@ -1337,10 +1687,17 @@
     toggleIntelPin: toggleIntelPin,
     inquireIntel: inquireIntel,
     getCommandCounts: getCommandCounts,
+    getCommandChains: getCommandChains,
+    getAgencyLoad: getAgencyLoad,
+    getAgencyLoads: getAgencyLoads,
+    getCommandPreview: getCommandPreview,
+    getExecutionRisks: getExecutionRisks,
+    strategy: STRATEGY,
     issueCommand: issueCommand,
     authorizeCommand: authorizeCommand,
     followUpCommand: followUpCommand,
     delegateCommand: delegateCommand,
+    cancelCommand: cancelCommand,
     coordinateAgency: coordinateAgency,
     communicate: communicate,
     applyChoice: applyChoice,

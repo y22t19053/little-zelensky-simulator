@@ -612,6 +612,11 @@ async function main() {
     await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
     const blocked = await savedState();
     assert(blocked.phase === 'briefing' && blocked.round === 2 && blocked.commands.some(function (command) { return command.choiceId === 'mobilize' && command.status === 'blocked'; }), '阻塞状态跨日保留');
+    await click('#btn-ops');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root [data-ops-tab=\\"commands\\"]")'); }, 5000);
+    await click('[data-ops-tab="commands"]');
+    await screenshot('13-command-blocked-desktop.png');
+    await click('#modal-root .modal-actions .btn');
     const pendingBeforeFollow = blocked.pending.length;
     const statsBeforeFollow = Object.assign({}, blocked.stats);
     assert(!(await evaluate(cdp, 'document.querySelector("#command-panel [data-followup]") ? document.querySelector("#command-panel [data-followup]").disabled : true')), '次日可对阻塞命令跟进');
@@ -621,6 +626,8 @@ async function main() {
     assert(followed.ap === blocked.ap - 1 && followedCommand.status === 'awaiting_feedback', '跟进消耗 1 AP 并解除阻塞、开始结算');
     assert(followedCommand.effectsApplied && followed.pending.length > pendingBeforeFollow, '跟进只结算一次并登记延迟后果');
     assert(!Object.keys(statsBeforeFollow).every(function (key) { return followed.stats[key] === statsBeforeFollow[key]; }), '命令结算产生实际国家状态变化');
+    await sleep(3800);
+    await screenshot('14-command-intervened-desktop.png');
 
     await click('#btn-ops');
     await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root [data-ops-tab=\\"intel\\"]")'); }, 5000);
@@ -634,7 +641,72 @@ async function main() {
     assert(Object.keys(statsBeforeInquiry).every(function (key) { return inquired.stats[key] === statsBeforeInquiry[key]; }), '追问不直接修改国家状态');
     await click('#modal-root .modal-actions .btn');
     assert(await evaluate(cdp, 'document.querySelectorAll("#toast-root .toast").length === 1'), '情报与命令操作不叠加通知');
+    await evaluate(cdp, 'window.scrollTo(0,0)');
+    await sleep(3800);
+    await screenshot('15-day2-legacy-desktop.png');
     await evaluate(cdp, 'LZS.saveGame(' + JSON.stringify(mid) + ')');
+
+    console.log('\n[8d] 三种处理方式的跨日差异');
+    const reloadScenario = async function () {
+      await cdp.send('Page.reload', { ignoreCache: true });
+      await sleep(320);
+      await waitFor(function () {
+        return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue")');
+      }, 15000);
+      await click('#btn-continue');
+      await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
+    };
+
+    const delaySetup = await evaluate(cdp, `(() => {
+      const s = LZS.createGame();
+      s.agencies.general_staff.workload = 3;
+      const first = LZS.issueCommand(s, 'mobilize').command;
+      LZS.authorizeCommand(s, first.id);
+      LZS.endRound(s);
+      LZS.continueFromInterlude(s);
+      const second = LZS.issueCommand(s, 'stay').command;
+      LZS.authorizeCommand(s, second.id);
+      LZS.saveGame(s);
+      return {round:s.round, first:first.status, second:second.status, ap:s.ap, deadline:first.deadlineRound};
+    })()`);
+    assert(delaySetup.round === 2 && delaySetup.first === 'blocked' && delaySetup.deadline === 2, '延误场景：第一夜阻塞并留下次日窗口');
+    await reloadScenario();
+    await screenshot('16-delay-day2-blocked.png');
+    await click('#btn-end-round');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.querySelector("#modal-root .modal-card").textContent.includes("失效")'), '接受延误在最后窗口后显示命令失效');
+    await screenshot('17-delay-night-expired.png');
+    await click('#modal-root .modal-actions .btn-primary');
+    await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    const expired = await savedState();
+    const expiredCommand = expired.commands.filter(function (command) { return command.choiceId === 'mobilize'; })[0];
+    assert(expired.round === 3 && expiredCommand.status === 'expired' && !expiredCommand.effectsApplied, '延误路线：命令失效且不结算原效果');
+    await screenshot('18-day3-accepted-delay.png');
+
+    const delegateSetup = await evaluate(cdp, `(() => {
+      const s = LZS.createGame();
+      const first = LZS.issueCommand(s, 'mobilize').command;
+      LZS.authorizeCommand(s, first.id);
+      LZS.delegateCommand(s, first.id, 'office');
+      LZS.endRound(s);
+      LZS.continueFromInterlude(s);
+      const second = LZS.issueCommand(s, 'record').command;
+      LZS.authorizeCommand(s, second.id);
+      LZS.saveGame(s);
+      return {round:s.round, first:first.status, blocked:first.blockedCode, ap:s.ap, handoff:first.handoffRound};
+    })()`);
+    assert(delegateSetup.round === 2 && delegateSetup.first === 'blocked' && delegateSetup.blocked === 'HANDOFF', '委派场景：首日交接，次夜才可能执行');
+    await reloadScenario();
+    await screenshot('19-delegation-day2-handoff.png');
+    await click('#btn-end-round');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.querySelector("#modal-root .modal-card").textContent.includes("执行")'), '委派路线第二夜执行并产生反馈');
+    await click('#modal-root .modal-actions .btn-primary');
+    await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    const delegated = await savedState();
+    const delegatedCommand = delegated.commands.filter(function (command) { return command.choiceId === 'mobilize'; })[0];
+    assert(delegated.round === 3 && delegatedCommand.status === 'awaiting_feedback' && delegatedCommand.effectsApplied, '委派路线延后一夜但保留执行效果');
+    await screenshot('20-day3-delegation-executed.png');
 
     console.log('\n[9] 320 / 360 / 390 / 430 手机端与真实触摸事件');
     const mobileViewports = [[320, 700], [360, 800], [390, 844], [430, 932]];
@@ -695,6 +767,21 @@ async function main() {
     }
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     assert(await evaluate(cdp, 'window.matchMedia("(prefers-reduced-motion: reduce)").matches && getComputedStyle(document.querySelector(".btn")).animationDuration === "1e-05s"'), '减少动态效果模式生效');
+
+    console.log('\n[9b] AP 全部用于既有事务时仍可结束回合');
+    await setViewport(1280, 900, false);
+    await evaluate(cdp, '(() => { const state = LZS.createGame(); state.ap = 0; return LZS.saveGame(state); })()');
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await waitFor(function () {
+      return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue")');
+    }, 15000);
+    await click('#btn-continue');
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.getElementById("btn-end-round").disabled === false'), '未签发新命令但 AP 已耗尽时结束按钮可用');
+    await click('#btn-end-round');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.querySelector("#modal-root .modal-card").textContent.indexOf("夜间态势") !== -1'), 'AP 耗尽的回合同样进入夜间结算');
+    await screenshot('21-ap-spent-desktop.png');
 
     console.log('\n[10] 离线试听页');
     await setViewport(1280, 900, false);
