@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="favicon-title favicon-desc">
+  <title id="favicon-title">小泽模拟器</title>
+  <desc id="favicon-desc">深色底、低饱和琥珀色边框与乌克兰总统办公室标记。</desc>
+  <rect width="64" height="64" rx="12" fill="#0c0f0d"/>
+  <rect x="3.5" y="3.5" width="57" height="57" rx="9" fill="none" stroke="#b79b62" stroke-width="1.6" opacity="0.75"/>
+  <text x="32" y="41" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="24" letter-spacing="1" fill="#d9c79d">УК</text>
+</svg>

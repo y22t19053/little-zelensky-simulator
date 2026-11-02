@@ -14,7 +14,7 @@ const SHOTS = path.join(__dirname, 'screenshots');
 const PROFILE = path.join(__dirname, '.edge-profile');
 const EDGE = process.env.EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const PORT = Number(process.env.EDGE_PORT || 9333);
-const PAGE_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
+const PAGE_URL = process.env.PAGE_URL || pathToFileURL(path.join(ROOT, 'index.html')).href;
 
 const SEQUENCE = {
   1: ['aid_call', 'address'],
@@ -205,11 +205,13 @@ async function main() {
     };
 
     const touchClick = async function (selector) {
-      const point = await evaluate(cdp, '(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return null; el.scrollIntoView({block:"center",behavior:"instant"}); const r = el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()');
-      if (!point) throw new Error('触摸失败，元素不存在：' + selector);
+      const found = await evaluate(cdp, '(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return false; el.scrollIntoView({block:"center",behavior:"instant"}); return true; })()');
+      if (!found) throw new Error('触摸失败，元素不存在：' + selector);
+      await sleep(180);
+      const point = await evaluate(cdp, '(() => { const r = document.querySelector(' + JSON.stringify(selector) + ').getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()');
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: point.x, y: point.y }] });
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      await sleep(100);
+      await sleep(220);
     };
 
     const savedState = async function () {
