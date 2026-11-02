@@ -1,0 +1,440 @@
+/*
+ * 引擎回归测试（Node，无浏览器）
+ * 运行：node tests/engine.test.cjs
+ */
+'use strict';
+
+const assert = require('node:assert/strict');
+
+const store = new Map();
+globalThis.window = globalThis;
+globalThis.localStorage = {
+  getItem: function (key) { return store.has(key) ? store.get(key) : null; },
+  setItem: function (key, value) { store.set(key, String(value)); },
+  removeItem: function (key) { store.delete(key); },
+  clear: function () { store.clear(); }
+};
+
+require('../js/events.js');
+require('../js/engine.js');
+
+const L = globalThis.LZS;
+let passed = 0;
+let failed = 0;
+
+function test(name, fn) {
+  try {
+    fn();
+    passed += 1;
+    console.log('  ok  ' + name);
+  } catch (error) {
+    failed += 1;
+    console.error('  FAIL ' + name);
+    console.error('       ' + (error && error.stack ? error.stack.split('\n').slice(0, 4).join('\n       ') : error));
+  }
+}
+
+function fresh() {
+  return L.createGame();
+}
+
+function setStats(state, overrides) {
+  Object.keys(state.stats).forEach(function (key) {
+    state.stats[key] = 80;
+  });
+  Object.assign(state.stats, overrides || {});
+  return state;
+}
+
+console.log('\n[数据完整性]');
+test('7 个连续事件，日期从 2 月 24 日到 3 月初', function () {
+  assert.equal(L.events.length, 7);
+  assert.equal(L.events[0].date, '2022-02-24');
+  assert.ok(L.events[L.events.length - 1].date >= '2022-03-01');
+  L.events.forEach(function (event) {
+    assert.ok(event.dateLabel && event.time && event.title && event.kicker);
+    assert.ok(event.intel && event.intel.level && event.intel.note);
+    assert.ok(Array.isArray(event.situation) && event.situation.length >= 1);
+    assert.ok(Array.isArray(event.known) && event.known.length >= 1);
+    assert.ok(Array.isArray(event.unknown) && event.unknown.length >= 1);
+    assert.equal(Object.prototype.hasOwnProperty.call(event, 'hindsight'), false, event.id + ' 仍在游玩数据中携带事后信息');
+    assert.ok(Number.isFinite(event.pressureRise) && event.pressureRise > 0);
+    assert.ok(Array.isArray(event.choices) && event.choices.length >= 2);
+  });
+});
+
+test('所有选项都有 AP 成本、即时效果和至少两难取舍', function () {
+  L.events.forEach(function (event) {
+    assert.ok(event.choices.length >= 4, event.id + ' 选项不足');
+    event.choices.forEach(function (choice) {
+      assert.ok(choice.id && choice.title && choice.summary && choice.staff);
+      assert.ok(Number.isInteger(choice.ap) && choice.ap >= 1);
+      assert.ok(choice.effects && Object.keys(choice.effects).length >= 2);
+      assert.ok(choice.summary.length > 10);
+    });
+  });
+});
+
+console.log('\n[初始状态与 AP]');
+test('初始 3 AP、压力 12、七项状态在 0—100', function () {
+  const state = fresh();
+  assert.equal(state.round, 1);
+  assert.equal(state.ap, 3);
+  assert.equal(state.apMax, 3);
+  assert.equal(state.pressure, 12);
+  assert.deepEqual(state.stats, L.meta.initialStats);
+  L.statKeys.forEach(function (key) {
+    assert.ok(state.stats[key] >= 0 && state.stats[key] <= 100);
+  });
+});
+
+test('签发扣 AP，效果立即结算', function () {
+  const state = fresh();
+  const choice = L.getChoice(L.getEvent(state), 'aid_call');
+  const before = Object.assign({}, state.stats);
+  const result = L.applyChoice(state, 'aid_call');
+  assert.equal(result.ok, true);
+  assert.equal(state.ap, 3 - choice.ap);
+  assert.equal(state.stats.intl, before.intl + choice.effects.intl);
+  assert.equal(state.stats.safety, before.safety + choice.effects.safety);
+  assert.equal(state.pressure, 12 + choice.effects.pressure);
+  assert.deepEqual(state.executed, ['aid_call']);
+});
+
+test('重复签发被拒绝，且不会二次扣 AP', function () {
+  const state = fresh();
+  assert.equal(L.applyChoice(state, 'address').ok, true);
+  const apAfter = state.ap;
+  const duplicate = L.applyChoice(state, 'address');
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.code, 'DUPLICATE');
+  assert.equal(state.ap, apAfter);
+  assert.equal(state.choices.length, 1);
+});
+
+test('AP 不足时拒绝签发', function () {
+  const state = fresh();
+  state.ap = 1;
+  const result = L.applyChoice(state, 'mobilize');
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'AP');
+  assert.equal(state.ap, 1);
+});
+
+test('所有状态变化都夹在 0—100 之间', function () {
+  const state = fresh();
+  const high = L._test.applyEffectValues(state, { gov: 999, army: 999, reserve: 999 });
+  assert.equal(state.stats.gov, 100);
+  assert.equal(state.stats.army, 100);
+  assert.equal(state.stats.reserve, 100);
+  assert.equal(high.deltas.gov, 100 - L.meta.initialStats.gov);
+
+  const low = L._test.applyEffectValues(state, { gov: -999, army: -999, safety: -999 });
+  assert.equal(state.stats.gov, 0);
+  assert.equal(state.stats.army, 0);
+  assert.equal(state.stats.safety, 0);
+  assert.ok(low.deltas.safety < 0);
+});
+
+test('互斥命令在 AP 检查之前被拒绝，不扣 AP 或写入日志', function () {
+  const cases = [
+    [2, 'stay', 'relocate'],
+    [3, 'counterattack', 'block_runway'],
+    [6, 'talks', 'refuse']
+  ];
+  cases.forEach(function (item) {
+    const state = fresh();
+    state.round = item[0];
+    assert.equal(L.applyChoice(state, item[1]).ok, true);
+    const before = { ap: state.ap, choices: state.choices.length, log: state.log.length };
+    const result = L.applyChoice(state, item[2]);
+    assert.equal(result.ok, false);
+    assert.equal(result.code, 'CONFLICT');
+    assert.equal(result.conflict.id, item[1]);
+    assert.equal(state.ap, before.ap);
+    assert.equal(state.choices.length, before.choices);
+    assert.equal(state.log.length, before.log);
+    assert.equal(L.getChoiceStatus(state, item[2]).state, 'conflict');
+  });
+});
+
+test('互斥状态在存档恢复后仍然有效', function () {
+  const state = fresh();
+  state.round = 2;
+  assert.equal(L.applyChoice(state, 'stay').ok, true);
+  assert.equal(L.saveGame(state), true);
+  const loaded = L.loadSavedGame().state;
+  assert.equal(L.getChoiceStatus(loaded, 'relocate').state, 'conflict');
+  const ap = loaded.ap;
+  assert.equal(L.applyChoice(loaded, 'split').code, 'CONFLICT');
+  assert.equal(loaded.ap, ap);
+  assert.equal(L.deleteSave(), true);
+});
+
+console.log('\n[回合与延迟效果]');
+test('空回合不能结束；结束一次后不能重复结算', function () {
+  const state = fresh();
+  const noChoice = L.endRound(state);
+  assert.equal(noChoice.ok, false);
+  assert.equal(noChoice.code, 'NO_CHOICE');
+
+  assert.equal(L.applyChoice(state, 'address').ok, true);
+  const first = L.endRound(state);
+  assert.equal(first.ok, true);
+  assert.equal(state.phase, 'interlude');
+  assert.equal(state.round, 2);
+  assert.equal(state.ap, 3);
+
+  const pressure = state.pressure;
+  const second = L.endRound(state);
+  assert.equal(second.ok, false);
+  assert.equal(second.code, 'PHASE');
+  assert.equal(state.pressure, pressure);
+  assert.equal(state.round, 2);
+});
+
+test('结束回合会按事件上升压力并产生夜间侵蚀', function () {
+  const state = fresh();
+  assert.equal(L.applyChoice(state, 'address').ok, true);
+  const before = state.pressure;
+  const event = L.getEvent(state);
+  const result = L.endRound(state);
+  assert.equal(result.ok, true);
+  assert.equal(result.pressure.before, before);
+  assert.equal(result.pressure.rise, event.pressureRise);
+  assert.equal(state.pressure, before + event.pressureRise);
+  assert.ok(result.attrition && result.attrition.kyiv < 0);
+  assert.ok(result.interlude && result.interlude.round === 2);
+});
+
+test('延迟后果按 dueRound 调度并只在到期时触发', function () {
+  const state = fresh();
+  assert.equal(L.applyChoice(state, 'mobilize').ok, true);
+  assert.equal(state.pending.length, 1);
+  assert.equal(state.pending[0].dueRound, 4);
+
+  const beforeArmy = state.stats.army;
+  const beforeWill = state.stats.will;
+  const resolved = L._test.resolveDueDelayed(state, 3);
+  assert.equal(resolved.length, 0);
+  assert.equal(state.pending.length, 1);
+  assert.equal(state.stats.army, beforeArmy);
+  assert.equal(state.stats.will, beforeWill);
+
+  state.phase = 'interlude';
+  const due = L._test.resolveDueDelayed(state, 4);
+  assert.equal(due.length, 1);
+  assert.equal(state.pending.length, 0);
+  assert.equal(state.resolved.length, 1);
+  assert.equal(state.resolved[0].appliedRound, 4);
+  assert.ok(state.stats.army < beforeArmy);
+  assert.ok(state.stats.will < beforeWill);
+  assert.ok(state.resolved[0].deltas.army < 0);
+  assert.ok(state.resolved[0].deltas.will < 0);
+});
+
+test('夜间确认只从 interlude 进入下一回合，不能重复继续', function () {
+  const state = fresh();
+  assert.equal(L.applyChoice(state, 'address').ok, true);
+  assert.equal(L.endRound(state).ok, true);
+  assert.equal(state.phase, 'interlude');
+  assert.equal(L.continueFromInterlude(state).ok, true);
+  assert.equal(state.phase, 'briefing');
+  assert.equal(L.continueFromInterlude(state).ok, false);
+});
+
+console.log('\n[存档]');
+test('保存、读取、摘要与删除存档', function () {
+  const state = fresh();
+  assert.equal(L.applyChoice(state, 'aid_call').ok, true);
+  assert.equal(L.saveGame(state), true);
+  assert.equal(L.hasSave(), true);
+
+  const summary = L.getSaveSummary();
+  assert.equal(summary.round, 1);
+  assert.equal(summary.ap, 2);
+  assert.equal(summary.phase, 'briefing');
+  assert.ok(summary.dateLabel.includes('2月24日'));
+
+  const loaded = L.loadSavedGame();
+  assert.ok(loaded && loaded.state);
+  assert.equal(loaded.state.ap, 2);
+  assert.deepEqual(loaded.state.executed, ['aid_call']);
+  assert.equal(loaded.state.choices.length, 1);
+
+  assert.equal(L.deleteSave(), true);
+  assert.equal(L.hasSave(), false);
+  assert.equal(L.loadSavedGame(), null);
+});
+
+test('v0.1 存档可恢复，并按当前事件数据保持互斥', function () {
+  const legacy = fresh();
+  legacy.round = 2;
+  assert.equal(L.applyChoice(legacy, 'stay').ok, true);
+  const legacyPayload = JSON.parse(JSON.stringify({ version: 1, savedAt: '2026-01-01T00:00:00.000Z', state: legacy }));
+  delete legacyPayload.state.__v02;
+  store.set(L.saveKey, JSON.stringify(legacyPayload));
+  const loaded = L.loadSavedGame();
+  assert.ok(loaded && loaded.state);
+  assert.equal(loaded.state.round, 2);
+  const ap = loaded.state.ap;
+  const conflict = L.applyChoice(loaded.state, 'relocate');
+  assert.equal(conflict.code, 'CONFLICT');
+  assert.equal(loaded.state.ap, ap);
+});
+
+test('损坏的存档不会让游戏崩溃', function () {
+  store.set(L.saveKey, '{not valid json');
+  assert.equal(L.loadSavedGame(), null);
+  store.set(L.saveKey, JSON.stringify({ version: 1, state: { round: 99 } }));
+  assert.equal(L.loadSavedGame(), null);
+});
+
+console.log('\n[结局判定]');
+test('七种状态崩溃与压力过载分别触发对应结局', function () {
+  const cases = [
+    ['president', { safety: 10 }],
+    ['government', { gov: 25 }],
+    ['kyiv', { kyiv: 12 }],
+    ['military', { army: 15 }],
+    ['will', { will: 20 }],
+    ['diplomatic', { intl: 10 }],
+    ['logistics', { reserve: 8 }]
+  ];
+  cases.forEach(function (item) {
+    const state = setStats(fresh(), item[1]);
+    const ending = L.checkCollapse(state);
+    assert.ok(ending, item[0] + ' 未触发');
+    assert.equal(ending.id, item[0]);
+  });
+
+  const overload = setStats(fresh(), {});
+  overload.pressure = 100;
+  const ending = L.checkCollapse(overload);
+  assert.equal(ending.id, 'overload');
+});
+
+test('崩溃判定优先级：总统安全优先于政府，政府优先于基辅', function () {
+  const state = setStats(fresh(), { safety: 5, gov: 25, kyiv: 12 });
+  assert.equal(L.checkCollapse(state).id, 'president');
+  state.stats.safety = 80;
+  assert.equal(L.checkCollapse(state).id, 'government');
+  state.stats.gov = 80;
+  assert.equal(L.checkCollapse(state).id, 'kyiv');
+});
+
+test('阶段结束可判定 held / costly / hollow', function () {
+  const held = setStats(fresh(), {});
+  held.pressure = 50;
+  assert.equal(L.evaluateFinal(held).id, 'held');
+
+  const costly = setStats(fresh(), {
+    gov: 40, kyiv: 28, army: 30, will: 34, intl: 30, reserve: 20, safety: 14
+  });
+  costly.pressure = 80;
+  assert.equal(L.evaluateFinal(costly).id, 'costly');
+
+  const hollow = setStats(fresh(), {
+    gov: 30, kyiv: 10, army: 10, will: 20, intl: 20, reserve: 10, safety: 5
+  });
+  hollow.pressure = 95;
+  assert.equal(L.evaluateFinal(hollow).id, 'hollow');
+});
+
+test('hollow 必须至少两项系统跌破严重受损线', function () {
+  const one = setStats(fresh(), { intl: 23 });
+  one.pressure = 80;
+  assert.equal(L.evaluateFinal(one).id, 'costly');
+  one.stats.reserve = 17;
+  const ending = L.evaluateFinal(one);
+  assert.equal(ending.id, 'hollow');
+  assert.equal(ending.severeCount, 2);
+  assert.deepEqual(ending.severeKeys, ['intl', 'reserve']);
+});
+
+test('held 同时要求七项状态达标和压力低于 95', function () {
+  const state = setStats(fresh(), {});
+  state.pressure = 94;
+  assert.equal(L.evaluateFinal(state).id, 'held');
+  state.stats.reserve = 23;
+  assert.equal(L.evaluateFinal(state).id, 'costly');
+});
+
+console.log('\n[完整一局]');
+test('固定策略可以从头玩到结局，且结局数据完整', function () {
+  const sequence = {
+    1: ['aid_call', 'address'],
+    2: ['stay', 'record'],
+    3: ['air_defense'],
+    4: ['curfew', 'arm_citizens'],
+    5: ['delegate'],
+    6: ['talks'],
+    7: ['logistics', 'evacuate']
+  };
+  const state = fresh();
+  let guard = 0;
+
+  while (state.phase !== 'ending' && guard < 20) {
+    guard += 1;
+    const round = state.round;
+    const event = L.getEvent(state);
+    assert.ok(event, '第 ' + round + ' 回合缺少事件');
+
+    const ids = sequence[round] || [];
+    assert.ok(ids.length >= 1, '第 ' + round + ' 回合没有策略');
+    ids.forEach(function (id) {
+      const result = L.applyChoice(state, id);
+      assert.equal(result.ok, true, '第 ' + round + ' 回合签发 ' + id + ' 失败：' + (result.error || ''));
+    });
+    assert.ok(state.executed.length >= 1);
+
+    const pressureBefore = state.pressure;
+    const end = L.endRound(state);
+    assert.equal(end.ok, true, '第 ' + round + ' 回合结束失败：' + (end.error || ''));
+    if (state.phase === 'ending') {
+      assert.ok(state.ending);
+      break;
+    }
+    const delayedPressure = end.interlude.pressure.delayed;
+    assert.equal(end.interlude.pressure.before, pressureBefore);
+    assert.equal(end.interlude.pressure.rise, event.pressureRise);
+    assert.equal(end.interlude.pressure.after, state.pressure);
+    assert.equal(
+      state.pressure,
+      Math.min(100, pressureBefore + event.pressureRise + delayedPressure),
+      '第 ' + round + ' 回合压力结算与夜间摘要不一致'
+    );
+    if (state.phase === 'interlude') {
+      assert.equal(L.continueFromInterlude(state).ok, true);
+    }
+  }
+
+  assert.equal(state.phase, 'ending');
+  assert.ok(state.ending && state.ending.title);
+  assert.equal(state.ending.finalStats.safety, state.stats.safety);
+  assert.equal(state.ending.keyChoices.length, state.choices.length);
+  assert.ok(state.ending.epilogue.length >= 1);
+  assert.ok(state.ending.reasons.length >= 1);
+  assert.ok(state.log.length >= 7);
+  console.log('      结局：' + state.ending.id + ' / ' + state.ending.title +
+    '；最终压力 ' + state.pressure + '；签发 ' + state.choices.length + ' 项');
+
+  assert.equal(L.applyChoice(state, 'address').ok, false, '结局后仍可签发');
+  assert.equal(L.endRound(state).ok, false, '结局后仍可结束回合');
+});
+
+console.log('\n[压力预测]');
+test('压力预测与事件 pressureRise 一致', function () {
+  const state = fresh();
+  const forecast = L.getPressureForecast(state);
+  const event = L.getEvent(state);
+  assert.equal(forecast.current, state.pressure);
+  assert.equal(forecast.rise, event.pressureRise);
+  assert.equal(forecast.next, Math.min(100, state.pressure + event.pressureRise));
+  assert.ok(forecast.attrition.kyiv < 0);
+});
+
+console.log('\n----------------------------------------');
+console.log('通过 ' + passed + ' 项，失败 ' + failed + ' 项');
+
+if (failed > 0) process.exitCode = 1;
