@@ -879,6 +879,101 @@ async function main() {
     await screenshot('30-ending-trend-mobile.png');
     await setViewport(1280, 900, false);
 
+    console.log('\n[8g] 基辅战役：UI 全程点击 13 个决策窗口');
+    await setViewport(1280, 800, false);
+    const classicBefore = await evaluate(cdp, 'localStorage.getItem("lzs_save_v1")');
+    const campState = async function () {
+      return evaluate(cdp, '(() => { try { return JSON.parse(localStorage.getItem("lzs_campaign_v1")).state; } catch (e) { return null; } })()');
+    };
+    await evaluate(cdp, 'localStorage.removeItem("lzs_campaign_v1"); "ok"');
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-campaign")'); }, 15000);
+    await screenshot('31-intro-campaign.png');
+    await click('#btn-campaign');
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
+    const PLAN = {
+      c1: ['c_command_line', 'c_first_appeal'], c2: ['c_counter_airfield'], c3: ['c_stay_capital'], c4: ['c_counterintel', 'c_rumor_rules'],
+      c5: ['c_blow_bridges'], c6: ['c_harass_convoy'], c7: ['c_evacuate'], c8: ['c_rotation'], c9: ['c_reserve_moshchun'],
+      c10: ['c_air_defense_aid', 'c_staff_rest'], c11: ['c_counter_west'], c12: ['c_stay_alert', 'c_verify_signal'], c13: ['c_staged_return', 'c_document']
+    };
+    let campInterludes = 0;
+    let reloadChecked = false;
+    for (let guard = 0; guard < 20; guard += 1) {
+      const st = await campState();
+      if (!st || st.phase === 'ending') break;
+      const eventId = st.round && ('c' + st.round);
+      const picks = PLAN[eventId] || [];
+      for (const id of picks) {
+        const ok = await evaluate(cdp, '(() => { const c = document.querySelector(\'.choice-card[data-choice-id="' + id + '"]\'); if (!c || c.classList.contains("is-locked")) return false; c.click(); return true; })()');
+        if (!ok) continue;
+        await sleep(80);
+        const can = await evaluate(cdp, '!document.getElementById("btn-issue").disabled');
+        if (can) await click('#btn-issue');
+      }
+      await authorizeAll();
+      if (eventId === 'c1') {
+        assert(await evaluate(cdp, '/窗口 1 \\/ 13/.test(document.getElementById("game-phase").textContent)'), '顶栏显示战役窗口 1 / 13');
+        assert(await evaluate(cdp, '!!document.querySelector(".front-map svg") && document.querySelectorAll(".front-legend li").length === 6'), '桌面显示六方向战场态势图');
+        await screenshot('32-campaign-c1-desktop.png');
+      }
+      if (eventId === 'c2') {
+        assert(await evaluate(cdp, '!!document.querySelector(".key-banner")'), '安东诺夫机场窗口显示重大决策横幅');
+        await screenshot('33-campaign-airfield.png');
+      }
+      if (eventId === 'c3') {
+        await setViewport(390, 844, true);
+        await sleep(200);
+        const m = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+        assert(m.sw <= m.cw + 2, '390px 战役窗口无横向溢出', JSON.stringify(m));
+        await screenshot('34-campaign-mobile.png');
+        await setViewport(1280, 800, false);
+      }
+      if (eventId === 'c5' && !reloadChecked) {
+        reloadChecked = true;
+        const roundBefore = st.round;
+        await cdp.send('Page.reload', { ignoreCache: true });
+        await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue-campaign") && !document.getElementById("btn-continue-campaign").hidden'); }, 15000);
+        await click('#btn-continue-campaign');
+        await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
+        const after = await campState();
+        assert(after.round === roundBefore && after.scenario === 'campaign', '刷新后继续战役回到同一窗口');
+      }
+      if (eventId === 'c9') await screenshot('35-campaign-reserve.png');
+      if (eventId === 'c12') await screenshot('36-campaign-signal.png');
+      const endable = await evaluate(cdp, '!document.getElementById("btn-end-round").disabled');
+      if (!endable) { assert(false, '战役窗口可以结束', eventId); break; }
+      await click('#btn-end-round');
+      const phase = await waitFor(async function () { const s = await campState(); return s && (s.phase === 'interlude' || s.phase === 'ending') ? s.phase : false; }, 5000);
+      if (phase === 'interlude') {
+        campInterludes += 1;
+        await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+        if (campInterludes === 1) {
+          assert(await evaluate(cdp, '!!document.querySelector("#modal-root .campaign-step")'), '窗口推进显示内部逐日模拟段');
+          await screenshot('37-campaign-interlude.png');
+        }
+        await click('#modal-root .modal-actions .btn-primary');
+        await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+      }
+    }
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-ending").hidden'); }, 5000);
+    const campEnd = await campState();
+    assert(campEnd && campEnd.phase === 'ending' && campEnd.ending && /^c_[A-H]$/.test(campEnd.ending.id), '战役 UI 全程推进到 A–H 结局', campEnd && campEnd.ending && campEnd.ending.id);
+    console.log('  战役结局：' + campEnd.ending.code + ' ' + campEnd.ending.title + ' / 第 ' + campEnd.ending.day + ' 天 / 窗口推进 ' + campInterludes);
+    assert(await evaluate(cdp, 'document.querySelectorAll(".dim-list li").length === 8 && !!document.querySelector(".key-chain li")'), '战役结局显示八维结果与关键决策链');
+    assert(await evaluate(cdp, 'localStorage.getItem("lzs_save_v1")') === classicBefore, '战役不改动七日开局存档');
+    await screenshot('38-campaign-ending.png');
+    await setViewport(390, 844, true);
+    await sleep(200);
+    const em = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+    assert(em.sw <= em.cw + 2, '390px 战役结局无横向溢出', JSON.stringify(em));
+    await screenshot('39-campaign-ending-mobile.png');
+    await setViewport(1280, 800, false);
+    await click('#btn-history');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .campaign-review")'); }, 5000);
+    assert(await evaluate(cdp, 'document.querySelectorAll("#modal-root .counterfactual").length >= 2 && document.querySelectorAll("#modal-root .history-timeline li").length >= 10'), '战役复盘包含历史进程与 2–4 个反事实');
+    await screenshot('40-campaign-review.png');
+    await evaluate(cdp, 'document.querySelectorAll("#modal-root [data-modal-close]").forEach(function(b){b.click();})');
+    await sleep(150);
     console.log('\n[9b] AP 全部用于既有事务时仍可结束回合');
     await setViewport(1280, 900, false);
     await evaluate(cdp, '(() => { const state = LZS.createGame(); state.ap = 0; return LZS.saveGame(state); })()');

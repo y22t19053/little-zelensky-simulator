@@ -16,6 +16,30 @@
   const BACKUP_KEY = 'lzs_save_v1_legacy_backup';
   const AP_MAX = META.apPerRound || 3;
   const FINAL_ROUND = EVENTS.length;
+  /* v0.6：基辅战役（2/24—4/2）。classic 七日模式保持原常量与存档键不变。 */
+  const CAMPAIGN = root.LZS_CAMPAIGN || null;
+  const CAMPAIGN_EVENTS = CAMPAIGN ? CAMPAIGN.events : [];
+  const CAMPAIGN_VERSION = 4;
+
+  function isCampaign(state) { return !!(state && state.scenario === 'campaign' && CAMPAIGN); }
+  function eventsFor(state) { return isCampaign(state) ? CAMPAIGN_EVENTS : EVENTS; }
+  function finalRoundFor(state) { return eventsFor(state).length; }
+  function apMaxFor(state, round) {
+    if (!isCampaign(state)) return AP_MAX;
+    const event = CAMPAIGN_EVENTS[(round || state.round) - 1];
+    return event && event.ap ? event.ap : AP_MAX;
+  }
+  function findEventById(id) {
+    return EVENTS.filter(function (item) { return item.id === id; })[0] || CAMPAIGN_EVENTS.filter(function (item) { return item.id === id; })[0] || null;
+  }
+  function flagsMatch(flags, when) {
+    if (!when) return true;
+    const f = flags || {};
+    if (when.all && !when.all.every(function (id) { return !!f[id]; })) return false;
+    if (when.any && !when.any.some(function (id) { return !!f[id]; })) return false;
+    if (when.none && when.none.some(function (id) { return !!f[id]; })) return false;
+    return true;
+  }
   const COMMAND_STATUSES = ['issued', 'executing', 'blocked', 'awaiting_feedback', 'completed', 'cancelled', 'expired'];
   const COMMAND_LABELS = {
     issued: '已签发', executing: '已接收 · 执行中', blocked: '遇到阻塞',
@@ -88,7 +112,7 @@
   function addLog(state, type, title, text) {
     state.log.push({
       round: state.round,
-      dateLabel: EVENTS[state.round - 1] ? EVENTS[state.round - 1].dateLabel : '',
+      dateLabel: eventsFor(state)[state.round - 1] ? eventsFor(state)[state.round - 1].dateLabel : '',
       type: type,
       title: title,
       text: text || ''
@@ -97,7 +121,7 @@
   }
 
   function getEvent(state) {
-    return EVENTS[state.round - 1] || null;
+    return eventsFor(state)[state.round - 1] || null;
   }
 
   function getChoice(event, choiceId) {
@@ -142,6 +166,9 @@
     if (isChoiceExecuted(state, choice.id)) {
       return { canIssue: false, state: 'issued', message: '这项命令已经签发。', conflict: null };
     }
+    if (choice.requires && !flagsMatch(state.flags, choice.requires)) {
+      return { canIssue: false, state: 'locked', message: choice.requireNote || '前置条件没有形成，这项命令目前不可执行。', conflict: null };
+    }
     const conflict = getExclusiveConflict(state, choice);
     if (conflict) {
       return {
@@ -183,7 +210,7 @@
   }
 
   function agencyForChoice(choice) {
-    return CHOICE_AGENCY[choice.id] || 'office';
+    return choice.agency || CHOICE_AGENCY[choice.id] || 'office';
   }
 
   function getAgencyLoad(state, agencyId) {
@@ -217,6 +244,8 @@
     const state = maybeChoice ? stateOrChoice : null;
     const choice = maybeChoice || stateOrChoice;
     if (!choice) return false;
+    /* v0.6 战役关键决策由总统直接签署授权：代价体现在 AP、不可逆性和后续回响，不再叠加跨部门召集。 */
+    if (choice.keyDecision) return false;
     const agency = agencyId || agencyForChoice(choice);
     const affected = STAT_KEYS.filter(function (key) { return !!choice.effects && !!choice.effects[key]; }).length;
     let required = choice.ap >= 2 || affected >= 5;
@@ -234,6 +263,10 @@
   function timeProfileFor(choiceId) {
     const profile = (STRAT.timeProfiles || {})[choiceId];
     const base = { kind: 'short', windowRounds: STRATEGY.windowRounds, holdRounds: 0, resurface: false, note: '' };
+    if (!profile && /^c_/.test(choiceId)) {
+      const campaignChoice = findChoiceAnywhere(choiceId);
+      if (campaignChoice && campaignChoice.keyDecision) return Object.assign(base, { kind: 'urgent', windowRounds: 0, note: '关键决策：只能在本窗口执行。' });
+    }
     return profile ? Object.assign(base, profile) : base;
   }
 
@@ -295,7 +328,7 @@
       slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2 || timeProfileFor(choice.id).kind === 'commitment',
       requiresIntel: requiresIntelClarification(state, event, choice),
       intelSatisfied: isIntelSatisfied(state, { requiresIntel: requiresIntelClarification(state, event, choice), intelReportId: event.id + ':military' }),
-      deadlineRound: Math.min(FINAL_ROUND, state.round + timeProfileFor(choice.id).windowRounds),
+      deadlineRound: Math.min(finalRoundFor(state), state.round + timeProfileFor(choice.id).windowRounds),
       timeKind: timeProfileFor(choice.id).kind,
       kindLabel: (STRAT.kindLabels || {})[timeProfileFor(choice.id).kind] || '短期窗口',
       timeNote: timeProfileFor(choice.id).note || '',
@@ -417,17 +450,19 @@
     return getIntelReports(state).filter(function (report) { return report.id === id; })[0] || null;
   }
 
-  function createGame() {
+  function createGame(options) {
+    const campaignMode = !!(options && options.scenario === 'campaign' && CAMPAIGN);
     const stats = {};
     STAT_KEYS.forEach(function (key) {
       stats[key] = clamp(META.initialStats[key], 0, 100);
     });
     const state = {
       version: VERSION,
-      schemaVersion: 3,
+      schemaVersion: campaignMode ? CAMPAIGN_VERSION : 3,
+      scenario: campaignMode ? 'campaign' : 'classic',
       round: 1,
-      ap: AP_MAX,
-      apMax: AP_MAX,
+      ap: campaignMode ? (CAMPAIGN_EVENTS[0].ap || AP_MAX) : AP_MAX,
+      apMax: campaignMode ? (CAMPAIGN_EVENTS[0].ap || AP_MAX) : AP_MAX,
       stats: stats,
       pressure: clamp(META.startPressure, 0, 100),
       flags: {},
@@ -453,6 +488,10 @@
       startedAt: new Date().toISOString(),
       runId: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
     };
+    if (campaignMode) {
+      state.version = CAMPAIGN_VERSION;
+      state.campaign = { day: 1, carryDays: 0, interruptions: [], entered: [], echoes: [], attritionCarry: {}, windows: [] };
+    }
     recordTimeline(state);
     addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 3 点注意力，用来决定这个国家先处理什么。信息可以免费阅读，追问与协调会占用注意力。');
     return state;
@@ -500,6 +539,7 @@
         dueRound: dueRound,
         label: item.label,
         note: item.note || '',
+        when: item.when || null,
         effects: Object.assign({}, item.effects || {})
       };
       state.pending.push(record);
@@ -524,6 +564,18 @@
       return { deltas: existing.deltas || {}, pressureDelta: existing.pressureDelta || 0 };
     }
     const result = applyEffectValues(state, choice.effects);
+    const modifierNotes = [];
+    (choice.modifiers || []).forEach(function (modifier) {
+      if (!flagsMatch(state.flags, modifier.when)) return;
+      const extra = applyEffectValues(state, modifier.effects);
+      Object.keys(extra.deltas).forEach(function (key) { result.deltas[key] = (result.deltas[key] || 0) + extra.deltas[key]; });
+      result.pressureDelta += extra.pressureDelta;
+      if (modifier.note) modifierNotes.push(modifier.note);
+    });
+    if (modifierNotes.length) {
+      result.modifierNotes = modifierNotes;
+      addLog(state, 'echo', '前序命令改变了执行结果：' + choice.title, modifierNotes.join(' '));
+    }
     if (choice.flags && choice.flags.length) {
       choice.flags.forEach(function (flag) { state.flags[flag] = true; });
     }
@@ -604,7 +656,7 @@
       effectsApplied: false,
       blockedReason: null,
       blockedCode: null,
-      deadlineRound: Math.min(FINAL_ROUND, state.round + profile.windowRounds),
+      deadlineRound: Math.min(finalRoundFor(state), state.round + profile.windowRounds),
       windowRounds: profile.windowRounds,
       expedited: false,
       cancelledRound: null,
@@ -698,7 +750,7 @@
       setCommandBlocked(state, command, 'COORDINATION', '跨部门执行条件未满足：需要总统召集' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '，或把任务委派出去。');
       return { ok: true, command: command, blocked: true, deltas: {}, pressureDelta: 0 };
     }
-    const event = EVENTS.filter(function (item) { return item.id === command.eventId; })[0];
+    const event = findEventById(command.eventId);
     const choice = event ? getChoice(event, command.choiceId) : null;
     if (!choice) return { ok: false, error: '命令来源数据缺失。', code: 'EVENT' };
     const result = applyImmediateRecord(state, command, choice);
@@ -708,7 +760,7 @@
     command.executedRound = state.round;
     command.executedLate = state.round > command.round;
     if (command.timeKind === 'commitment' && command.holdRounds > 0) {
-      command.holdUntilRound = Math.min(FINAL_ROUND, state.round + command.holdRounds);
+      command.holdUntilRound = Math.min(finalRoundFor(state), state.round + command.holdRounds);
     }
     command.result = { deltas: result.deltas, pressureDelta: result.pressureDelta, scheduled: scheduled.map(function (item) { return item.label; }) };
     clearCommandBlock(command);
@@ -904,7 +956,7 @@
     }
     if (option.extendHold && item.commandId) {
       const command = findCommand(state, item.commandId);
-      if (command && command.holdUntilRound) command.holdUntilRound = Math.min(FINAL_ROUND, command.holdUntilRound + 1);
+      if (command && command.holdUntilRound) command.holdUntilRound = Math.min(finalRoundFor(state), command.holdUntilRound + 1);
     }
     if (option.extraSlot && option.agencyId && state.agencies[option.agencyId]) {
       state.agencies[option.agencyId].workload = Math.max(0, state.agencies[option.agencyId].workload - 1);
@@ -1029,8 +1081,9 @@
   }
 
   function findChoiceAnywhere(choiceId) {
-    for (let i = 0; i < EVENTS.length; i += 1) {
-      const found = getChoice(EVENTS[i], choiceId);
+    const all = EVENTS.concat(CAMPAIGN_EVENTS);
+    for (let i = 0; i < all.length; i += 1) {
+      const found = getChoice(all[i], choiceId);
       if (found) return found;
     }
     return null;
@@ -1040,7 +1093,7 @@
   function reissueFromDispatch(state, item) {
     const source = findCommand(state, item.commandId);
     if (!source) return null;
-    const event = EVENTS.filter(function (entry) { return entry.id === source.eventId; })[0];
+    const event = findEventById(source.eventId);
     const choice = event ? getChoice(event, source.choiceId) : null;
     if (!choice) return null;
     const id = 'r' + state.round + ':resurface:' + choice.id;
@@ -1095,7 +1148,7 @@
     state.ap -= 1;
     state.communicationsThisRound[channelId] = true;
     const id = 'comm:r' + state.round + ':' + channelId;
-    const dueRound = Math.min(FINAL_ROUND, state.round + 1);
+    const dueRound = Math.min(finalRoundFor(state), state.round + 1);
     const command = {
       id: id, kind: 'communication', round: state.round, title: channel.label,
       agency: channel.agency, executorId: channel.agency, status: 'awaiting_feedback',
@@ -1275,7 +1328,9 @@
     state.pending = state.pending.filter(function (item) { return item.dueRound > round; });
 
     return due.map(function (item) {
-      const result = applyEffectValues(state, item.effects);
+      /* v0.6：带条件的延迟后果只在条件仍成立时兑现；条件被后来的命令改变时记为未兑现。 */
+      const skipped = !!(item.when && !flagsMatch(state.flags, item.when));
+      const result = skipped ? { deltas: {}, pressureDelta: 0 } : applyEffectValues(state, item.effects);
       const effect = (state.effects || []).filter(function (entry) { return entry.id === 'delayed:' + item.id + ':r' + item.dueRound; })[0];
       if (effect) {
         effect.status = 'applied';
@@ -1293,13 +1348,14 @@
         label: item.label,
         note: item.note,
         deltas: result.deltas,
-        pressureDelta: result.pressureDelta
+        pressureDelta: result.pressureDelta,
+        skipped: skipped
       };
       state.resolved.push(applied);
       addLog(
         state,
         'delayed',
-        '延迟后果：' + item.label,
+        (skipped ? '延迟后果未兑现：' : '延迟后果：') + item.label,
         (item.note ? item.note + ' ' : '') + formatDeltaText(result.deltas, result.pressureDelta)
       );
       return applied;
@@ -1418,7 +1474,7 @@
     if (!state || state.phase !== 'briefing') {
       return { ok: false, error: '当前阶段不能结束回合。', code: 'PHASE' };
     }
-    if (!state.executed.length && state.ap >= AP_MAX) {
+    if (!state.executed.length && state.ap >= (state.apMax || AP_MAX)) {
       return { ok: false, error: '至少签发一项命令，或把本轮注意力全部用于处理既有命令，才能结束本回合。', code: 'NO_CHOICE' };
     }
     if (state.lastSettledRound >= state.round) {
@@ -1460,6 +1516,7 @@
       if (result) commandResults.push(result);
     }
     state.lastSettledRound = state.round;
+    if (isCampaign(state)) return endCampaignWindow(state, event, commandResults, settledDispatches);
     const pressureBefore = state.pressure;
     const pressureRise = event.pressureRise;
     state.pressure = clamp(state.pressure + pressureRise, 0, 100);
@@ -1484,7 +1541,7 @@
     }
 
     let ending = checkCollapse(state);
-    if (!ending && state.round >= FINAL_ROUND) {
+    if (!ending && state.round >= finalRoundFor(state)) {
       ending = evaluateFinal(state);
     }
     if (ending) {
@@ -1532,7 +1589,7 @@
     state.phase = 'interlude';
     state.interlude = {
       round: state.round,
-      dateLabel: EVENTS[state.round - 1].dateLabel,
+      dateLabel: getEvent(state).dateLabel,
       pressure: {
         before: pressureBefore,
         rise: pressureRise,
@@ -1559,6 +1616,250 @@
     };
   }
 
+  /* ===== v0.6 基辅战役：双层时间 ===== */
+  function campaignDateLabel(day) {
+    const d = new Date(Date.UTC(2022, 1, 24 + Math.max(0, Math.floor(day) - 1)));
+    return (d.getUTCMonth() + 1) + ' 月 ' + d.getUTCDate() + ' 日';
+  }
+
+  function campaignActFor(event) {
+    const acts = (CAMPAIGN && CAMPAIGN.acts) || [];
+    return acts.filter(function (act) { return act.id === (event && event.act); })[0] || acts[0] || { id: 1, weight: 0.5, music: 'day', title: '' };
+  }
+
+  function getCampaignStatus(state) {
+    if (!isCampaign(state)) return null;
+    const event = getEvent(state);
+    const day = Math.min(CAMPAIGN.totalDays || 38, Math.floor(state.campaign.day || 1));
+    const act = campaignActFor(event);
+    return {
+      day: day,
+      totalDays: CAMPAIGN.totalDays,
+      dateLabel: campaignDateLabel(day),
+      act: act,
+      window: state.round,
+      windows: CAMPAIGN_EVENTS.length,
+      span: event ? event.days : 0,
+      carryDays: state.campaign.carryDays || 0,
+      fronts: CAMPAIGN.frontStatus(state, day),
+      interruptions: state.campaign.interruptions.slice(),
+      echoes: state.campaign.echoes.filter(function (item) { return item.round === state.round; })
+    };
+  }
+
+  /* 内部逐日模拟中出现新的越线才中断；窗口开始时已经越线的项目不会每个窗口反复中断。 */
+  function campaignBreaches(state) {
+    const t = CAMPAIGN.interrupt || {};
+    const list = [];
+    if (state.stats.kyiv <= t.kyiv) list.push('kyiv');
+    if (state.stats.gov <= t.gov) list.push('gov');
+    if (state.stats.safety <= t.safety) list.push('safety');
+    if (state.pressure >= t.pressure) list.push('pressure');
+    return list;
+  }
+  const BREACH_TEXT = { kyiv: '首都防御告急', gov: '政府运转告急', safety: '总统安全告急', pressure: '战争压力逼近极限' };
+
+  function applyCampaignOnEnter(state, event) {
+    const rules = (CAMPAIGN.onEnter || []).filter(function (rule) { return rule.window === event.id && flagsMatch(state.flags, rule.when); });
+    return rules.map(function (rule) {
+      const key = rule.id + ':' + state.round;
+      if (state.campaign.entered.indexOf(key) !== -1) return null;
+      state.campaign.entered.push(key);
+      const result = applyEffectValues(state, rule.effects || {});
+      const echo = { id: rule.id, round: state.round, eventId: event.id, title: rule.title, text: rule.text, deltas: result.deltas, pressureDelta: result.pressureDelta };
+      state.campaign.echoes.push(echo);
+      addLog(state, 'echo', '前序命令的回响：' + rule.title, rule.text + ' ' + formatDeltaText(result.deltas, result.pressureDelta));
+      return echo;
+    }).filter(Boolean);
+  }
+
+  function endCampaignWindow(state, event, commandResults, settledDispatches) {
+    const c = state.campaign;
+    const act = campaignActFor(event);
+    const weight = typeof act.weight === 'number' ? act.weight : 0.5;
+    const span = Math.max(0.5, (event.days || 1) + (c.carryDays || 0));
+    const steps = Math.max(1, Math.ceil(span));
+    const startDay = c.day;
+    const pressureBefore = state.pressure;
+    const breachedAtStart = campaignBreaches(state);
+    const totals = {};
+    let pressureTotal = 0;
+    let simulated = 0;
+    let interruption = null;
+    let ending = null;
+
+    for (let i = 0; i < steps; i += 1) {
+      const portion = Math.min(1, span - simulated);
+      /* 压力：窗口事件带来的压力按天分摊。 */
+      const rise = (event.pressureRise || 0) * portion / span;
+      /* 模拟设计值：敌方攻势随时间耗散（act.relief），但只有防线仍然成立（基辅≥30 且军队≥30）时才生效。 */
+      const holding = state.stats.kyiv >= 30 && state.stats.army >= 30;
+      const relief = holding ? (act.relief || 0) * portion : 0;
+      c.attritionCarry.pressure = (c.attritionCarry.pressure || 0) - relief;
+      c.attritionCarry.pressure = (c.attritionCarry.pressure || 0) + rise;
+      const wholeRise = c.attritionCarry.pressure >= 0 ? Math.floor(c.attritionCarry.pressure) : Math.ceil(c.attritionCarry.pressure);
+      c.attritionCarry.pressure -= wholeRise;
+      if (wholeRise) {
+        const pr = applyEffectValues(state, { pressure: wholeRise });
+        pressureTotal += pr.pressureDelta;
+      }
+      /* 侵蚀：沿用七日模型的压力侵蚀公式，按幕的强度和天数缩放；小数部分结转到之后的日子。 */
+      const raw = calculateAttrition(state.pressure, state.flags);
+      const daily = {};
+      Object.keys(raw).forEach(function (key) {
+        c.attritionCarry[key] = (c.attritionCarry[key] || 0) + raw[key] * weight * portion;
+        const whole = c.attritionCarry[key] >= 0 ? Math.floor(c.attritionCarry[key]) : Math.ceil(c.attritionCarry[key]);
+        if (whole) {
+          daily[key] = whole;
+          c.attritionCarry[key] -= whole;
+        }
+      });
+      const res = applyEffectValues(state, daily);
+      Object.keys(res.deltas).forEach(function (key) { totals[key] = (totals[key] || 0) + res.deltas[key]; });
+      simulated += portion;
+      c.day = startDay + simulated;
+      ending = checkCollapse(state);
+      if (ending) break;
+      const fresh = campaignBreaches(state).filter(function (key) { return breachedAtStart.indexOf(key) === -1; });
+      if (fresh.length && event.interruptible !== false && span - simulated >= 1 && state.round < finalRoundFor(state)) {
+        interruption = {
+          round: state.round,
+          day: Math.floor(c.day),
+          dateLabel: campaignDateLabel(c.day),
+          keys: fresh,
+          title: fresh.map(function (key) { return BREACH_TEXT[key]; }).join('、'),
+          carried: Math.round((span - simulated) * 2) / 2
+        };
+        break;
+      }
+    }
+
+    c.carryDays = interruption ? interruption.carried : 0;
+    if (interruption) {
+      c.interruptions.push(interruption);
+      addLog(state, 'interrupt', '紧急简报：时间推进提前中断', interruption.dateLabel + '，' + interruption.title + '。剩余 ' + interruption.carried + ' 天并入下一个决策窗口。');
+    }
+    c.windows.push({ round: state.round, eventId: event.id, fromDay: Math.floor(startDay), toDay: Math.floor(c.day), simulated: simulated, interrupted: !!interruption });
+    addLog(state, 'pressure', '内部逐日推进 ' + simulated + ' 天', '压力 ' + pressureBefore + ' → ' + state.pressure + '。' + (Object.keys(totals).length ? ' 累计侵蚀：' + formatDeltaText(totals, 0) : ''));
+
+    if (!ending && state.round >= finalRoundFor(state)) ending = buildCampaignEnding(state, null);
+    const summary = {
+      fromLabel: campaignDateLabel(startDay),
+      toLabel: campaignDateLabel(Math.max(startDay, c.day - 0.01)),
+      days: simulated,
+      interruption: interruption
+    };
+    if (ending) {
+      finalizeEnding(state, ending);
+      return { ok: true, ending: state.ending, commandResults: commandResults, pressure: { before: pressureBefore, rise: pressureTotal, after: state.pressure }, attrition: totals, campaign: summary };
+    }
+
+    state.round += 1;
+    const next = getEvent(state);
+    state.apMax = next && next.ap ? next.ap : AP_MAX;
+    state.ap = state.apMax;
+    state.executed = [];
+    state.coordinationThisRound = {};
+    state.communicationsThisRound = {};
+    if (Math.floor(c.day) < next.day && !c.carryDays) c.day = next.day;
+    const delayed = resolveDueDelayed(state, state.round);
+    Object.keys(state.standing || {}).forEach(function (agencyId) {
+      if (state.standing[agencyId].active && state.agencies[agencyId]) {
+        state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination + ((STRAT.standing || {}).nightlyDrift || -1), 0, 100);
+      }
+    });
+    const echoes = applyCampaignOnEnter(state, next);
+    recordTimeline(state);
+    ending = checkCollapse(state);
+    if (ending) {
+      finalizeEnding(state, ending);
+      return { ok: true, ending: state.ending, commandResults: commandResults, pressure: { before: pressureBefore, rise: pressureTotal, after: state.pressure }, attrition: totals, delayed: delayed, campaign: summary };
+    }
+    const delayedPressure = delayed.reduce(function (sum, item) { return sum + (item.pressureDelta || 0); }, 0);
+    state.phase = 'interlude';
+    state.interlude = {
+      round: state.round,
+      dateLabel: interruption ? campaignDateLabel(c.day) + '（提前）' : next.dateLabel,
+      campaign: summary,
+      echoes: echoes,
+      pressure: { before: pressureBefore, rise: pressureTotal, delayed: delayedPressure, after: state.pressure },
+      attrition: totals,
+      delayed: delayed,
+      commandResults: commandResults,
+      blocked: commandResults.filter(function (item) { return item.status === 'blocked'; }),
+      settledDispatches: settledDispatches.map(function (item) { return { id: item.id, title: item.title, outcome: item.outcome }; }),
+      dispatches: generateDispatches(state, commandResults),
+      alarms: getAlarms(state),
+      ap: state.ap
+    };
+    return { ok: true, ending: null, interlude: state.interlude, pressure: state.interlude.pressure, attrition: totals, delayed: delayed, commandResults: commandResults, campaign: summary };
+  }
+
+  /* 战役结局：多维判定（campaign.evaluate），再附上关键决策链、与历史基准的偏离和反事实分析。 */
+  function buildCampaignEnding(state, collapseId) {
+    if (collapseId) state.collapseId = collapseId;
+    const result = CAMPAIGN.evaluate(state);
+    const meta = CAMPAIGN.endings[result.id] || { code: '?', title: '战役结束', plausibility: '中', tone: 'costly', summary: '' };
+    const toneMap = { held: 'success', costly: 'warning', hollow: 'warning', collapse: 'danger' };
+    const day = Math.min(CAMPAIGN.totalDays || 38, Math.floor(state.campaign.day || 1));
+    const keyDecisions = (state.choices || []).map(function (record) {
+      const choice = findChoiceAnywhere(record.choiceId);
+      if (!choice || !choice.keyDecision) return null;
+      const command = findCommand(state, record.commandId);
+      return {
+        node: choice.keyDecision.node, choiceId: choice.id, title: choice.title, round: record.round,
+        dateLabel: record.dateLabel, purpose: choice.keyDecision.purpose, cost: choice.keyDecision.cost,
+        unknown: choice.keyDecision.unknown, irreversible: !!choice.keyDecision.irreversible,
+        status: command ? command.status : 'unknown'
+      };
+    }).filter(Boolean);
+    const baseline = CAMPAIGN.baseline || {};
+    const divergence = Object.keys(baseline).map(function (node) {
+      const picks = keyDecisions.filter(function (item) { return item.node === node && ['expired', 'cancelled'].indexOf(item.status) === -1; });
+      const base = baseline[node];
+      let kind = 'none';
+      if (!base.choices.length) kind = 'abstract';
+      else if (!picks.length) kind = 'missed';
+      else kind = picks.some(function (item) { return base.choices.indexOf(item.choiceId) !== -1; }) ? 'near' : 'diverged';
+      return { node: node, kind: kind, picks: picks.map(function (item) { return item.title; }), round: picks[0] ? picks[0].round : null, note: base.note };
+    });
+    const firstDiverge = divergence.filter(function (item) { return item.kind === 'diverged' || item.kind === 'missed'; }).sort(function (a, b) { return (a.round || 99) - (b.round || 99); })[0] || null;
+    const cfNodes = divergence.filter(function (item) { return item.kind === 'diverged' || item.kind === 'missed'; }).map(function (item) { return item.node; });
+    ['airfield', 'reserve', 'signal', 'capital', 'bridges', 'return'].forEach(function (node) { if (cfNodes.length < 2 && cfNodes.indexOf(node) === -1) cfNodes.push(node); });
+    const counterfactuals = cfNodes.slice(0, 4).map(function (node) { return Object.assign({ node: node }, CAMPAIGN.counterfactuals[node] || {}); }).filter(function (item) { return item.title; });
+    const s = state.stats;
+    return {
+      id: result.id,
+      scenario: 'campaign',
+      code: meta.code,
+      plausibility: meta.plausibility,
+      tone: toneMap[meta.tone] || 'warning',
+      kicker: '战役判定 · 结局 ' + meta.code + ' · 合理性 ' + meta.plausibility,
+      title: meta.title,
+      verdict: meta.summary,
+      reasons: result.reasons.slice(),
+      dims: result.dims,
+      epilogue: [
+        '战役在 ' + campaignDateLabel(day) + ' 收束（第 ' + day + ' / ' + CAMPAIGN.totalDays + ' 天，' + state.round + ' 个决策窗口）。',
+        '结局由多项条件共同判定：政府连续性、首都、军队、行政运转、后勤、平民承受、国际支持和未来主动权。没有单一胜负分。',
+        '所有数值是游戏模拟值，不代表真实伤亡、装备或兵力统计。'
+      ],
+      flags: Object.assign({}, state.flags),
+      severeKeys: STAT_KEYS.filter(function (key) { return s[key] < FINAL_THRESHOLDS.hollow[key]; }),
+      severeCount: result.dims.filter(function (d) { return d.level === 'severe'; }).length,
+      collapseId: collapseId || null,
+      fronts: CAMPAIGN.frontStatus(state, day),
+      keyDecisions: keyDecisions,
+      divergence: divergence,
+      firstDivergence: firstDiverge,
+      counterfactuals: counterfactuals,
+      echoes: state.campaign.echoes.slice(),
+      interruptions: state.campaign.interruptions.slice(),
+      windows: state.campaign.windows.slice(),
+      day: day
+    };
+  }
+
   function continueFromInterlude(state) {
     if (!state || state.phase !== 'interlude') {
       return { ok: false, error: '当前没有待确认的夜间态势。', code: 'PHASE' };
@@ -1569,15 +1870,22 @@
   }
 
   function checkCollapse(state) {
+    const id = collapseIdFor(state);
+    if (!id) return null;
+    if (isCampaign(state)) return buildCampaignEnding(state, id);
+    return buildEnding(state, id);
+  }
+
+  function collapseIdFor(state) {
     const s = state.stats;
-    if (s.safety <= 10) return buildEnding(state, 'president');
-    if (s.gov <= 25) return buildEnding(state, 'government');
-    if (s.kyiv <= 12) return buildEnding(state, 'kyiv');
-    if (s.army <= 15) return buildEnding(state, 'military');
-    if (s.will <= 20) return buildEnding(state, 'will');
-    if (s.intl <= COLLAPSE_LINES.diplomatic) return buildEnding(state, 'diplomatic');
-    if (s.reserve <= COLLAPSE_LINES.logistics) return buildEnding(state, 'logistics');
-    if (state.pressure >= 100) return buildEnding(state, 'overload');
+    if (s.safety <= 10) return 'president';
+    if (s.gov <= 25) return 'government';
+    if (s.kyiv <= 12) return 'kyiv';
+    if (s.army <= 15) return 'military';
+    if (s.will <= 20) return 'will';
+    if (s.intl <= COLLAPSE_LINES.diplomatic) return 'diplomatic';
+    if (s.reserve <= COLLAPSE_LINES.logistics) return 'logistics';
+    if (state.pressure >= 100) return 'overload';
     return null;
   }
 
@@ -1686,7 +1994,7 @@
     (state.resolved || []).forEach(function (item) {
       const size = Object.keys(item.deltas || {}).reduce(function (sum, key) { return sum + Math.abs(item.deltas[key]); }, 0) + Math.abs(item.pressureDelta || 0);
       if (size >= 6) {
-        const sourceRound = EVENTS.findIndex(function (event) { return event.id === item.sourceEventId; }) + 1;
+        const sourceRound = eventsFor(state).findIndex(function (event) { return event.id === item.sourceEventId; }) + 1;
         points.push({ type: 'unforeseen', round: item.appliedRound, title: item.label, note: (sourceRound > 0 ? '源自第 ' + sourceRound + ' 日「' + (item.sourceLabel || '') + '」' : '源自此前决定') + '；签发时只能看到方向，看不到具体幅度' });
       }
     });
@@ -1719,6 +2027,7 @@
         endingId: ending.id,
         endingTitle: ending.title,
         round: state.round,
+        scenario: state.scenario || 'classic',
         style: profile.primary,
         styleLabel: profile.tendencies[0] ? profile.tendencies[0].label : '',
         route: (state.choices || []).map(function (record) { return record.choiceId; }).slice(0, 21)
@@ -1940,11 +2249,13 @@
     return base;
   }
 
-  function getSaveSummary() {
-    const data = loadSavedGame();
+  function saveKeyFor(scenario) { return scenario === 'campaign' && CAMPAIGN ? CAMPAIGN.saveKey : SAVE_KEY; }
+
+  function getSaveSummary(scenario) {
+    const data = loadSavedGame(scenario);
     if (!data) return null;
     const state = data.state;
-    const event = EVENTS[state.round - 1];
+    const event = eventsFor(state)[state.round - 1];
     return {
       savedAt: data.savedAt,
       round: state.round,
@@ -1952,6 +2263,9 @@
       phase: state.phase,
       ap: state.ap,
       endingTitle: state.ending ? state.ending.title : '',
+      scenario: state.scenario || 'classic',
+      finalRound: finalRoundFor(state),
+      day: state.campaign ? Math.min(CAMPAIGN.totalDays || 38, Math.floor(state.campaign.day)) : null,
       stats: state.stats
     };
   }
@@ -1959,7 +2273,8 @@
   function saveGame(state) {
     try {
       if (!root.localStorage) return false;
-      const existing = root.localStorage.getItem(SAVE_KEY);
+      const key = saveKeyFor(state.scenario);
+      const existing = key === SAVE_KEY ? root.localStorage.getItem(SAVE_KEY) : null;
       if (existing) {
         try {
           const old = JSON.parse(existing);
@@ -1968,30 +2283,36 @@
           }
         } catch (ignore) {}
       }
-      state.schemaVersion = 3;
-      state.version = VERSION;
+      const version = isCampaign(state) ? CAMPAIGN_VERSION : VERSION;
+      state.schemaVersion = isCampaign(state) ? CAMPAIGN_VERSION : 3;
+      state.version = version;
       const payload = {
-        version: VERSION,
+        version: version,
         savedAt: new Date().toISOString(),
         state: state
       };
-      root.localStorage.setItem(SAVE_KEY, JSON.stringify(payload));
+      root.localStorage.setItem(key, JSON.stringify(payload));
       return true;
     } catch (error) {
       return false;
     }
   }
 
-  function loadSavedGame() {
+  function loadSavedGame(scenario) {
     try {
       if (!root.localStorage) return null;
-      const raw = root.localStorage.getItem(SAVE_KEY);
+      const campaignKey = scenario === 'campaign';
+      if (campaignKey && !CAMPAIGN) return null;
+      const raw = root.localStorage.getItem(saveKeyFor(scenario));
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (!data || !data.state || [1, 2, 3].indexOf(data.version) === -1) return null;
+      /* 七日存档与战役存档分键保存：旧七日存档不会被当作 38 天战役读入。 */
+      if (!data || !data.state || (campaignKey ? [CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
+      if (campaignKey && data.state.scenario !== 'campaign') return null;
+      if (!campaignKey && data.state.scenario === 'campaign') return null;
       const state = normalizeLoadedState(data.state, data.version);
       if (!state) return null;
-      return { version: data.version, migratedFrom: data.version < VERSION ? data.version : null, savedAt: data.savedAt, state: state };
+      return { version: data.version, migratedFrom: !campaignKey && data.version < VERSION ? data.version : null, savedAt: data.savedAt, state: state };
     } catch (error) {
       return null;
     }
@@ -1999,7 +2320,11 @@
 
   function normalizeLoadedState(input, sourceVersion) {
     if (!input || typeof input !== 'object') return null;
-    if (!Number.isInteger(input.round) || input.round < 1 || input.round > FINAL_ROUND) return null;
+    const loadedCampaign = input.scenario === 'campaign' && !!CAMPAIGN;
+    if (input.scenario === 'campaign' && !CAMPAIGN) return null;
+    const scenarioProbe = { scenario: loadedCampaign ? 'campaign' : 'classic', round: input.round };
+    const FINAL_FOR_INPUT = finalRoundFor(scenarioProbe);
+    if (!Number.isInteger(input.round) || input.round < 1 || input.round > FINAL_FOR_INPUT) return null;
     if (!input.stats || typeof input.stats !== 'object') return null;
 
     const stats = {};
@@ -2016,7 +2341,7 @@
       if (!Array.isArray(copy.followedRounds)) copy.followedRounds = [];
       if (copy.requiredCoordination === undefined) copy.requiredCoordination = false;
       if (copy.accepted === undefined) copy.accepted = ['executing', 'blocked', 'awaiting_feedback'].indexOf(copy.status) !== -1 && copy.kind !== 'communication';
-      if (copy.deadlineRound === undefined) copy.deadlineRound = Math.min(FINAL_ROUND, copy.round + STRATEGY.windowRounds);
+      if (copy.deadlineRound === undefined) copy.deadlineRound = Math.min(FINAL_FOR_INPUT, copy.round + STRATEGY.windowRounds);
       if (copy.windowRounds === undefined) copy.windowRounds = STRATEGY.windowRounds;
       if (copy.blockedCode === undefined) copy.blockedCode = null;
       if (copy.delegatedRound === undefined) copy.delegatedRound = null;
@@ -2037,7 +2362,7 @@
         choiceId: record.choiceId, title: record.label, ap: record.ap, agency: record.agency || 'office',
         executorId: record.agency || 'office', status: 'completed', authorizedAt: null,
         requiredCoordination: false, coordinated: true, delegated: false, delegateRound: null, effectsApplied: true,
-        accepted: false, deadlineRound: Math.min(FINAL_ROUND, record.round + STRATEGY.windowRounds),
+        accepted: false, deadlineRound: Math.min(FINAL_FOR_INPUT, record.round + STRATEGY.windowRounds),
         windowRounds: STRATEGY.windowRounds, blockedCode: null, history: [],
         blockedReason: null, followedRounds: [], completedRound: record.round,
         result: { deltas: record.deltas || {}, pressureDelta: record.pressureDelta || 0 }
@@ -2062,12 +2387,13 @@
       }
     });
     const state = {
-      version: VERSION,
-      schemaVersion: 3,
+      version: loadedCampaign ? CAMPAIGN_VERSION : VERSION,
+      schemaVersion: loadedCampaign ? CAMPAIGN_VERSION : 3,
+      scenario: loadedCampaign ? 'campaign' : 'classic',
       migratedFrom: sourceVersion && sourceVersion < VERSION ? sourceVersion : (input.migratedFrom || null),
       round: input.round,
-      ap: clamp(input.ap, 0, AP_MAX),
-      apMax: AP_MAX,
+      ap: clamp(input.ap, 0, apMaxFor(scenarioProbe, input.round)),
+      apMax: apMaxFor(scenarioProbe, input.round),
       stats: stats,
       pressure: clamp(input.pressure, 0, 100),
       flags: input.flags && typeof input.flags === 'object' ? input.flags : {},
@@ -2094,6 +2420,19 @@
       startedAt: input.startedAt || new Date().toISOString(),
       runId: typeof input.runId === 'string' ? input.runId : (input.startedAt || '')
     };
+    if (loadedCampaign) {
+      const c = input.campaign && typeof input.campaign === 'object' ? input.campaign : {};
+      state.campaign = {
+        day: typeof c.day === 'number' && c.day >= 1 ? c.day : (CAMPAIGN_EVENTS[input.round - 1] || {}).day || 1,
+        carryDays: typeof c.carryDays === 'number' && c.carryDays > 0 ? c.carryDays : 0,
+        interruptions: Array.isArray(c.interruptions) ? c.interruptions : [],
+        entered: Array.isArray(c.entered) ? c.entered : [],
+        echoes: Array.isArray(c.echoes) ? c.echoes : [],
+        attritionCarry: c.attritionCarry && typeof c.attritionCarry === 'object' ? c.attritionCarry : {},
+        windows: Array.isArray(c.windows) ? c.windows : []
+      };
+      if (typeof input.collapseId === 'string') state.collapseId = input.collapseId;
+    }
     if (state.phase === 'interlude' && !state.interlude) {
       state.phase = 'briefing';
     }
@@ -2103,17 +2442,17 @@
     return state;
   }
 
-  function deleteSave() {
+  function deleteSave(scenario) {
     try {
-      if (root.localStorage) root.localStorage.removeItem(SAVE_KEY);
+      if (root.localStorage) root.localStorage.removeItem(saveKeyFor(scenario));
       return true;
     } catch (error) {
       return false;
     }
   }
 
-  function hasSave() {
-    return !!getSaveSummary();
+  function hasSave(scenario) {
+    return !!getSaveSummary(scenario);
   }
 
   function getDeltaList(deltas, pressureDelta) {
@@ -2139,6 +2478,13 @@
     statMeta: STAT_META,
     apMax: AP_MAX,
     finalRound: FINAL_ROUND,
+    campaign: CAMPAIGN,
+    campaignSaveKey: CAMPAIGN ? CAMPAIGN.saveKey : null,
+    isCampaign: isCampaign,
+    eventsFor: eventsFor,
+    finalRoundFor: finalRoundFor,
+    campaignDateLabel: campaignDateLabel,
+    getCampaignStatus: getCampaignStatus,
     thresholds: FINAL_THRESHOLDS,
     collapseLines: COLLAPSE_LINES,
     intel: INTEL,

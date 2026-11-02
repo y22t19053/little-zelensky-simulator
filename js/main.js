@@ -18,6 +18,8 @@
     ending: document.getElementById('screen-ending'),
     start: document.getElementById('btn-start'),
     continue: document.getElementById('btn-continue'),
+    campaign: document.getElementById('btn-campaign'),
+    continueCampaign: document.getElementById('btn-continue-campaign'),
     clearSave: document.getElementById('btn-clear-save'),
     how: document.getElementById('btn-how'),
     disclaimer: document.getElementById('btn-disclaimer'),
@@ -122,7 +124,7 @@
     ui.screen = name;
     document.body.classList.toggle('is-playing', name === 'game');
     document.title = name === 'intro' ? '小泽模拟器 · 你能顶住几天？' : name === 'ending' ? '阶段结局 · 小泽模拟器' : '总统办公室 · 小泽模拟器';
-    if (A) A.setTheme(name === 'intro' ? 'menu' : name === 'ending' ? 'ending' : (ui.game && ui.game.phase === 'interlude' ? 'night' : 'day'));
+    if (A) A.setTheme(name === 'intro' ? 'menu' : name === 'ending' ? 'ending' : (ui.game && ui.game.phase === 'interlude' ? 'night' : dayTheme()));
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
@@ -151,46 +153,61 @@
   }
 
   /* 开场与资料 */
+  function saveStateText(summary) {
+    return summary.phase === 'ending' ? '已结束 · ' + (summary.endingTitle || '阶段结局') : '进行中 · 剩余 ' + summary.ap + ' AP';
+  }
+
   function renderIntro() {
     closeModal();
     ui.selectedChoiceId = null;
     ui.lastDeltas = null;
     ui.game = null;
     showScreen('intro');
-    const summary = L.getSaveSummary();
-    const hasSave = !!summary;
-    el.continue.hidden = !hasSave;
-    el.clearSave.hidden = !hasSave;
-    el.saveSummary.hidden = !hasSave;
+    const classic = L.getSaveSummary('classic');
+    const campaign = L.getSaveSummary('campaign');
+    el.continue.hidden = !classic;
+    if (el.continueCampaign) el.continueCampaign.hidden = !campaign;
+    el.clearSave.hidden = !classic && !campaign;
+    el.saveSummary.hidden = !classic && !campaign;
     const startLabel = el.start.querySelector('span');
-    if (startLabel) startLabel.textContent = hasSave ? '开始新一局' : '进入总统办公室';
-    if (hasSave) {
-      el.continue.textContent = summary.phase === 'ending' ? '查看上次结局' : '继续上一局';
-      const stateText = summary.phase === 'ending' ? '已结束 · ' + (summary.endingTitle || '阶段结局') : '进行中 · 剩余 ' + summary.ap + ' AP';
-      el.saveSummary.innerHTML = '本机存档：<strong>' + escapeHtml(summary.dateLabel) + '</strong> · 第 ' + summary.round + ' / ' + L.finalRound + ' 回合 · ' + escapeHtml(stateText);
-    } else {
-      el.saveSummary.textContent = '';
+    if (startLabel) startLabel.textContent = classic ? '重新开始七日开局' : '七日开局 · 进入总统办公室';
+    const campaignLabel = el.campaign ? el.campaign.querySelector('span') : null;
+    if (campaignLabel) campaignLabel.textContent = campaign ? '重新开始基辅战役' : '基辅战役 · 38 天';
+    const lines = [];
+    if (classic) {
+      el.continue.textContent = classic.phase === 'ending' ? '查看上次结局' : '继续七日开局';
+      lines.push('七日开局：<strong>' + escapeHtml(classic.dateLabel) + '</strong> · 第 ' + classic.round + ' / ' + (classic.finalRound || L.finalRound) + ' 回合 · ' + escapeHtml(saveStateText(classic)));
     }
+    if (campaign && el.continueCampaign) {
+      el.continueCampaign.textContent = campaign.phase === 'ending' ? '查看战役结局' : '继续基辅战役';
+      lines.push('基辅战役：<strong>' + escapeHtml(campaign.dateLabel) + '</strong> · 窗口 ' + campaign.round + ' / ' + campaign.finalRound + ' · 第 ' + (campaign.day || 1) + ' / 38 天 · ' + escapeHtml(saveStateText(campaign)));
+    }
+    el.saveSummary.innerHTML = lines.length ? '本机存档：' + lines.join('<br>') : '';
   }
 
-  function requestStart() {
-    if (L.hasSave()) {
-      const summary = L.getSaveSummary();
+  function scenarioArg(value) { return value === 'campaign' ? 'campaign' : 'classic'; }
+
+  function requestStart(arg) {
+    const scenario = scenarioArg(arg);
+    if (L.hasSave(scenario)) {
+      const summary = L.getSaveSummary(scenario);
+      const isC = scenario === 'campaign';
       openConfirm({
-        kicker: '覆盖确认', title: '开始新一局？',
-        message: '<p>本机已有一局进度：<strong>' + escapeHtml(summary ? summary.dateLabel : '') + '</strong>，第 ' + (summary ? summary.round : '?') + ' 回合。</p><p>开始新一局会覆盖这份存档。</p>',
-        confirmLabel: '覆盖并开始', onConfirm: function () { startNewGame(true); }
+        kicker: '覆盖确认', title: isC ? '重新开始基辅战役？' : '开始新一局？',
+        message: '<p>本机已有一局' + (isC ? '基辅战役' : '七日开局') + '进度：<strong>' + escapeHtml(summary ? summary.dateLabel : '') + '</strong>，第 ' + (summary ? summary.round : '?') + (isC ? ' 个决策窗口' : ' 回合') + '。</p><p>开始新一局会覆盖这份存档；另一种模式的存档不受影响。</p>',
+        confirmLabel: '覆盖并开始', onConfirm: function () { startNewGame(true, scenario); }
       });
       return;
     }
-    startNewGame(true);
+    startNewGame(true, scenario);
   }
 
-  function startNewGame(force) {
-    if (!force && L.hasSave()) return;
-    L.deleteSave();
+  function startNewGame(force, arg) {
+    const scenario = scenarioArg(arg);
+    if (!force && L.hasSave(scenario)) return;
+    L.deleteSave(scenario);
     if (A) A.playSfx('menu');
-    ui.game = L.createGame();
+    ui.game = scenario === 'campaign' ? L.createGame({ scenario: 'campaign' }) : L.createGame();
     ui.selectedChoiceId = null;
     ui.lastDeltas = null;
     ui.lastPressureDelta = 0;
@@ -198,8 +215,8 @@
     enterGame();
   }
 
-  function loadGame() {
-    const data = L.loadSavedGame();
+  function loadGame(arg) {
+    const data = L.loadSavedGame(scenarioArg(arg));
     if (!data || !data.state) {
       toast('没有找到可读取的存档。', true);
       renderIntro();
@@ -227,7 +244,8 @@
         '<section><span>01</span><h3>读局势</h3><p>每回合先看事件视觉、情报摘要与国家状态。情报可信度描述信息边界，不代表成功率。</p></section>' +
         '<section><span>02</span><h3>分配 3 AP</h3><p>选择文件查看收益、代价、定性量级与延迟回合。可以签发多项，也可以保留未用 AP，但它不会结转。</p></section>' +
         '<section><span>03</span><h3>签发并归档</h3><p>固定底栏是签发前确认。签发后显示引擎结算的实际数值；互斥命令不能同时执行。</p></section>' +
-        '<section><span>04</span><h3>承担夜晚</h3><p>结束回合后，命令归档、延迟后果、状态侵蚀和战争压力依次结算。撑过七回合，或在途中面对崩溃判定。</p></section>' +
+        '<section><span>04</span><h3>承担夜晚</h3><p>结束回合后，命令归档、延迟后果、状态侵蚀和战争压力依次结算。七日开局共七回合；基辅战役共 13 个决策窗口，结束窗口后系统按天模拟到下一窗口，危险线被新越过时会提前中断。</p></section>' +
+        '<section><span>05</span><h3>重大决策</h3><p>战役中标为“重大决策”的文件由总统直接签署，不需召集协调，但低可信情报仍需先追问。它们多数不可逆，会在之后的窗口以“前序回响”回来。</p></section>' +
         '</div><p class="modal-note">键盘：Tab 移动焦点，Enter 或空格选择文件，Escape 关闭可关闭的窗口。手机可展开“国家状态”查看全部七项。</p>',
       actions: [{ label: '明白', className: 'btn btn-primary', onClick: function () {} }]
     });
@@ -236,7 +254,7 @@
   function openDisclaimer() {
     openModal({
       kicker: '资料边界 / DISCLAIMER', title: '历史情景，不是历史复原',
-      body: '<div class="confirm-copy"><p>背景为 2022 年 2 月 24 日至 3 月 2 日。事件顺序参考公开资料；文电、幕僚评估和情境叙述为合成文本，不冒充真实档案，不虚构真实人物引语。</p><p><strong>所有 AP、状态、战争压力、效果和阈值都是模拟设计参数，不是历史统计。</strong>游戏不会用后见之明给玩家提示，也不评价真实人物的能力。</p><p>完整事实、当时认知、后来确认、争议与来源在结局后的独立历史复盘中开放。复盘正文离线可读；外部来源链接只有主动点击时才访问网络。</p></div>',
+      body: '<div class="confirm-copy"><p>七日开局的背景为 2022 年 2 月 24 日至 3 月 2 日，基辅战役为 2 月 24 日至 4 月 2 日。事件顺序参考公开资料；文电、幕僚评估和情境叙述为合成文本，不冒充真实档案，不虚构真实人物引语。</p><p><strong>所有 AP、状态、战争压力、效果和阈值都是模拟设计参数，不是历史统计。</strong>游戏不会用后见之明给玩家提示，也不评价真实人物的能力。</p><p>完整事实、当时认知、后来确认、争议与来源在结局后的独立历史复盘中开放。复盘正文离线可读；外部来源链接只有主动点击时才访问网络。</p></div>',
       actions: [{ label: '关闭', className: 'btn btn-ghost', onClick: function () {} }]
     });
   }
@@ -446,7 +464,8 @@
     if (!event) return;
     const alarms = alarmMap(L.getAlarms(g));
     el.gameDate.textContent = event.dateLabel;
-    el.gamePhase.textContent = '第 ' + g.round + ' / ' + L.finalRound + ' 回合 · ' + event.time;
+    const cs = campaignStatus();
+    el.gamePhase.textContent = cs ? '窗口 ' + g.round + ' / ' + cs.windows + ' · ' + (cs.act ? String(cs.act.title).split(' · ')[0] : '') + ' · 第 ' + cs.day + ' / ' + cs.totalDays + ' 天' : '第 ' + g.round + ' / ' + L.finalRound + ' 回合 · ' + event.time;
     el.pressureValue.textContent = g.pressure;
     el.pressureTag.textContent = pressureLabel(g.pressure);
     el.pressureTag.className = 'pressure-tag' + (alarms.pressure ? ' is-' + alarms.pressure.level : '');
@@ -461,13 +480,13 @@
     if (g.phase !== 'briefing') el.apNote.textContent = '本回合正在结算。';
     else if (g.ap <= 0) el.apNote.textContent = '注意力已耗尽，请结束本回合。';
     else if (!available) el.apNote.textContent = '剩余 AP 已不足以签发任何文件。';
-    else el.apNote.textContent = '还可分配 ' + g.ap + ' 点注意力；未使用的 AP 不会保留。';
+    else el.apNote.textContent = '还可分配 ' + g.ap + ' 点注意力；' + (isCampaignGame() ? '注意力按决策窗口刷新，未用完的不会带入下一窗口。' : '未使用的 AP 不会保留。');
   }
 
   function renderEvent() {
     const g = ui.game;
     const event = L.getEvent(g);
-    const art = EVENT_ART[event.id] || EVENT_ART.e1;
+    const art = artFor(event);
     const intel = event.intel || { level: '未知', note: '' };
     const situation = event.situation || [];
     if (el.deskPanel) el.deskPanel.innerHTML = deskStateHtml();
@@ -484,7 +503,7 @@
           '<p class="dossier-kicker">' + escapeHtml(event.kicker) + '</p>' +
           '<h1 class="dossier-title">' + escapeHtml(event.title) + '</h1>' +
           '<div class="intel-band"><span>情报可信度 <strong>' + escapeHtml(intel.level) + '</strong></span><p>' + escapeHtml(intel.note) + '</p></div>' +
-          '<div class="situation"><p>' + escapeHtml(situation[0] || '') + '</p></div>' +
+          '<div class="situation"><p>' + escapeHtml(situation[0] || '') + '</p></div>' + windowBriefHtml(event) +
           '<details class="intel-details epistemics"><summary>展开完整简报与信息边界</summary><div class="intel-details-body">' +
             situation.slice(1).map(function (text) { return '<p>' + escapeHtml(text) + '</p>'; }).join('') +
             '<div class="epistemic-grid"><section class="epistemic-block"><h2>当时已知</h2>' + listHtml(event.known) + '</section>' +
@@ -499,6 +518,121 @@
 
   /* ---------- v0.5：日焦点、办公桌状态、前序回响、事务电报 ---------- */
   function strat() { return L.strategyData || window.LZS_STRATEGY || {}; }
+
+  /* ---------- v0.6：基辅战役 ---------- */
+  function isCampaignGame(g) { g = g || ui.game; return !!(g && (L.isCampaign ? L.isCampaign(g) : g.scenario === 'campaign')); }
+  function scenarioOf() { return isCampaignGame() ? 'campaign' : 'classic'; }
+  function finalRoundOf(g) { g = g || ui.game; return g && L.finalRoundFor ? L.finalRoundFor(g) : L.finalRound; }
+  function eventsOf(g) { g = g || ui.game; return g && L.eventsFor ? L.eventsFor(g) : L.events; }
+  function campaignStatus() { return isCampaignGame() && L.getCampaignStatus ? L.getCampaignStatus(ui.game) : null; }
+  function dayTheme() { const cs = campaignStatus(); return cs && cs.act && cs.act.music ? cs.act.music : 'day'; }
+  function spanText(days) { const d = Number(days || 0); return d < 1 ? '数小时' : (Math.round(d * 10) / 10) + ' 天'; }
+  const CAMPAIGN_ART = { c1: 'e1', c2: 'e3', c3: 'e2', c4: 'e4', c5: 'e5', c6: 'e5', c7: 'e7', c8: 'e7', c9: 'e5', c10: 'e6', c11: 'e1', c12: 'e6', c13: 'e4' };
+  function artFor(event) {
+    const base = EVENT_ART[CAMPAIGN_ART[event.id] || event.id] || EVENT_ART.e1;
+    return isCampaignGame() ? Object.assign({}, base, { caption: event.title + ' · 借用本地视觉的抽象示意' }) : base;
+  }
+  const FRONT_TONE = { threat: 'danger', pressure: 'warning', contested: 'warning', cut: 'warning', held: 'ok', denied: 'ok', withdrawal: 'ok', reentered: 'ok' };
+  function frontsMapHtml(fronts, title) {
+    if (!fronts || !fronts.length) return '';
+    const pts = fronts.map(function (f, i) {
+      const x = Number(f.x), y = Number(f.y) * 0.7 + 2;
+      return '<g class="front-pt tone-' + (FRONT_TONE[f.status] || 'warning') + '"><circle cx="' + x + '" cy="' + y + '" r="3.4"></circle><text x="' + x + '" y="' + (y + 1.4) + '" text-anchor="middle">' + (i + 1) + '</text></g>';
+    }).join('');
+    const legend = fronts.map(function (f, i) {
+      return '<li class="tone-' + (FRONT_TONE[f.status] || 'warning') + '"><span class="front-num">' + (i + 1) + '</span><div><strong>' + escapeHtml(f.label) + '</strong><span class="front-status">' + escapeHtml(f.statusLabel || f.status) + '</span>' + (f.note ? '<p>' + escapeHtml(f.note) + '</p>' : '') + '</div></li>';
+    }).join('');
+    return '<figure class="front-map"><figcaption><strong>' + escapeHtml(title) + '</strong><span>抽象示意，不表示实际兵力或精确战线</span></figcaption>' +
+      '<svg viewBox="0 0 100 74" role="img" aria-label="基辅周边六个方向的态势示意"><path class="river" d="M58 0 C60 16 55 30 57 42 S62 60 66 74"></path><path class="river is-minor" d="M22 44 C32 46 40 36 46 26"></path><circle class="kyiv-ring" cx="54" cy="42.6" r="9"></circle>' + pts + '</svg>' +
+      '<ol class="front-legend">' + legend + '</ol></figure>';
+  }
+  function campaignDeskHtml(event, lamp, open, counts) {
+    const cs = campaignStatus();
+    const acts = (L.campaign && L.campaign.acts) || [];
+    const actIdx = cs && cs.act ? acts.map(function (a) { return a.id; }).indexOf(cs.act.id) : 0;
+    const actHtml = acts.map(function (act, i) {
+      return '<li class="' + (i < actIdx ? 'is-past' : i === actIdx ? 'is-current' : '') + '"' + (i === actIdx ? ' aria-current="step"' : '') + '><strong>' + escapeHtml(String(act.title).split(' · ')[0]) + '</strong><span>' + escapeHtml(act.range || '') + '</span></li>';
+    }).join('');
+    const day = cs ? cs.day : 1, total = cs ? cs.totalDays : 38;
+    const pct = Math.round(Math.min(100, Math.max(0, (day - 1) / total * 100)));
+    return '<section class="desk-state campaign-desk lamp-' + lamp + '" aria-label="战役时间线与战场态势">' +
+      '<div class="campaign-clock"><span class="day-focus-label">' + escapeHtml(cs && cs.act ? cs.act.title : '') + '</span>' + (cs && cs.act && cs.act.note ? '<p>' + escapeHtml(cs.act.note) + '</p>' : '') +
+      '<div class="campaign-progress" role="img" aria-label="战役第 ' + day + ' / ' + total + ' 天"><span style="width:' + pct + '%"></span></div>' +
+      '<p class="campaign-day">' + escapeHtml(cs ? cs.dateLabel : '') + ' · 第 ' + day + ' / ' + total + ' 天 · 窗口 ' + ui.game.round + ' / ' + (cs ? cs.windows : '') + '</p>' +
+      '<ol class="act-track">' + actHtml + '</ol></div>' +
+      frontsMapHtml(cs ? cs.fronts : [], '战场态势示意') +
+      '<ul class="desk-items"><li class="desk-item desk-phone' + (open ? ' is-ringing' : '') + '"><span class="desk-glyph" aria-hidden="true">☎</span><span>' + (open ? open + ' 份电报待处理' : '无待处理电报') + '</span></li>' +
+      '<li class="desk-item desk-files' + (counts.blocked ? ' is-heavy' : '') + '"><span class="desk-glyph" aria-hidden="true">▤</span><span>' + counts.active + ' 件在办' + (counts.blocked ? ' · ' + counts.blocked + ' 件受阻' : '') + '</span></li></ul></section>';
+  }
+  function windowBriefHtml(event) {
+    if (!isCampaignGame()) return '';
+    const cs = campaignStatus();
+    const carry = cs && cs.carryDays ? cs.carryDays : 0;
+    const hasKey = (event.choices || []).some(function (c) { return c.keyDecision; });
+    return '<div class="window-span"><span>' + escapeHtml(event.span || event.dateLabel || '') + '</span><p>本窗口结束后，系统内部逐日模拟约 ' + escapeHtml(spanText(Number(event.days || 0) + carry)) + (carry ? '（含上一窗口中断后结转的 ' + escapeHtml(spanText(carry)) + '）' : '') + '。' + (event.interruptible === false ? '这段时间不会被中断。' : '越过危险线时可能提前中断，并发出紧急简报。') + '</p></div>' +
+      (hasKey ? '<div class="key-banner" role="note"><strong>重大决策</strong><p>本窗口包含高代价、多数不可逆的总统决定。同组方案互斥，签署后锁定。总统授权方向和资源，具体战斗由军事指挥链执行。</p></div>' : '');
+  }
+  function keyDetailHtml(choice) {
+    const k = choice.keyDecision;
+    if (!k) return '';
+    return '<section class="key-detail"><h4>总统授权文件 · 重大决策</h4><dl><div><dt>战略目的</dt><dd>' + escapeHtml(k.purpose || '') + '</dd></div><div><dt>已知代价</dt><dd>' + escapeHtml(k.cost || '') + '</dd></div><div><dt>无法确认</dt><dd>' + escapeHtml(k.unknown || '') + '</dd></div></dl><p>' + (k.irreversible ? '签发后不可撤回；执行、反馈与后续影响会记入战役档案。' : '后续影响会记入战役档案。') + '</p></section>';
+  }
+  function campaignInterludeHtml(data) {
+    const c = data.campaign;
+    if (!c) return '';
+    const it = c.interruption;
+    const echoes = data.echoes || [];
+    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>内部逐日模拟 · ' + escapeHtml(spanText(c.days)) + '</h3><p>' + escapeHtml((c.fromLabel || '') + ' 至 ' + (c.toLabel || '')) + '：命令执行、部队与资源消耗、前线压力和延迟后果按天结算。这里只汇报有意义的变化。</p>' +
+      (it ? '<div class="interrupt-note" role="alert"><strong>紧急简报 · 时间推进提前中断</strong><p>' + escapeHtml(it.dateLabel + '，' + it.title + '。剩余 ' + it.carried + ' 天并入下一个决策窗口。') + '</p></div>' : '') +
+      (echoes.length ? '<ul class="settlement-list">' + echoes.map(function (item) { return '<li><div><strong>' + escapeHtml(item.title) + '</strong><span>此前决定的后果</span></div><p>' + escapeHtml(item.text || '') + '</p><div class="effect-row">' + (effectChips(item.deltas || {}, item.pressureDelta || 0) || '') + '</div></li>'; }).join('') + '</ul>' : '') +
+      '</section></li>';
+  }
+  const NODE_LABELS = { airfield: '安东诺夫机场', capital: '政府连续性', bridges: '伊尔平河与桥梁', reserve: '莫什春 / 布罗瓦雷预备队', signal: '3 月 29 日撤退信号', return: '重新进入失地' };
+  const DIVERGE_LABELS = { near: '接近历史基线', diverged: '偏离历史基线', missed: '未作出或命令失效', abstract: '历史基线是抽象的，不逐项对比', none: '—' };
+  const DIM_LEVEL = { good: '尚可', strained: '吃紧', severe: '严重受损' };
+  function campaignEndingMainHtml(ending) {
+    const keys = ending.keyDecisions || [];
+    const keyHtml = keys.length ? '<ol class="key-chain">' + keys.map(function (k) {
+      return '<li><span>' + escapeHtml((NODE_LABELS[k.node] || k.node) + ' · 窗口 ' + k.round + ' · ' + (k.dateLabel || '')) + '</span><strong>' + escapeHtml(k.title) + '</strong><p>目的：' + escapeHtml(k.purpose || '') + '</p><p>代价：' + escapeHtml(k.cost || '') + '</p><small>执行状态：' + escapeHtml(commandStatusLabel(k.status)) + (k.irreversible ? ' · 不可逆' : '') + '</small></li>';
+    }).join('') + '</ol>' : '<p class="empty-note">本局没有签发重大决策。</p>';
+    const divHtml = '<ul class="divergence-list">' + (ending.divergence || []).map(function (d) {
+      return '<li class="is-' + escapeHtml(d.kind) + '"><strong>' + escapeHtml(NODE_LABELS[d.node] || d.node) + '</strong><span>' + escapeHtml(DIVERGE_LABELS[d.kind] || d.kind) + '</span>' + (d.picks && d.picks.length ? '<p>你的选择：' + escapeHtml(d.picks.join('；')) + '</p>' : '') + (d.note ? '<p class="stat-hint">历史参照：' + escapeHtml(d.note) + '</p>' : '') + '</li>';
+    }).join('') + '</ul>';
+    const first = ending.firstDivergence;
+    const windows = ending.windows || [];
+    const winHtml = windows.length ? '<ol class="window-track">' + windows.map(function (w) {
+      const ev = eventsOf().filter(function (item) { return item.id === w.eventId; })[0];
+      return '<li' + (w.interrupted ? ' class="is-interrupted"' : '') + '><span>' + escapeHtml(L.campaignDateLabel(Math.floor(w.fromDay)) + ' → ' + L.campaignDateLabel(Math.floor(w.toDay))) + '</span><strong>' + escapeHtml(ev ? ev.title : w.eventId) + '</strong><small>' + escapeHtml('内部模拟 ' + spanText(w.simulated) + (w.interrupted ? ' · 紧急中断' : '')) + '</small></li>';
+    }).join('') + '</ol>' : '';
+    return '<section class="ending-section"><span class="section-kicker">KEY ORDERS</span><h2>重大决策如何走向战役结果</h2>' + keyHtml + '</section>' +
+      '<section class="ending-section"><h2>你的时间线与历史基线</h2><p class="stat-hint">' + escapeHtml(first ? '最早的偏离：' + (NODE_LABELS[first.node] || first.node) + (first.round ? '（窗口 ' + first.round + '）' : '') + '。偏离之后的差异包含模型内部推演，不等于历史事实。' : '本局关键节点与历史基线大体一致；差异来自数值与执行过程，也属于模型推演。') + '</p>' + divHtml + '</section>' +
+      (winHtml ? '<section class="ending-section"><h2>38 天的时间推进</h2>' + winHtml + '</section>' : '');
+  }
+  function campaignEndingSideHtml(ending) {
+    return '<section class="ending-section"><h2>八维战役结果</h2><p class="stat-hint">结局 ' + escapeHtml(ending.code || '') + ' · 合理性「' + escapeHtml(ending.plausibility || '') + '」。合理性指历史条件与现实机制的支持程度，不是评分。</p><ul class="dim-list">' + (ending.dims || []).map(function (d) {
+      return '<li class="is-' + escapeHtml(d.level) + '"><span>' + escapeHtml(d.label) + '</span><strong>' + escapeHtml(DIM_LEVEL[d.level] || d.level) + '</strong><small>' + d.value + '</small></li>';
+    }).join('') + '</ul></section>' +
+      (ending.fronts && ending.fronts.length ? '<section class="ending-section"><h2>4 月 2 日的方向状态</h2>' + frontsMapHtml(ending.fronts, '战役收束时的态势示意') + '</section>' : '');
+  }
+  const HIST_STATUS = { confirmed: '已确认', reported: '当时报道', disputed: '有争议', analysis: '战后分析' };
+  function campaignHistoryHtml() {
+    const C = L.campaign || {};
+    const srcMap = {};
+    (C.sources || []).forEach(function (s) { srcMap[s.id] = s; });
+    const ending = (ui.game && ui.game.ending) || {};
+    const hist = '<ol class="history-timeline">' + (C.history || []).map(function (item) {
+      return '<li class="is-' + escapeHtml(item.status) + '"><span>' + escapeHtml(item.date + ' · ' + (HIST_STATUS[item.status] || item.status)) + '</span><strong>' + escapeHtml(item.event) + '</strong><p>信息何时可得：' + escapeHtml(item.known || '') + '</p><small>来源：' + (item.sources || []).map(function (id) { return escapeHtml(srcMap[id] ? String(srcMap[id].title).split('：')[0] : id); }).join('、') + '</small></li>';
+    }).join('') + '</ol>';
+    const cf = (ending.counterfactuals || []).map(function (c) {
+      return '<article class="counterfactual"><h3>' + escapeHtml(c.title) + '</h3><dl><div><dt>当时已知</dt><dd>' + escapeHtml(c.known || '') + '</dd></div><div><dt>仍不确定</dt><dd>' + escapeHtml(c.uncertain || '') + '</dd></div><div><dt>可以支持的推论</dt><dd>' + escapeHtml(c.inference || '') + '</dd></div><div><dt>不能确定的地方</dt><dd>' + escapeHtml(c.cannot || '') + '</dd></div><div><dt>不同研究视角</dt><dd>' + escapeHtml(c.perspectives || '') + '</dd></div></dl></article>';
+    }).join('');
+    const research = '<ul class="research-list">' + (C.research || []).map(function (r) { return '<li><strong>' + escapeHtml(r.title) + '</strong><p>' + escapeHtml(r.text) + '</p><small>' + escapeHtml(srcMap[r.source] ? srcMap[r.source].title : r.source) + '</small></li>'; }).join('') + '</ul>';
+    const sources = '<ol class="source-list">' + (C.sources || []).map(function (s) { return '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.title) + '</a></li>'; }).join('') + '</ol>';
+    return '<section class="history-review campaign-review"><h2>基辅方向的历史进程（2 月 24 日—4 月 2 日）</h2><p class="stat-hint">以下资料只在战役结束后开放。标签区分已确认事实、当时报道、争议与战后分析；游戏内数值不是历史统计。</p>' + hist +
+      (cf ? '<h2>反事实分析</h2><p class="stat-hint">根据本局偏离历史基线的节点选出。反事实推演没有唯一正确答案。</p>' + cf : '') +
+      '<h2>研究者的分析框架</h2><p class="stat-hint">以下是对公开研究的概括与归属，不是原文引语；它们都是战后研究，不是战争当时的预测。</p>' + research +
+      '<h2>资料来源</h2>' + sources + '</section>';
+  }
 
   const TIME_KIND_NOTES = {
     urgent: '紧急窗口：今晚不执行就失效，不会顺延。',
@@ -522,6 +656,7 @@
     const alarms = L.getAlarms(g);
     const critical = alarms.some(function (alarm) { return alarm.level === 'critical'; });
     const lamp = critical ? 'critical' : alarms.length ? 'warning' : 'steady';
+    if (isCampaignGame()) return campaignDeskHtml(event, lamp, open, counts);
     const days = Array.from({ length: L.finalRound }, function (_, i) {
       const day = i + 1;
       return '<li class="' + (day < g.round ? 'is-past' : day === g.round ? 'is-today' : '') + '"' + (day === g.round ? ' aria-current="step"' : '') + '><span class="sr-only">第 ' + day + ' 日</span></li>';
@@ -547,6 +682,10 @@
       else if (command.status === 'blocked') rows.push({ cls: 'is-blocked', text: '「' + command.title + '」仍受阻：' + (command.blockedReason || '等待处理') });
       else if (command.holdUntilRound && command.holdUntilRound >= g.round && command.effectsApplied) rows.push({ cls: 'is-held', text: '「' + command.title + '」作为长期承诺继续占用' + agencyLabel(command.agency) + '席位至第 ' + command.holdUntilRound + ' 夜。' });
     });
+    if (isCampaignGame()) {
+      const cs = campaignStatus();
+      (cs ? cs.echoes : []).forEach(function (item) { rows.unshift({ cls: 'is-echo', text: item.title + '：' + item.text }); });
+    }
     const links = (strat().links || []);
     (g.commands || []).forEach(function (command) {
       links.forEach(function (link) {
@@ -628,14 +767,14 @@
 
   function delayDueLabel(delay) {
     const due = (ui.game ? ui.game.round : 1) + Number(delay || 0);
-    const event = L.events[due - 1];
-    return '第 ' + due + ' 回合 · ' + (event ? event.dateLabel : '阶段结束后');
+    const event = eventsOf()[due - 1];
+    return (isCampaignGame() ? '第 ' + due + ' 窗口 · ' : '第 ' + due + ' 回合 · ') + (event ? event.dateLabel : (isCampaignGame() ? '战役结束后' : '阶段结束后'));
   }
 
   function delayDetails(choice) {
     if (!choice.delayed || !choice.delayed.length) return '<p class="choice-delay">无额外延迟效果；夜间压力与侵蚀仍会结算。</p>';
     return choice.delayed.map(function (item) {
-      return '<div class="choice-delay"><div><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(delayDueLabel(item.delay)) + '</span></div><p>' + escapeHtml(item.note || '') + '</p><div class="effect-forecast">' + effectForecast(item.effects) + '</div></div>';
+      return '<div class="choice-delay"><div><strong>' + escapeHtml(item.label) + '</strong><span>' + escapeHtml(delayDueLabel(item.delay)) + '</span></div><p>' + escapeHtml(item.note || '') + '</p>' + (item.when ? '<p class="delay-when">有条件：到期时视当时局势而定，可能不兑现。</p>' : '') + '<div class="effect-forecast">' + effectForecast(item.effects) + '</div></div>';
     }).join('');
   }
 
@@ -657,17 +796,18 @@
       if (locked) classes.push('is-locked');
       if (conflict) classes.push('is-conflict');
       if (selected) classes.push('is-selected');
-      const stateText = executed ? '已签发' : conflict ? '互斥锁定' : status.state === 'ap' ? 'AP 不足' : selected ? '已选择' : '选择';
-      const lockNote = locked && !executed ? '<p class="choice-locked-note' + (conflict ? ' is-conflict-note' : '') + '"><strong>' + (conflict ? '命令冲突' : '注意力不足') + '：</strong>' + escapeHtml(status.message) + '</p>' : '';
+      const stateText = executed ? '已签发' : conflict ? '互斥锁定' : status.state === 'locked' ? '条件未满足' : status.state === 'ap' ? 'AP 不足' : selected ? '已选择' : '选择';
+      const lockNote = locked && !executed ? '<p class="choice-locked-note' + (conflict ? ' is-conflict-note' : '') + '"><strong>' + (conflict ? '命令冲突' : status.state === 'locked' ? '前序条件未满足' : '注意力不足') + '：</strong>' + escapeHtml(status.message) + '</p>' : '';
       const expanded = selected || executed;
       return '<article class="' + classes.join(' ') + '" data-choice-id="' + escapeHtml(choice.id) + '" role="button" tabindex="0" aria-pressed="' + (selected ? 'true' : 'false') + '" aria-disabled="' + (locked ? 'true' : 'false') + '" aria-label="' + escapeHtml(choice.title + '，' + choice.ap + ' AP，' + stateText) + '">' +
         '<span class="choice-num" aria-hidden="true">' + String(index + 1).padStart(2, '0') + '</span>' +
         '<div class="choice-topline"><h3 class="choice-title">' + escapeHtml(choice.title) + '</h3><span class="choice-ap">' + choice.ap + ' AP</span></div>' +
+        (choice.keyDecision ? '<p class="choice-key"><strong>重大决策</strong>' + (choice.keyDecision.irreversible ? ' · 签发后不可逆' : '') + '</p>' : '') +
         '<p class="choice-summary">' + escapeHtml(choice.summary) + '</p>' +
         (link ? '<p class="choice-link ' + (link.coordination === 'relax' ? 'is-relax' : 'is-require') + '"><strong>' + (link.coordination === 'relax' ? '前序已落地' : '前序已失效') + '：</strong>' + escapeHtml(link.note || '') + '</p>' : '') +
         '<div class="effect-forecast" aria-label="时间属性与签发前定性影响"><span class="choice-time time-' + escapeHtml(profile.kind) + '">' + escapeHtml(timeKindLabel(profile.kind)) + '</span>' + effectForecast(choice.effects) + '</div>' +
         (lockNote) +
-        '<div class="choice-detail"' + (expanded ? '' : ' hidden') + '>' +
+        '<div class="choice-detail"' + (expanded ? '' : ' hidden') + '>' + keyDetailHtml(choice) +
           '<div class="staff-note"><span>幕僚评估</span><p>' + escapeHtml(choice.staff) + '</p></div>' +
           '<div class="choice-intel">信息基础：本回合情报可信度「' + escapeHtml(event.intel.level) + '」。' + escapeHtml(event.intel.note) + '</div>' +
           (preview ? '<section class="execution-preview"><h4>执行条件 · 签发前可见</h4><div class="execution-meta"><span>执行机构 <strong>' + escapeHtml(preview.agencyLabel) + '</strong></span><span>在办 <strong>' + preview.load.workload + ' / ' + preview.load.capacity + '</strong></span><span>协调余量 <strong>' + preview.load.coordination + '</strong></span><span>执行窗口 <strong>至第 ' + preview.deadlineRound + ' 夜</strong></span><span>优先级 <strong class="' + (preview.slotRequired ? 'is-warning' : 'is-ok') + '">' + (preview.slotRequired ? '占用优先席位' : '机构自行排队') + '</strong></span>' + (preview.requiresIntel ? '<span>情报确认 <strong class="' + (preview.intelSatisfied ? 'is-ok' : 'is-warning') + '">' + (preview.intelSatisfied ? '已追问总参' : '未完成') + '</strong></span>' : '') + '</div>' + (preview.risks.length ? '<ul class="execution-risks">' + preview.risks.map(function (risk) { return '<li>' + escapeHtml(risk) + '</li>'; }).join('') + '</ul>' : '<p class="execution-ok">当前没有容量或协调告警；命令仍可能因夜间压力或后续阻塞延迟。</p>') + '</section>' : '') +
@@ -754,7 +894,7 @@
 
   function pendingDueLabel(item) {
     const diff = Math.max(0, Number(item.dueRound || 0) - (ui.game ? ui.game.round : 1));
-    const event = L.events[Number(item.dueRound) - 1];
+    const event = eventsOf()[Number(item.dueRound) - 1];
     return { short: diff ? 'D+' + diff : '今晚', full: event ? event.dateLabel : '阶段结束后' };
   }
 
@@ -970,7 +1110,7 @@
     const untouchedTurn = g.executed.length === 0 && g.ap >= (g.apMax || 3);
     el.issue.disabled = !canIssue;
     el.endRound.disabled = ui.busy || g.phase !== 'briefing' || untouchedTurn || unauthorized.length > 0;
-    el.endRound.textContent = g.round >= L.finalRound ? '结算本阶段' : '结束本回合';
+    el.endRound.textContent = g.round >= finalRoundOf(g) ? (isCampaignGame() ? '结算战役' : '结算本阶段') : (isCampaignGame() ? '结束本窗口 · 推进时间' : '结束本回合');
     el.endRound.title = untouchedTurn ? '先签发命令，或把注意力用于处理既有事务。' : unauthorized.length ? '先授权或委派所有已签发命令。' : '';
   }
 
@@ -1120,9 +1260,9 @@
     }).join('') : '<li><p>没有延迟后果在本夜触发。</p></li>';
     const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">本夜没有触发新的 getAlarms() 告警。</p>';
     openModal({
-      kicker: '夜间态势 / NIGHT SETTLEMENT', title: '第 ' + (data.round - 1) + ' 夜', dismissible: false, wide: true, className: 'interlude-modal',
+      kicker: data.campaign ? '战役推进 / CAMPAIGN CLOCK' : '夜间态势 / NIGHT SETTLEMENT', title: data.campaign ? '时间推进 · ' + (data.campaign.fromLabel || '') + ' → ' + (data.campaign.toLabel || '') : '第 ' + (data.round - 1) + ' 夜', dismissible: false, wide: true, className: 'interlude-modal',
       body: '<div class="interlude-sheet" data-interlude-round="' + data.round + '"><div class="interlude-date"><strong>' + escapeHtml(data.dateLabel || '') + '</strong><span>夜间结算不会重复执行</span></div>' +
-        '<ol class="settlement-sequence">' +
+        '<ol class="settlement-sequence">' + campaignInterludeHtml(data) +
           '<li><span class="settlement-index">01</span><section><h3>命令执行与跨日状态</h3><ul class="settlement-list">' + commandHtml + '</ul>' + archivedNote + '</section></li>' +
           '<li><span class="settlement-index">02</span><section><h3>延迟后果 · 实际变化</h3><ul class="settlement-list">' + delayedHtml + '</ul></section></li>' +
           '<li><span class="settlement-index">03</span><section><h3>国家状态侵蚀 · 实际变化</h3><div class="effect-row">' + (effectChips(data.attrition || {}) || '<span class="empty-note">本晚没有可测量侵蚀。</span>') + '</div></section></li>' +
@@ -1137,7 +1277,7 @@
         ui.busy = false;
         if (!result.ok) { toast(result.error || '无法进入下一回合。', true); return; }
         closeModal();
-        if (A) { A.setTheme('day'); A.playSfx(L.getDispatches(ui.game).length ? 'phone' : 'dayturn'); }
+        if (A) { A.setTheme(dayTheme()); A.playSfx(L.getDispatches(ui.game).length ? 'phone' : 'dayturn'); }
         saveGame(false);
         renderGame();
       } }],
@@ -1190,7 +1330,7 @@
       actions: [
         { label: '继续游戏', className: 'btn btn-ghost', onClick: function () {} },
         { label: '保存并回到封面', className: 'btn btn-ghost', onClick: function () { saveGame(true); renderIntro(); } },
-        { label: '重新开始', className: 'btn btn-ghost', onClick: function () { openConfirm({ kicker: '覆盖确认', title: '放弃本局，重新开始？', message: '<p>当前进度会被清除。这个动作不能撤销。</p>', confirmLabel: '清除并重新开始', onConfirm: function () { startNewGame(true); } }); } }
+        { label: '重新开始', className: 'btn btn-ghost', onClick: function () { openConfirm({ kicker: '覆盖确认', title: '放弃本局，重新开始？', message: '<p>当前进度会被清除。这个动作不能撤销。</p>', confirmLabel: '清除并重新开始', onConfirm: function () { startNewGame(true, scenarioOf()); } }); } }
       ]
     });
   }
@@ -1209,7 +1349,7 @@
     const records = ui.game.choices || [];
     if (!records.length) return '<p class="empty-note">本局没有签发决策。</p>';
     return '<section class="simulation-review"><h3>本局完整模拟参数</h3><p>这里披露原始精确效果；实际即时变化可能受到 0—100 边界限制。它们都是模拟设计值。</p><ol>' + records.map(function (record) {
-      const event = L.events.find(function (item) { return item.id === record.eventId; });
+      const event = eventsOf().find(function (item) { return item.id === record.eventId; });
       const choice = event ? L.getChoice(event, record.choiceId) : null;
       const delayed = choice && choice.delayed && choice.delayed.length ? '<div class="review-delay"><strong>完整延迟参数</strong>' + choice.delayed.map(function (item) { return '<div><span>' + escapeHtml(item.label) + ' · 第 ' + (record.round + item.delay) + ' 回合</span><div class="effect-row">' + effectChips(item.effects) + '</div></div>'; }).join('') + '</div>' : '';
       return '<li><h4>R' + record.round + ' · ' + escapeHtml(record.label) + '</h4><p>' + record.ap + ' AP · 实际即时：' + escapeHtml(L.formatDeltaText(record.deltas, record.pressureDelta)) + '</p><div class="effect-row"><span class="parameter-label">原始即时参数</span>' + effectChips(choice ? choice.effects : {}) + '</div>' + delayed + '</li>';
@@ -1219,7 +1359,7 @@
   function openHistoryReview() {
     if (A) A.playSfx('archive');
     if (!ui.game) return;
-    const historyHtml = window.LZS_REVIEW ? window.LZS_REVIEW.render(ui.game) : '<section class="history-review"><h2>历史复盘</h2><p>复盘资料未能载入。</p></section>';
+    const historyHtml = isCampaignGame() ? campaignHistoryHtml() : window.LZS_REVIEW ? window.LZS_REVIEW.render(ui.game) : '<section class="history-review"><h2>历史复盘</h2><p>复盘资料未能载入。</p></section>';
     openModal({
       kicker: '独立档案 / AFTER ACTION REVIEW', title: '历史复盘与完整参数', wide: true, className: 'history-modal',
       body: '<div class="review-tabs-note">先比较本局参数，再阅读事实、当时认知、后来确认与争议。两部分都不参与游戏规则。</div>' + simulationReviewHtml() + historyHtml,
@@ -1273,7 +1413,7 @@
     const runs = L.getRecords ? L.getRecords().runs.slice(-5).reverse() : [];
     if (!runs.length) return '';
     return '<section class="ending-section run-records"><h2>本机记录</h2><p class="stat-hint">只保存在这台设备上：结局、主要倾向和路线。没有积分或排行。</p><ol>' + runs.map(function (run) {
-      return '<li><strong>' + escapeHtml(run.endingTitle || run.endingId) + '</strong><span>' + escapeHtml(run.styleLabel || '') + ' · 第 ' + run.round + ' 回合</span></li>';
+      return '<li><strong>' + escapeHtml(run.endingTitle || run.endingId) + '</strong><span>' + escapeHtml((run.scenario === 'campaign' ? '基辅战役 · ' : '七日开局 · ') + (run.styleLabel || '')) + ' · 第 ' + run.round + (run.scenario === 'campaign' ? ' 窗口' : ' 回合') + '</span></li>';
     }).join('') + '</ol></section>';
   }
 
@@ -1285,8 +1425,9 @@
     closeModal();
     clearToasts();
     showScreen('ending');
-    if (A) A.playSfx(ending.tone === 'danger' ? 'collapse' : ending.id === 'held' ? 'ending' : 'ending_costly');
+    if (A) A.playSfx(ending.tone === 'danger' ? 'collapse' : (ending.id === 'held' || ending.id === 'c_A' || ending.id === 'c_D') ? 'ending' : 'ending_costly');
     const stats = ending.finalStats || ui.game.stats || {};
+    const campaignEnd = ending.scenario === 'campaign' || isCampaignGame();
     const choices = ending.keyChoices || [];
     const chain = ending.chain || [];
     const timeline = choices.length ? '<ol class="decision-timeline">' + choices.map(function (record) {
@@ -1302,33 +1443,35 @@
       }).join('') + '</ol></li>';
     }).join('') + '</ol>' : '<p class="empty-note">本局没有可展开的命令执行链。</p>';
     const toneLabel = ending.tone === 'success' ? '阶段存续' : ending.tone === 'warning' ? '代价存续' : '阶段未守住';
-    el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / 阶段档案</span><span>2022.02.24 — 03.02</span></header>' +
-      '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta"><span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span><span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
+    el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / ' + (campaignEnd ? '战役档案' : '阶段档案') + '</span><span>' + (campaignEnd ? '2022.02.24 — 04.02' : '2022.02.24 — 03.02') + '</span></header>' +
+      '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(campaignEnd ? '结局 ' + (ending.code || '') : toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta">' + (campaignEnd ? '<span>第 ' + (ending.day || '?') + ' / 38 天 · ' + (ending.finalRound || ui.game.round) + ' 个决策窗口</span>' : '<span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span>') + '<span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
       '<div class="ending-layout"><div class="ending-column"><section class="ending-section"><span class="section-kicker">AFTER ACTION</span><h2>阶段记录</h2><div class="ending-copy">' + (ending.epilogue || []).map(function (p) { return '<p>' + escapeHtml(p) + '</p>'; }).join('') + '</div></section>' +
-      governanceHtml(ending) + turningPointsHtml(ending) +
+      (campaignEnd ? campaignEndingMainHtml(ending) : '') + governanceHtml(ending) + turningPointsHtml(ending) +
       '<section class="ending-section"><h2>命令如何走向后果</h2><p class="stat-hint">这里优先展示失效、阻塞、撤回与等待核验的命令：总统注意力、机构容量和窗口如何改变结果。</p>' + commandChainHtml + '</section>' +
       '<section class="ending-section"><h2>完整决策链</h2>' + timeline + '</section><section class="ending-section"><h2>延迟后果链</h2>' + chainHtml + '</section></div>' +
       '<aside class="ending-column"><section class="ending-section"><h2>七项最终状态</h2><div class="ending-stats">' + endingStatsHtml(stats) + '</div><div class="ending-pressure"><span>战争压力</span><strong>' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + ' / 100</strong></div></section>' +
-      '' + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
+      (campaignEnd ? campaignEndingSideHtml(ending) : '') + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
       '<section class="ending-review-invite"><span class="section-kicker">SEALED UNTIL THE END</span><h2>现在，打开事后才能看见的资料。</h2><p>完整模拟参数、逐日事实、当时认知、后来确认、争议与资料来源已独立归档，不再接在结局正文之后。</p><button type="button" class="btn btn-primary" id="btn-history">进入历史复盘</button></section>' +
       '<div class="ending-disclaimer"><strong>模拟说明：</strong>' + escapeHtml(ending.disclaimer || L.meta.disclaimer || '') + '<br>本结局只描述本局模拟参数下的国家状态，不评价真实历史人物。<br>版本 ' + escapeHtml(L.meta.version || '') + ' · 所有数值均为模拟设计参数。</div>' +
       '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
     document.getElementById('btn-history').addEventListener('click', openHistoryReview);
-    document.getElementById('btn-replay').addEventListener('click', function () { startNewGame(true); });
+    document.getElementById('btn-replay').addEventListener('click', function () { startNewGame(true, scenarioOf()); });
     document.getElementById('btn-back-cover').addEventListener('click', renderIntro);
     document.getElementById('btn-print').addEventListener('click', function () { window.print(); });
   }
 
   function init() {
-    el.start.addEventListener('click', requestStart);
-    el.continue.addEventListener('click', loadGame);
+    el.start.addEventListener('click', function () { requestStart('classic'); });
+    el.continue.addEventListener('click', function () { loadGame('classic'); });
+    if (el.campaign) el.campaign.addEventListener('click', function () { requestStart('campaign'); });
+    if (el.continueCampaign) el.continueCampaign.addEventListener('click', function () { loadGame('campaign'); });
     el.how.addEventListener('click', openHowToPlay);
     el.disclaimer.addEventListener('click', openDisclaimer);
     el.helpBtn.addEventListener('click', openHowToPlay);
     el.audioBtn.addEventListener('click', openAudioSettings);
     el.audioIntroBtn.addEventListener('click', openAudioSettings);
     el.clearSave.addEventListener('click', function () {
-      openConfirm({ kicker: '清除存档', title: '删除本机进度？', message: '<p>这只会删除本机浏览器里的《小泽模拟器》存档，不会影响其他网站。</p>', confirmLabel: '删除存档', onConfirm: function () { L.deleteSave(); toast('存档已删除。'); renderIntro(); } });
+      openConfirm({ kicker: '清除存档', title: '删除本机进度？', message: '<p>这会删除本机浏览器里《小泽模拟器》的七日开局与基辅战役存档；本机结局记录保留，不会影响其他网站。</p>', confirmLabel: '删除存档', onConfirm: function () { L.deleteSave('classic'); L.deleteSave('campaign'); toast('存档已删除。'); renderIntro(); } });
     });
     el.saveBtn.addEventListener('click', function () { saveGame(true); });
     el.logBtn.addEventListener('click', openLog);

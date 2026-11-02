@@ -81,3 +81,22 @@
 - 时间属性、路径依赖、常设授权、协调值与机构负载都是模拟设计值，不是历史统计。
 - 结局的治理风格回顾只描述玩家在本局中的操作倾向，不评价真实人物。
 - 游玩期间的信息边界不变：事后才确认的信息仍只出现在结局后的独立历史复盘中。
+
+## v0.6.0 基辅战役资料说明
+
+基辅战役模式的历史资料位于 js/campaign.js 的 sources / history / research / counterfactuals，只在结局后显示。主要来源：
+
+1. Modern War Institute at West Point，Urban Warfare Project Case Study #12: Battle of Kyiv（2025）。<https://mwi.westpoint.edu/urban-warfare-project-case-study-12-battle-of-kyiv/>
+2. 乌克兰内务部，入侵初期主要战斗编年。官方来源，属于一方叙述。<https://mvs.gov.ua/en/news/xronika-osnovnix-bitv-na-pocatku-rosiiskogo-vtorgnennia>
+3. Liam Collins、Michael Kofman、John Spencer，The Battle of Hostomel Airport: A Key Moment in Russia’s Defeat in Kyiv，War on the Rocks（2023）。<https://warontherocks.com/the-battle-of-hostomel-airport-a-key-moment-in-russias-defeat-in-kyiv/>
+4. RUSI，Preliminary Lessons in Conventional Warfighting from Russia’s Invasion of Ukraine: February–July 2022。<https://www.rusi.org/explore-our-research/publications/special-resources/preliminary-lessons-conventional-warfighting-russias-invasion-ukraine-february-july-2022>
+5. 美国国防部，Defense Official Not Ready to Call Russian Activity in Ukraine a Retreat or Withdrawal（2022-03-29）。<https://www.defense.gov/News/News-Stories/Article/Article/2982197/defense-official-not-ready-to-call-russian-activity-in-ukraine-a-retreat-or-wit/>
+
+处理规则：
+
+- 14 条历史进程分为已确认、报道、存在争议和事后分析四类。机降突击的细节和伊尔平河谷淹没的过程标为争议；“机场没有成为空中运输通道”标为事后分析；桥梁破坏、车队停滞、莫什春、布罗瓦雷伏击、马卡里夫反击和撤离标为报道。
+- 游戏中出现的是当时可能获得的信息，例如“机场仍在争夺”“俄方宣布减少活动，但美方官员不愿称之为撤退”。事后结论只出现在复盘。
+- 研究框架只概括作者的分析方向，不引用原话，并标注为战后研究，不代表当时的预测。
+- 游戏中的“历史基线”是对各节点大致方向的抽象（例如机场遭到争夺并破坏、桥梁被炸），不等于总统本人亲自下达了这些战术命令；预备队、重新进入等节点没有可对应的单一历史选择，标为抽象。
+- 战役中的所有数值、跨度和概率都是模拟设计值，不是伤亡、兵力或装备统计。
+- 本轮开发环境没有联网检索工具，以上资料依据开发者已有知识和用户提供的链接整理，未在线逐条复核；具体日期以来源原文为准。

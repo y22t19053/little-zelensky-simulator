@@ -18,20 +18,23 @@
           <span class="masthead-mark" aria-hidden="true">УК</span>
           <div><p class="masthead-kicker">总统办公室 · 危机档案</p><p class="masthead-sub">A PRESIDENTIAL CRISIS SIMULATION</p></div>
         </div>
-        <div class="masthead-right"><span>02.24 — 03.02</span><span>2022</span></div>
+        <div class="masthead-right"><span>02.24 — 04.02</span><span>2022</span></div>
       </header>
       <main class="intro-grid">
         <div class="intro-main">
-          <p class="eyebrow">历史情景 · 单人决策 · 约 5—10 分钟</p>
+          <p class="eyebrow">历史情景 · 单人决策 · 基辅战役约 30—45 分钟 · 七日开局约 10 分钟</p>
           <h1 id="intro-title" class="game-title">小泽模拟器</h1>
           <p class="game-subtitle">Little Zelensky Simulator</p>
           <p class="tagline">你能顶住几天？</p>
           <p class="intro-lead">2022年2月24日凌晨，全面入侵开始。你坐在总统办公室里，面对的不是一张完整战况图，而是有限注意力、不完整情报，以及必须有人承担的决定。</p>
           <p class="intro-position">你不是将军。你分配 AP、签发总统命令，并承担它们在国家机器中留下的连锁后果。</p>
           <div class="intro-actions">
-            <button id="btn-start" class="btn btn-primary" type="button"><span>进入总统办公室</span><span aria-hidden="true">→</span></button>
-            <button id="btn-continue" class="btn btn-ghost" type="button" hidden>继续上一局</button>
+            <button id="btn-campaign" class="btn btn-primary" type="button"><span>基辅战役 · 38 天</span><span aria-hidden="true">→</span></button>
+            <button id="btn-continue-campaign" class="btn btn-ghost" type="button" hidden>继续基辅战役</button>
+            <button id="btn-start" class="btn btn-ghost" type="button"><span>七日开局 · 进入总统办公室</span><span aria-hidden="true">→</span></button>
+            <button id="btn-continue" class="btn btn-ghost" type="button" hidden>继续七日开局</button>
           </div>
+          <p class="mode-note"><strong>基辅战役</strong>：2 月 24 日至 4 月 2 日，四幕、13 个决策窗口，窗口之间系统逐日模拟。<strong>七日开局</strong>：v0.5 的 7 个每日回合，存档互不影响。</p>
           <div class="intro-links">
             <button id="btn-how" class="text-btn" type="button">怎么玩</button>
             <button id="btn-audio-intro" class="text-btn" type="button" aria-haspopup="dialog">声音设置</button>
@@ -40,9 +43,9 @@
           </div>
           <p id="save-summary" class="save-summary" hidden></p>
           <ul class="intro-facts" aria-label="游戏概览">
-            <li><strong>3 AP</strong><span>每回合的总统注意力</span></li>
-            <li><strong>7 天</strong><span>连续危机与延迟后果</span></li>
-            <li><strong>11 种</strong><span>由多项状态共同判定的结局</span></li>
+            <li><strong>38 天</strong><span>四幕基辅战役 · 13 个决策窗口</span></li>
+            <li><strong>2—3 AP</strong><span>每个决策窗口的总统注意力</span></li>
+            <li><strong>A—H</strong><span>八个维度共同判定的战役结局</span></li>
           </ul>
         </div>
         <aside class="intro-file" aria-label="情景档案">
@@ -57,7 +60,7 @@
           <div class="file-stamp" aria-hidden="true">模拟推演</div>
           <h2>你接手的不是一支军队。</h2>
           <p class="file-lead">是一台正在同时失去余量的国家机器。政府要运转，首都要守住，社会要相信还有明天。</p>
-          <dl class="brief-list"><div><dt>身份</dt><dd>乌克兰总统</dd></div><div><dt>时间</dt><dd>2022.02.24 — 03.02</dd></div><div><dt>目标</dt><dd>让国家撑过第一阶段</dd></div></dl>
+          <dl class="brief-list"><div><dt>身份</dt><dd>乌克兰总统</dd></div><div><dt>时间</dt><dd>2022.02.24 — 04.02</dd></div><div><dt>目标</dt><dd>让国家撑过基辅防御战役</dd></div></dl>
           <p class="file-note">没有“正确答案”。只有你愿意先承担哪一种代价。</p>
         </aside>
       </main>
@@ -125,6 +128,7 @@
   <script src="js/events.js"></script>
   <script src="js/intel.js"></script>
   <script src="js/strategy.js"></script>
+    <script src="js/campaign.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/review.js"></script>
