@@ -14,7 +14,7 @@ const SHOTS = path.join(__dirname, 'screenshots');
 const PROFILE = path.join(__dirname, '.edge-profile');
 const EDGE = process.env.EDGE_PATH || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const PORT = Number(process.env.EDGE_PORT || 9333);
-const PAGE_URL = pathToFileURL(path.join(ROOT, 'index.html')).href;
+const PAGE_URL = process.env.PAGE_URL || pathToFileURL(path.join(ROOT, 'index.html')).href;
 
 const SEQUENCE = {
   1: ['aid_call', 'address'],
@@ -193,6 +193,7 @@ async function main() {
     };
 
     const screenshot = async function (name) {
+      await sleep(380);
       const result = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       fs.writeFileSync(path.join(SHOTS, name), Buffer.from(result.data, 'base64'));
       console.log('  shot ' + name);
@@ -205,11 +206,13 @@ async function main() {
     };
 
     const touchClick = async function (selector) {
-      const point = await evaluate(cdp, '(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return null; el.scrollIntoView({block:"center",behavior:"instant"}); const r = el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()');
-      if (!point) throw new Error('触摸失败，元素不存在：' + selector);
+      const found = await evaluate(cdp, '(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return false; el.scrollIntoView({block:"center",behavior:"instant"}); return true; })()');
+      if (!found) throw new Error('触摸失败，元素不存在：' + selector);
+      await sleep(180);
+      const point = await evaluate(cdp, '(() => { const r = document.querySelector(' + JSON.stringify(selector) + ').getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; })()');
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: point.x, y: point.y }] });
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-      await sleep(100);
+      await sleep(220);
     };
 
     const savedState = async function () {
@@ -445,7 +448,10 @@ async function main() {
       }, 15000);
       const introLayout = await evaluate(cdp, '({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
       assert(introLayout.sw <= introLayout.cw + 2, size[0] + 'px 开场无横向溢出', JSON.stringify(introLayout));
-      if (size[0] === 390) await screenshot('07-intro-mobile.png');
+      if (size[0] === 390) {
+        await evaluate(cdp, 'window.scrollTo(0,0)');
+        await screenshot('07-intro-mobile.png');
+      }
       await touchClick('#btn-continue');
       await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden'); }, 5000);
       const mobile = await evaluate(cdp, `(() => {

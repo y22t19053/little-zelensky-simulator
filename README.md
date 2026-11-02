@@ -174,17 +174,24 @@ npm run test:browser  # 无头 Edge、CDP 点击与触摸、整局与四视口�
 - 320 / 360 / 390 / 430 四视口的开场、游戏、七项状态、选项、固定底栏、日志弹窗和结局复盘；
 - CDP 真实触摸事件与减少动态效果模式。
 
-截图位于 `tests/screenshots/`。测试使用浏览器设备模拟，**没有在真实手机上测试**；也未进行人工逐像素视觉走查。
+同一套浏览器测试在线上 Pages 地址复跑通过，控制台 0 错误、0 警告。
+
+截图仅在本地运行测试后生成到 `tests/screenshots/`，不随仓库发布。测试使用浏览器设备模拟，**没有在真实手机上测试**；已对封面、游戏页、结局页和手机截图做人工观察，但不是逐像素设计验收。
 
 ## GitHub Pages 部署
 
-仓库已配置 `.github/workflows/pages.yml`，通过 GitHub Actions 部署，不需要本地构建。
+线上地址：<https://y22t19053.github.io/little-zelensky-simulator/>
 
-1. 将项目推送到 GitHub 的 `main` 分支。
-2. 打开仓库 **Settings → Pages**，在 **Build and deployment → Source** 选择 **GitHub Actions**。
-3. 推送 `main` 或在 **Actions → Deploy GitHub Pages → Run workflow** 手动运行。
-4. 工作流会把运行所需文件组装到 `_site`，上传并部署；`tests/`、`css.zip` 和 `.github/` 不进入公开站点。
-5. 部署地址为 `https://y22t19053.github.io/little-zelensky-simulator/`。
+当前仓库使用 **Deploy from a branch**：`main` 分支根目录直接发布。项目是纯静态文件，不需要构建；`.nojekyll` 已包含。
+
+已启用状态（仓库设置）：
+
+1. **Settings → Pages → Build and deployment → Source**：`Deploy from a branch`。
+2. 分支选择 `main`，目录选择 `/ (root)`。
+3. 每次更新 `main` 后，GitHub Pages 会自动重建。
+4. 分支发布会公开仓库中的游戏文件与 `tests/` 测试脚本；测试脚本不包含玩家存档或凭据。本地截图、Edge 测试配置和旧版归档 `css.zip` 已被 `.gitignore` 排除，不会进入公开站点。
+
+仓库同时保留了 `.github/workflows/pages.yml`，供以后切换到 **GitHub Actions** 部署时使用。切换时把 Source 改为 `GitHub Actions`，工作流会把运行所需文件组装到 `_site` 后上传；两种方式不要同时启用。
 
 所有资源使用相对路径，`.nojekyll` 已包含，项目页子路径可以正常工作。不要提交凭据、Token 或本地截图归档。
 
