@@ -67,8 +67,9 @@ def music(theme, seed):
     drone = np.sin(2 * np.pi * root * t) * 0.24 + np.sin(2 * np.pi * root * 1.5 * t) * 0.07
     air = lowpass(noise(dur, seed), 0.012) * (0.12 if theme != 'night' else 0.17)
     score = drone + air
-    motif = [146.832, 174.614, 220.0, 164.814, 146.832, 130.813]
-    starts = [2.0, 6.5, 11.0, 16.0, 21.0, 26.0]
+    # 'Seven Days Unfinished': seven notes; the seventh (C, a whole step under the D tonic) is left unresolved.
+    motif = [146.832, 174.614, 220.0, 164.814, 146.832, 130.813, 130.813 * 0.9439]
+    starts = [2.0, 6.0, 10.0, 14.5, 19.0, 23.5, 27.0]
     gains = {'menu': 0.16, 'day': 0.13, 'night': 0.08, 'ending': 0.18}[theme]
     for index, (start, freq) in enumerate(zip(starts, motif)):
         if theme == 'night' and index % 2:
@@ -110,6 +111,34 @@ def sfx(name):
         x = pluck(220, 1.8) * 0.4 + pluck(293.665, 1.8) * 0.25 + pluck(349.228, 1.8) * 0.15
     elif name == 'menu':
         t = time(0.16); x = highpass_simple(noise(0.16, 29)) * np.exp(-t / 0.028) + pluck(520, 0.16) * 0.12
+    elif name == 'phone':
+        # Two short desk-phone purrs (not an alarm): 2 x 0.18 s with a gap.
+        t = time(0.18); ring = (sine(420, 0.18) + sine(480, 0.18) * 0.7) * np.minimum(1, t / 0.01) * np.exp(-t / 0.12)
+        x = np.concatenate((ring, np.zeros(int(0.09 * SR)), ring * 0.8)) * 0.5
+    elif name == 'file':
+        t = time(0.3); x = lowpass(noise(0.3, 41), 0.32) * np.exp(-t / 0.05) * 0.8 + lowpass(noise(0.3, 43), 0.08) * np.exp(-((t - 0.12) ** 2) / 0.002) * 0.5
+    elif name == 'receive':
+        t = time(0.42); x = pluck(293.665, 0.42) * 0.35 + np.roll(pluck(440.0, 0.42), int(0.08 * SR)) * 0.25
+    elif name == 'blocked':
+        t = time(0.5); x = (sine(196, 0.5) * 0.5 + sine(207.65, 0.5) * 0.3) * np.exp(-t / 0.12) + lowpass(noise(0.5, 47), 0.05) * np.exp(-t / 0.05) * 0.3
+    elif name == 'complete':
+        t = time(0.6); x = pluck(220, 0.6) * 0.32 + np.roll(pluck(293.665, 0.6), int(0.07 * SR)) * 0.3
+    elif name == 'dayturn':
+        # One 7/8 bar at 168 bpm (eighth = 0.179 s), grouped 2+2+3; accents on 1, 3, 5.
+        eighth = 60 / 168 / 2
+        x = np.zeros(int(eighth * 7 * SR + 0.4 * SR))
+        for step in range(7):
+            accent = step in (0, 2, 4)
+            tick = lowpass(noise(0.05, 50 + step), 0.4) * np.exp(-time(0.05) / 0.01) * (0.6 if accent else 0.28)
+            if accent:
+                tick = tick + pluck(146.832 if step == 0 else 220.0, 0.05) * 0.25
+            i = int(step * eighth * SR)
+            x[i:i + len(tick)] += tick
+    elif name == 'archive':
+        t = time(0.7); x = lowpass(noise(0.7, 53), 0.2) * np.exp(-t / 0.09) * 0.6 + sine(98, 0.7, 0.2) * 0.4
+    elif name == 'ending_costly':
+        # Held at the unresolved seventh: no return to the tonic.
+        x = pluck(220, 2.0) * 0.32 + np.roll(pluck(164.814, 2.0), int(0.35 * SR)) * 0.28 + np.roll(pluck(130.813 * 0.9439, 2.0), int(0.7 * SR)) * 0.3
     else:  # modal
         t = time(0.28); x = lowpass(noise(0.28, 31), 0.12) * np.exp(-t / 0.055) + pluck(260, 0.28) * 0.15
     return norm(x, 0.52)
@@ -141,7 +170,7 @@ for index, theme in enumerate(('menu', 'day', 'night', 'ending')):
     write_wav(source, data); encode(source, target, True)
     manifest.append({'id': 'music.' + theme, 'source': 'production/audio/raw/' + source.name, 'output': 'assets/audio/music/' + target.name, 'seconds': 32, 'bytes': target.stat().st_size, 'method': 'original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS'})
     print('music', theme, target.stat().st_size)
-for name in ('select', 'issue', 'invalid', 'round', 'delayed', 'alert', 'collapse', 'ending', 'menu', 'modal'):
+for name in ('select', 'issue', 'invalid', 'round', 'delayed', 'alert', 'collapse', 'ending', 'menu', 'modal', 'phone', 'file', 'receive', 'blocked', 'complete', 'dayturn', 'archive', 'ending_costly'):
     data = sfx(name)
     source = RAW / (name + '.wav')
     target = OUT / 'sfx' / (name + '.ogg')

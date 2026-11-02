@@ -10,7 +10,8 @@
   const EVENTS = root.LZS_EVENTS || [];
   const META = root.LZS_META || {};
   const INTEL = root.LZS_INTEL || { categories: [], agencies: [], communications: [] };
-  const VERSION = 2;
+  const STRAT = root.LZS_STRATEGY || { dayFocus: {}, timeProfiles: {}, kindLabels: {}, links: [], interventionBacklog: { windowDays: 3, minDays: 3 }, standing: { cost: 1, minCoordination: 45, nightlyDrift: -1, interventionExtra: 3 }, dispatchText: {}, styleMeta: {}, recordsKey: 'lzs_records_v1' };
+  const VERSION = 3;
   const SAVE_KEY = 'lzs_save_v1';
   const BACKUP_KEY = 'lzs_save_v1_legacy_backup';
   const AP_MAX = META.apPerRound || 3;
@@ -223,7 +224,36 @@
     if (state.stats.gov <= 35 && ['office', 'interior', 'communications'].indexOf(agency) !== -1) required = true;
     if (state.stats.intl <= 28 && agency === 'foreign' && (choice.effects.intl || 0) > 0) required = true;
     if (state.stats.reserve <= 24 && (choice.effects.reserve || 0) <= -4) required = true;
+    const link = getLinkEffect(state, choice.id);
+    if (link && link.coordination === 'require') required = true;
+    if (link && link.coordination === 'relax' && required && state.stats.gov > 35) required = false;
     return required;
+  }
+
+  /* v0.5 时间属性：未列出的选项保持 v0.4 的一日短期窗口。 */
+  function timeProfileFor(choiceId) {
+    const profile = (STRAT.timeProfiles || {})[choiceId];
+    const base = { kind: 'short', windowRounds: STRATEGY.windowRounds, holdRounds: 0, resurface: false, note: '' };
+    return profile ? Object.assign(base, profile) : base;
+  }
+
+  /* 路径依赖：已结束的前序命令（completed / awaiting_feedback 或 expired）决定后续命令的协调条件。 */
+  function getLinkEffect(state, choiceId) {
+    if (!state || !state.commands) return null;
+    const links = (STRAT.links || []).filter(function (link) { return link.target === choiceId; });
+    let found = null;
+    links.forEach(function (link) {
+      const source = state.commands.filter(function (command) {
+        return command.choiceId === link.from && command.kind !== 'communication';
+      })[0];
+      if (!source) return;
+      const done = source.effectsApplied && ['awaiting_feedback', 'completed'].indexOf(source.status) !== -1;
+      const lost = source.status === 'expired';
+      if ((link.when === 'completed' && done) || (link.when === 'expired' && lost)) {
+        found = Object.assign({ sourceCommandId: source.id }, link);
+      }
+    });
+    return found;
   }
 
   function requiresIntelClarification(state, event, choice) {
@@ -262,10 +292,16 @@
       agencyLabel: getAgency(agency) ? getAgency(agency).label : agency,
       load: getAgencyLoad(state, agency),
       requiresCoordination: needsCoordination(state, choice, agency),
-      slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2,
+      slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2 || timeProfileFor(choice.id).kind === 'commitment',
       requiresIntel: requiresIntelClarification(state, event, choice),
       intelSatisfied: isIntelSatisfied(state, { requiresIntel: requiresIntelClarification(state, event, choice), intelReportId: event.id + ':military' }),
-      deadlineRound: Math.min(FINAL_ROUND, state.round + STRATEGY.windowRounds),
+      deadlineRound: Math.min(FINAL_ROUND, state.round + timeProfileFor(choice.id).windowRounds),
+      timeKind: timeProfileFor(choice.id).kind,
+      kindLabel: (STRAT.kindLabels || {})[timeProfileFor(choice.id).kind] || '短期窗口',
+      timeNote: timeProfileFor(choice.id).note || '',
+      holdRounds: timeProfileFor(choice.id).holdRounds || 0,
+      link: getLinkEffect(state, choice.id),
+      standing: !!(state.standing && state.standing[agency] && state.standing[agency].active),
       risks: getExecutionRisks(state, choice)
     };
   }
@@ -388,7 +424,7 @@
     });
     const state = {
       version: VERSION,
-      schemaVersion: 2,
+      schemaVersion: 3,
       round: 1,
       ap: AP_MAX,
       apMax: AP_MAX,
@@ -410,8 +446,13 @@
       phase: 'briefing',
       interlude: null,
       ending: null,
+      standing: {},
+      dispatches: [],
+      interventionRounds: [],
+      timeline: [],
       startedAt: new Date().toISOString()
     };
+    recordTimeline(state);
     addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 3 点注意力，用来决定这个国家先处理什么。信息可以免费阅读，追问与协调会占用注意力。');
     return state;
   }
@@ -526,9 +567,18 @@
     const id = 'r' + state.round + ':' + event.id + ':' + choice.id;
     if (findCommand(state, id)) return { ok: false, error: '这项命令已经建档。', code: 'DUPLICATE' };
     const agency = agencyForChoice(choice);
+    const profile = timeProfileFor(choice.id);
+    const link = getLinkEffect(state, choice.id);
     const command = {
       id: id,
       kind: 'authorization',
+      timeKind: profile.kind,
+      holdRounds: profile.holdRounds || 0,
+      holdUntilRound: null,
+      resurface: !!profile.resurface,
+      resurfaced: false,
+      linkNote: link ? link.note : null,
+      linkCoordination: link ? link.coordination : null,
       round: state.round,
       dateLabel: event.dateLabel,
       eventId: event.id,
@@ -541,7 +591,7 @@
       authorizedAt: null,
       requiredCoordination: needsCoordination(state, choice, agency),
       /* 只有高投入或跨部门命令占用总统优先席位；1 AP 单项工作由机构在授权内自行排队。 */
-      slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2,
+      slotRequired: needsCoordination(state, choice, agency) || choice.ap >= 2 || profile.kind === 'commitment',
       coordinated: !!state.coordinationThisRound[agency],
       requiresIntel: requiresIntelClarification(state, event, choice),
       intelReportId: event.id + ':military',
@@ -553,8 +603,8 @@
       effectsApplied: false,
       blockedReason: null,
       blockedCode: null,
-      deadlineRound: Math.min(FINAL_ROUND, state.round + STRATEGY.windowRounds),
-      windowRounds: STRATEGY.windowRounds,
+      deadlineRound: Math.min(FINAL_ROUND, state.round + profile.windowRounds),
+      windowRounds: profile.windowRounds,
       expedited: false,
       cancelledRound: null,
       expiredRound: null,
@@ -581,6 +631,17 @@
       scheduled: []
     });
     addCommandLog(state, command, '签发：' + choice.title, '命令已建档并交给' + (getAgency(agency) ? getAgency(agency).label : '总统办公室') + '。尚未授权执行。');
+    if (link) {
+      addCommandLog(state, command, (link.coordination === 'relax' ? '前期准备生效：' : '前期事务失效的后果：') + choice.title, link.note);
+    }
+    if (state.standing && state.standing[agency] && state.standing[agency].active) {
+      const auto = authorizeCommand(state, command.id);
+      if (auto.ok) {
+        command.autoAuthorized = true;
+        addCommandLog(state, command, '常设授权自动接收：' + choice.title, '该机构持有总统常设授权，签发即进入执行队列，无需逐项授权。');
+      }
+      return { ok: true, command: command, choice: choice, autoAuthorized: !!auto.ok, blocked: !!auto.blocked };
+    }
     return { ok: true, command: command, choice: choice };
   }
 
@@ -645,6 +706,9 @@
     command.status = 'awaiting_feedback';
     command.executedRound = state.round;
     command.executedLate = state.round > command.round;
+    if (command.timeKind === 'commitment' && command.holdRounds > 0) {
+      command.holdUntilRound = Math.min(FINAL_ROUND, state.round + command.holdRounds);
+    }
     command.result = { deltas: result.deltas, pressureDelta: result.pressureDelta, scheduled: scheduled.map(function (item) { return item.label; }) };
     clearCommandBlock(command);
     const record = state.choices.filter(function (item) { return item.commandId === command.id; })[0];
@@ -682,8 +746,11 @@
       const forced = reserveAgencySlot(state, command, { force: true });
       if (!forced.ok) return { ok: false, error: '介入失败：无法占用执行机构。', code: 'AGENCY' };
       if (state.agencies[previousAgency]) {
-        state.agencies[previousAgency].coordination = clamp(state.agencies[previousAgency].coordination - STRATEGY.interventionCoordinationCost, 0, 100);
+        const standingExtra = state.standing && state.standing[previousAgency] && state.standing[previousAgency].active ? (STRAT.standing.interventionExtra || 0) : 0;
+        state.agencies[previousAgency].coordination = clamp(state.agencies[previousAgency].coordination - STRATEGY.interventionCoordinationCost - standingExtra, 0, 100);
       }
+      if (!Array.isArray(state.interventionRounds)) state.interventionRounds = [];
+      if (state.interventionRounds.indexOf(state.round) === -1) state.interventionRounds.push(state.round);
       result = executeCommandNow(state, command, 'followup');
       if (result.ok && !result.blocked) {
         addCommandLog(state, command, '总统介入：' + command.title, '总统亲自催办并越过排队，命令立即执行；这占用了本可用于另一项事务的注意力，并向执行机构透支了 ' + STRATEGY.interventionCoordinationCost + ' 点协调余量。');
@@ -746,6 +813,253 @@
     if (record) record.status = 'cancelled';
     addCommandLog(state, command, '撤回命令：' + command.title, '总统撤回尚未执行的命令，释放机构在办名额；已支付的 ' + command.ap + ' AP 不会退还，原定效果与本可争取的时间窗口一并放弃。');
     return { ok: true, command: command };
+  }
+
+  /*
+   * 常设授权：总统一次性把例行执行权交给一个机构（1 AP，需协调 >= 45）。
+   * 此后该机构的新命令签发即自动授权；代价是每夜协调 -1，且总统介入该机构命令时多付协调。
+   */
+  function grantStanding(state, agencyId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能授予常设授权。', code: 'PHASE' };
+    const spec = STRAT.standing || {};
+    const cost = spec.cost || 1;
+    if (!getAgency(agencyId) || !state.agencies[agencyId]) return { ok: false, error: '未找到这个机构。', code: 'AGENCY' };
+    if (!state.standing) state.standing = {};
+    if (state.standing[agencyId]) return { ok: false, error: '这个机构已经持有常设授权。', code: 'DUPLICATE' };
+    if (state.ap < cost) return { ok: false, error: '授予常设授权需要 ' + cost + ' AP。', code: 'AP' };
+    const load = getAgencyLoad(state, agencyId);
+    if (load.coordination < (spec.minCoordination || 45)) {
+      return { ok: false, error: '机构协调余量 ' + load.coordination + '，低于 ' + (spec.minCoordination || 45) + '：协调不足的机构不能自主运行。', code: 'COORDINATION' };
+    }
+    state.ap -= cost;
+    state.standing[agencyId] = { active: true, grantedRound: state.round };
+    addLog(state, 'coordination', '常设授权：' + getAgency(agencyId).label,
+      '此后该机构签发的命令自动进入执行，不再逐项授权。代价：机构每夜协调 ' + (spec.nightlyDrift || -1) + '；总统亲自介入该机构命令时额外消耗 ' + (spec.interventionExtra || 0) + ' 点协调。');
+    return { ok: true, agencyId: agencyId };
+  }
+
+  function getDispatches(state, includeResolved) {
+    return (state && state.dispatches || []).filter(function (item) {
+      return item.round === state.round && (includeResolved || !item.resolved);
+    });
+  }
+
+  function dispatchTemplate(type, vars) {
+    const tpl = (STRAT.dispatchText || {})[type] || { kicker: '模拟反馈', title: '', body: '', source: '' };
+    function fill(text) {
+      return String(text || '').replace(/\{(\w+)\}/g, function (all, key) { return vars[key] != null ? vars[key] : ''; });
+    }
+    return { kicker: tpl.kicker, title: fill(tpl.title), body: fill(tpl.body), source: fill(tpl.source) };
+  }
+
+  function addDispatch(state, type, data) {
+    if (!Array.isArray(state.dispatches)) state.dispatches = [];
+    const id = 'd' + state.round + ':' + type + ':' + (data.key || data.commandId || data.agencyId || 'x');
+    if (state.dispatches.some(function (item) { return item.id === id; })) return null;
+    const agency = data.agencyId ? getAgency(data.agencyId) : null;
+    const text = dispatchTemplate(type, { choice: data.choiceTitle || '', agency: agency ? agency.label : '', note: data.note || '' });
+    const item = Object.assign({ id: id, type: type, round: state.round, resolved: false, outcome: null, options: [] }, text, data);
+    state.dispatches.push(item);
+    addLog(state, 'dispatch', item.kicker + '：' + item.title, item.body);
+    return item;
+  }
+
+  /* 处理一条事务。option 来自 dispatch.options；未处理的事务在当夜按 defaultOption 结算。 */
+  function resolveDispatch(state, dispatchId, optionId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能处理事务。', code: 'PHASE' };
+    const item = (state.dispatches || []).filter(function (entry) { return entry.id === dispatchId; })[0];
+    if (!item) return { ok: false, error: '未找到这条事务。', code: 'NOT_FOUND' };
+    if (item.resolved) return { ok: false, error: '这条事务已经处理。', code: 'DUPLICATE' };
+    const option = (item.options || []).filter(function (entry) { return entry.id === optionId; })[0];
+    if (!option) return { ok: false, error: '没有这个处理方式。', code: 'OPTION' };
+    if ((option.ap || 0) > state.ap) return { ok: false, error: '这个处理方式需要 ' + option.ap + ' AP。', code: 'AP' };
+    return applyDispatchOption(state, item, option, false);
+  }
+
+  function applyDispatchOption(state, item, option, automatic) {
+    state.ap -= automatic ? 0 : (option.ap || 0);
+    const result = applyEffectValues(state, option.effects || {});
+    if (option.agencyId && state.agencies[option.agencyId] && option.coordination) {
+      state.agencies[option.agencyId].coordination = clamp(state.agencies[option.agencyId].coordination + option.coordination, 0, 100);
+    }
+    if (option.unblockIntel && item.commandId) {
+      const command = findCommand(state, item.commandId);
+      if (command) {
+        if (!state.intelState) state.intelState = {};
+        const record = state.intelState[command.intelReportId] || {};
+        record.inquired = true;
+        record.viaDispatch = true;
+        state.intelState[command.intelReportId] = record;
+        if (command.status === 'blocked' && command.blockedCode === 'INFO') {
+          command.status = 'executing';
+          command.blockedCode = null;
+          command.blockedReason = null;
+        }
+      }
+    }
+    if (option.reissue) {
+      const reissued = reissueFromDispatch(state, item);
+      item.reissuedCommandId = reissued ? reissued.id : null;
+    }
+    if (option.extendHold && item.commandId) {
+      const command = findCommand(state, item.commandId);
+      if (command && command.holdUntilRound) command.holdUntilRound = Math.min(FINAL_ROUND, command.holdUntilRound + 1);
+    }
+    if (option.extraSlot && option.agencyId && state.agencies[option.agencyId]) {
+      state.agencies[option.agencyId].workload = Math.max(0, state.agencies[option.agencyId].workload - 1);
+      item.extraSlotUsed = true;
+    }
+    item.resolved = true;
+    item.outcome = { optionId: option.id, label: option.label, automatic: !!automatic, deltas: result.deltas, coordination: option.coordination || 0 };
+    addLog(state, 'dispatch', (automatic ? '默认处理：' : '处理事务：') + item.title,
+      option.label + '。' + (formatDeltaText(result.deltas, 0) || '') + (option.coordination ? ' 机构协调 ' + (option.coordination > 0 ? '+' : '') + option.coordination + '。' : ''));
+    return { ok: true, dispatch: item, deltas: result.deltas };
+  }
+
+  function settleOpenDispatches(state) {
+    const settled = [];
+    (state.dispatches || []).forEach(function (item) {
+      if (item.resolved || item.round !== state.round) return;
+      const option = (item.options || []).filter(function (entry) { return entry.id === item.defaultOption; })[0];
+      if (option) {
+        applyDispatchOption(state, item, option, true);
+      } else {
+        item.resolved = true;
+        item.outcome = { optionId: null, label: '已阅', automatic: true, deltas: {} };
+      }
+      settled.push(item);
+    });
+    return settled;
+  }
+
+  /*
+   * 夜间生成第二天早上的事务。全部来自真实状态：
+   * 情报阻塞、失效的可持续任务、机构满载、连续介入、外交承诺遭遇低支持、前序命令落地/失效。
+   */
+  function generateDispatches(state, nightResults) {
+    const made = [];
+    const round = state.round;
+    (state.commands || []).forEach(function (command) {
+      if (command.kind === 'communication') return;
+      // 迟到的报告：前一夜因情报未确认而阻塞、仍在窗口内的命令
+      if (command.status === 'blocked' && command.blockedCode === 'INFO' && !command.effectsApplied) {
+        const d = addDispatch(state, 'late_report', {
+          commandId: command.id, choiceTitle: command.title, agencyId: 'general_staff',
+          options: [
+            { id: 'accept', label: '采纳核实报告，解除情报阻塞', ap: 0, unblockIntel: true },
+            { id: 'hold', label: '暂不采纳，继续等待', ap: 0 }
+          ],
+          defaultOption: 'hold'
+        });
+        if (d) made.push(d);
+      }
+      // 事务重新浮现：可持续任务失效后，以当日紧急窗口重新出现一次
+      if (command.status === 'expired' && command.resurface && !command.resurfaced && command.expiredRound === round - 1) {
+        command.resurfaced = true;
+        const d = addDispatch(state, 'resurface', {
+          commandId: command.id, choiceTitle: command.title, agencyId: command.executorId,
+          options: [
+            { id: 'reissue', label: '重新签发（2 AP，紧急窗口，今晚必须执行）', ap: 2, reissue: true },
+            { id: 'drop', label: '放弃这项工作，机构协调 -2', ap: 0, coordination: -2, agencyId: command.executorId }
+          ],
+          defaultOption: 'drop'
+        });
+        if (d) made.push(d);
+      }
+      // 前期准备落地 / 失效后果：链接关系在夜里第一次成立时提示
+      (STRAT.links || []).forEach(function (link) {
+        if (link.from !== command.choiceId) return;
+        const done = command.effectsApplied && command.executedRound === round - 1;
+        const lost = command.status === 'expired' && command.expiredRound === round - 1;
+        if ((link.when === 'completed' && done) || (link.when === 'expired' && lost)) {
+          const target = findChoiceAnywhere(link.target);
+          const d = addDispatch(state, link.when === 'completed' ? 'groundwork' : 'setback', {
+            key: link.from + '>' + link.target, commandId: command.id,
+            choiceTitle: target ? target.title : link.target, agencyId: command.executorId,
+            note: link.note, targetChoiceId: link.target, info: true,
+            options: [{ id: 'ack', label: '已阅', ap: 0 }], defaultOption: 'ack'
+          });
+          if (d) made.push(d);
+        }
+      });
+      // 承诺遭遇阻力：长期承诺占用期间，国际支持处于低位
+      if (command.timeKind === 'commitment' && command.holdUntilRound && command.holdUntilRound >= round && state.stats.intl <= 32 && command.agency === 'foreign') {
+        const d = addDispatch(state, 'obstacle', {
+          commandId: command.id, choiceTitle: command.title, agencyId: 'foreign',
+          options: [
+            { id: 'push', label: '追加协调，维持进度（1 AP，外交部协调 +4）', ap: 1, coordination: 4, agencyId: 'foreign' },
+            { id: 'slow', label: '接受放缓，承诺多占用外交席位一夜', ap: 0, extendHold: true }
+          ],
+          defaultOption: 'slow'
+        });
+        if (d) made.push(d);
+      }
+    });
+    // 机构资源请求：在办已满
+    getAgencyLoads(state).forEach(function (load) {
+      if (!load.overloaded) return;
+      const d = addDispatch(state, 'resource_request', {
+        agencyId: load.id,
+        options: [
+          { id: 'approve', label: '批准增援（1 AP，战略储备 -3，今晚多一个在办名额）', ap: 1, effects: { reserve: -3 }, extraSlot: true, agencyId: load.id },
+          { id: 'decline', label: '不批准，机构协调 -3', ap: 0, coordination: -3, agencyId: load.id }
+        ],
+        defaultOption: 'decline'
+      });
+      if (d) made.push(d);
+    });
+    // 办公室积压：最近 N 天中每天都亲自介入
+    const spec = STRAT.interventionBacklog || { windowDays: 3, minDays: 3 };
+    const recent = (state.interventionRounds || []).filter(function (r) { return r >= round - spec.windowDays && r < round; });
+    const lastBacklog = (state.dispatches || []).filter(function (item) { return item.type === 'backlog'; }).map(function (item) { return item.round; });
+    const cooled = !lastBacklog.length || round - Math.max.apply(null, lastBacklog) >= 2;
+    if (recent.length >= spec.minDays && cooled) {
+      const d = addDispatch(state, 'backlog', {
+        key: 'r' + round, agencyId: 'office',
+        options: [
+          { id: 'clear', label: '花时间清理积压（1 AP，办公室协调 +3）', ap: 1, coordination: 3, agencyId: 'office' },
+          { id: 'defer', label: '继续搁置，政府连续性 -3', ap: 0, effects: { gov: -3 } }
+        ],
+        defaultOption: 'defer'
+      });
+      if (d) made.push(d);
+    }
+    return made;
+  }
+
+  function findChoiceAnywhere(choiceId) {
+    for (let i = 0; i < EVENTS.length; i += 1) {
+      const found = getChoice(EVENTS[i], choiceId);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  /* 重新签发一项已失效的可持续任务：紧急窗口、2 AP、当夜执行，不能委派。 */
+  function reissueFromDispatch(state, item) {
+    const source = findCommand(state, item.commandId);
+    if (!source) return null;
+    const event = EVENTS.filter(function (entry) { return entry.id === source.eventId; })[0];
+    const choice = event ? getChoice(event, source.choiceId) : null;
+    if (!choice) return null;
+    const id = 'r' + state.round + ':resurface:' + choice.id;
+    if (findCommand(state, id)) return null;
+    const command = Object.assign({}, source, {
+      id: id, round: state.round, dateLabel: getEvent(state).dateLabel, status: 'executing', ap: 2,
+      timeKind: 'urgent', windowRounds: 0, deadlineRound: state.round, resurface: false, resurfaced: true,
+      reissuedFrom: source.id, accepted: false, effectsApplied: false, blockedCode: null, blockedReason: null,
+      coordinated: true, delegated: false, handoffRound: null, followedRounds: [], history: [], expiredRound: null,
+      slotRequired: true, authorizedAt: new Date().toISOString(), result: null, record: null
+    });
+    state.commands.push(command);
+    state.choices.push({
+      round: state.round, dateLabel: command.dateLabel, eventId: source.eventId, eventTitle: event.title,
+      choiceId: choice.id, commandId: id, label: choice.title + '（重新签发）', ap: 2, agency: command.agency,
+      status: 'executing', deltas: {}, pressureDelta: 0, scheduled: []
+    });
+    const slot = reserveAgencySlot(state, command);
+    addCommandLog(state, command, '重新签发：' + choice.title, '这项工作在错过原窗口后重新回到桌面。这一次代价更高（2 AP），且必须今晚执行。' + (slot.ok ? '' : ' 但执行机构仍然满载。'));
+    return command;
   }
 
   function coordinateAgency(state, agencyId) {
@@ -1124,9 +1438,15 @@
     }
 
     const commandResults = [];
-    /* 旧一日已执行、等待反馈的命令先归档并释放机构名额；跨日占用不会无限延续。 */
+    /* v0.5：当天没有处理的事务，按默认方式结算（默认方式即“不投入注意力”的代价）。 */
+    const settledDispatches = settleOpenDispatches(state);
+    /* 旧一日已执行、等待反馈的命令先归档并释放机构名额；长期承诺在占用期内继续占席。 */
     (state.commands || []).forEach(function (command) {
       if (command.kind !== 'communication' && command.status === 'awaiting_feedback' && command.round < state.round) {
+        if (command.holdUntilRound && command.holdUntilRound >= state.round) {
+          commandResults.push(commandResult(command, { held: true, note: '长期承诺仍在推进，继续占用机构席位至第 ' + command.holdUntilRound + ' 夜' }));
+          return;
+        }
         completeCommand(command, state);
         commandResults.push(commandResult(command, { archived: true, note: '旧命令反馈核验，释放机构名额' }));
       }
@@ -1183,6 +1503,13 @@
     state.coordinationThisRound = {};
     state.communicationsThisRound = {};
     const delayed = resolveDueDelayed(state, state.round);
+    /* 常设授权的机构自主运转，每夜协调余量缓慢消耗。 */
+    Object.keys(state.standing || {}).forEach(function (agencyId) {
+      if (state.standing[agencyId].active && state.agencies[agencyId]) {
+        state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination + ((STRAT.standing || {}).nightlyDrift || -1), 0, 100);
+      }
+    });
+    recordTimeline(state);
 
     ending = checkCollapse(state);
     if (ending) {
@@ -1215,6 +1542,8 @@
       delayed: delayed,
       commandResults: commandResults,
       blocked: commandResults.filter(function (item) { return item.status === 'blocked'; }),
+      settledDispatches: settledDispatches.map(function (item) { return { id: item.id, title: item.title, outcome: item.outcome }; }),
+      dispatches: generateDispatches(state, commandResults),
       alarms: getAlarms(state),
       ap: state.ap
     };
@@ -1278,7 +1607,137 @@
     return buildEnding(state, 'costly');
   }
 
+  /* v0.5：逐日状态快照。每个日期只记一次，供趋势图和复盘使用，不参与任何判定。 */
+  function recordTimeline(state) {
+    if (!Array.isArray(state.timeline)) state.timeline = [];
+    const snapshot = { round: state.round, stats: Object.assign({}, state.stats), pressure: state.pressure };
+    const index = state.timeline.findIndex(function (item) { return item.round === state.round && !item.final; });
+    if (index === -1) state.timeline.push(snapshot);
+    else state.timeline[index] = snapshot;
+    return snapshot;
+  }
+
+  /*
+   * 治理风格回顾：只统计这一局实际发生的动作，不打分，不评价好坏。
+   * 风格是“注意力花在哪里”的描述，同一局可以有多个明显倾向。
+   */
+  function getGovernanceProfile(state) {
+    const commands = (state.commands || []).filter(function (command) { return command.kind !== 'communication'; });
+    const counts = {
+      issued: commands.length,
+      interventions: commands.reduce(function (sum, command) { return sum + ((command.followedRounds || []).length); }, 0),
+      interventionDays: (state.interventionRounds || []).filter(function (round, index, list) { return list.indexOf(round) === index; }).length,
+      delegations: commands.filter(function (command) { return command.delegated; }).length,
+      standing: Object.keys(state.standing || {}).filter(function (id) { return state.standing[id].active; }).length,
+      coordination: (state.log || []).filter(function (entry) { return entry.type === 'coordination'; }).length,
+      inquiries: Object.keys(state.intelState || {}).filter(function (id) { return state.intelState[id] && state.intelState[id].inquired; }).length,
+      communications: (state.commands || []).filter(function (command) { return command.kind === 'communication'; }).length,
+      completed: commands.filter(function (command) { return command.effectsApplied; }).length,
+      expired: commands.filter(function (command) { return command.status === 'expired'; }).length,
+      dispatchesHandled: (state.dispatches || []).filter(function (item) { return item.resolved && !item.automatic; }).length,
+      dispatchesDefaulted: (state.dispatches || []).filter(function (item) { return item.resolved && item.automatic; }).length
+    };
+    const domains = { military: 0, continuity: 0, external: 0, society: 0 };
+    const domainOf = { army: 'military', kyiv: 'military', gov: 'continuity', safety: 'continuity', intl: 'external', will: 'society', reserve: 'society' };
+    (state.choices || []).forEach(function (record) {
+      Object.keys(record.deltas || {}).forEach(function (key) {
+        if (record.deltas[key] > 0 && domainOf[key]) domains[domainOf[key]] += record.deltas[key];
+      });
+    });
+    const tendencies = [];
+    if (counts.interventionDays >= 4) tendencies.push('hands_on');
+    if (counts.delegations + counts.standing * 2 >= 3) tendencies.push('delegating');
+    if (counts.coordination >= 3) tendencies.push('coordinating');
+    if (counts.inquiries >= 3) tendencies.push('verifying');
+    const domainRank = Object.keys(domains).sort(function (a, b) { return domains[b] - domains[a]; });
+    const totalDomain = domainRank.reduce(function (sum, key) { return sum + domains[key]; }, 0);
+    if (totalDomain > 0 && domains[domainRank[0]] >= totalDomain * 0.38) tendencies.push(domainRank[0]);
+    if (!tendencies.length) tendencies.push('balanced');
+    const meta = STRAT.styleMeta || {};
+    return {
+      primary: tendencies[0],
+      tendencies: tendencies.map(function (id) {
+        return { id: id, label: (meta[id] && meta[id].label) || id, note: (meta[id] && meta[id].note) || '' };
+      }),
+      counts: counts,
+      domains: domains
+    };
+  }
+
+  /* 复盘关键节点：及时完成、被搁置、失去的机会、当时无法预知的后果。全部来自本局记录。 */
+  function getTurningPoints(state) {
+    const points = [];
+    (state.commands || []).forEach(function (command) {
+      if (command.kind === 'communication') return;
+      if (command.status === 'expired') {
+        points.push({ type: 'lost', round: command.expiredRound || command.round, title: command.title, note: command.blockedReason || '执行窗口关闭' });
+      } else if (command.effectsApplied && command.timeKind === 'urgent') {
+        points.push({ type: 'timely', round: command.executedRound || command.round, title: command.title, note: '紧急窗口内完成' });
+      } else if (command.effectsApplied && (command.followedRounds || []).length) {
+        points.push({ type: 'timely', round: command.executedRound || command.round, title: command.title, note: '经总统介入后推进' });
+      }
+    });
+    (state.dispatches || []).forEach(function (item) {
+      if (item.resolved && item.outcome && item.outcome.automatic && item.options && item.options.length > 1) {
+        points.push({ type: 'shelved', round: item.round, title: item.title, note: '当日未处理，按默认方式结算：' + (item.outcome.label || '默认处理') });
+      }
+    });
+    (state.resolved || []).forEach(function (item) {
+      const size = Object.keys(item.deltas || {}).reduce(function (sum, key) { return sum + Math.abs(item.deltas[key]); }, 0) + Math.abs(item.pressureDelta || 0);
+      if (size >= 6) {
+        const sourceRound = EVENTS.findIndex(function (event) { return event.id === item.sourceEventId; }) + 1;
+        points.push({ type: 'unforeseen', round: item.appliedRound, title: item.label, note: (sourceRound > 0 ? '源自第 ' + sourceRound + ' 日「' + (item.sourceLabel || '') + '」' : '源自此前决定') + '；签发时只能看到方向，看不到具体幅度' });
+      }
+    });
+    points.sort(function (a, b) { return a.round - b.round; });
+    return points.slice(0, 10);
+  }
+
+  /* 轻量重玩记录：结局、倾向、路线。每局按 startedAt 只记一次，不做积分或成就。 */
+  function getRecords() {
+    try {
+      if (!root.localStorage) return { version: 1, runs: [] };
+      const raw = root.localStorage.getItem(STRAT.recordsKey || 'lzs_records_v1');
+      const data = raw ? JSON.parse(raw) : null;
+      if (!data || !Array.isArray(data.runs)) return { version: 1, runs: [] };
+      return data;
+    } catch (error) {
+      return { version: 1, runs: [] };
+    }
+  }
+
+  function recordRun(state, ending, profile) {
+    try {
+      if (!root.localStorage) return null;
+      const records = getRecords();
+      const key = state.startedAt || '';
+      if (records.runs.some(function (run) { return run.key === key; })) return null;
+      const run = {
+        key: key,
+        endedAt: new Date().toISOString(),
+        endingId: ending.id,
+        endingTitle: ending.title,
+        round: state.round,
+        style: profile.primary,
+        styleLabel: profile.tendencies[0] ? profile.tendencies[0].label : '',
+        route: (state.choices || []).map(function (record) { return record.choiceId; }).slice(0, 21)
+      };
+      records.runs.push(run);
+      records.runs = records.runs.slice(-30);
+      root.localStorage.setItem(STRAT.recordsKey || 'lzs_records_v1', JSON.stringify(records));
+      return run;
+    } catch (error) {
+      return null;
+    }
+  }
+
   function finalizeEnding(state, ending) {
+    recordTimeline(state);
+    if (state.timeline.length) state.timeline[state.timeline.length - 1].final = true;
+    ending.timeline = state.timeline.map(function (item) { return { round: item.round, stats: Object.assign({}, item.stats), pressure: item.pressure, partial: !!item.partial }; });
+    ending.governance = getGovernanceProfile(state);
+    ending.turningPoints = getTurningPoints(state);
+    ending.record = recordRun(state, ending, ending.governance);
     ending.finalStats = Object.assign({}, state.stats);
     ending.finalPressure = state.pressure;
     ending.finalRound = state.round;
@@ -1508,7 +1967,7 @@
           }
         } catch (ignore) {}
       }
-      state.schemaVersion = 2;
+      state.schemaVersion = 3;
       state.version = VERSION;
       const payload = {
         version: VERSION,
@@ -1528,10 +1987,10 @@
       const raw = root.localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (!data || !data.state || (data.version !== 1 && data.version !== 2)) return null;
+      if (!data || !data.state || [1, 2, 3].indexOf(data.version) === -1) return null;
       const state = normalizeLoadedState(data.state, data.version);
       if (!state) return null;
-      return { version: data.version, migratedFrom: data.version === 1 ? 1 : null, savedAt: data.savedAt, state: state };
+      return { version: data.version, migratedFrom: data.version < VERSION ? data.version : null, savedAt: data.savedAt, state: state };
     } catch (error) {
       return null;
     }
@@ -1563,6 +2022,12 @@
       if (copy.handoffRound === undefined) copy.handoffRound = null;
       if (!Array.isArray(copy.history)) copy.history = [];
       if (copy.slotRequired === undefined) copy.slotRequired = !!copy.requiredCoordination || Number(copy.ap) >= 2;
+      /* v0.5 字段：旧命令一律按 v0.4 的短期窗口处理，不追溯改变已发生的结果。 */
+      if (copy.timeKind === undefined) copy.timeKind = 'short';
+      if (copy.holdRounds === undefined) copy.holdRounds = 0;
+      if (copy.holdUntilRound === undefined) copy.holdUntilRound = null;
+      if (copy.resurface === undefined) copy.resurface = false;
+      if (copy.resurfaced === undefined) copy.resurfaced = false;
       return copy;
     }) : choices.map(function (record, index) {
       const id = record.commandId || ('legacy:' + record.round + ':' + record.choiceId + ':' + index);
@@ -1597,8 +2062,8 @@
     });
     const state = {
       version: VERSION,
-      schemaVersion: 2,
-      migratedFrom: sourceVersion === 1 ? 1 : (input.migratedFrom || null),
+      schemaVersion: 3,
+      migratedFrom: sourceVersion && sourceVersion < VERSION ? sourceVersion : (input.migratedFrom || null),
       round: input.round,
       ap: clamp(input.ap, 0, AP_MAX),
       apMax: AP_MAX,
@@ -1620,6 +2085,11 @@
       phase: phase,
       interlude: input.interlude || null,
       ending: input.ending || null,
+      standing: input.standing && typeof input.standing === 'object' ? input.standing : {},
+      dispatches: Array.isArray(input.dispatches) ? input.dispatches.filter(function (item) { return item && typeof item.id === 'string'; }) : [],
+      interventionRounds: Array.isArray(input.interventionRounds) ? input.interventionRounds.filter(Number.isInteger) : [],
+      /* 旧存档没有逐日轨迹；只补当前时点，不伪造过去的数值。 */
+      timeline: Array.isArray(input.timeline) && input.timeline.length ? input.timeline : [{ round: input.round, stats: Object.assign({}, stats), pressure: clamp(input.pressure, 0, 100), partial: true }],
       startedAt: input.startedAt || new Date().toISOString()
     };
     if (state.phase === 'interlude' && !state.interlude) {
@@ -1693,6 +2163,16 @@
     getCommandPreview: getCommandPreview,
     getExecutionRisks: getExecutionRisks,
     strategy: STRATEGY,
+    strategyData: STRAT,
+    thresholds: FINAL_THRESHOLDS,
+    timeProfileFor: timeProfileFor,
+    getLinkEffect: getLinkEffect,
+    grantStanding: grantStanding,
+    getDispatches: getDispatches,
+    resolveDispatch: resolveDispatch,
+    getGovernanceProfile: getGovernanceProfile,
+    getTurningPoints: getTurningPoints,
+    getRecords: getRecords,
     issueCommand: issueCommand,
     authorizeCommand: authorizeCommand,
     followUpCommand: followUpCommand,

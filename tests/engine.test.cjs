@@ -17,6 +17,7 @@ globalThis.localStorage = {
 
 require('../js/events.js');
 require('../js/intel.js');
+require('../js/strategy.js');
 require('../js/engine.js');
 
 const L = globalThis.LZS;
@@ -573,8 +574,8 @@ test('v1 存档迁移为 v2 台账，保留旧决策且不重复结算', functio
   localStorage.setItem('lzs_save_v1', JSON.stringify({ version: 1, savedAt: new Date().toISOString(), state: old }));
   const loaded = L.loadSavedGame();
   assert.ok(loaded && loaded.state);
-  assert.equal(loaded.state.version, 2);
-  assert.equal(loaded.state.schemaVersion, 2);
+  assert.equal(loaded.state.version, L.version);
+  assert.equal(loaded.state.schemaVersion, 3);
   assert.equal(loaded.state.commands.length, 1);
   assert.equal(loaded.state.commands[0].status, 'completed');
   assert.equal(loaded.state.choices.length, 1);
@@ -847,6 +848,203 @@ test('路线差异在首日命令状态、次日 AP 与机构负载上可观察'
   assert.equal(delegate.ap, 3);
 });
 
+// ---------------- v0.5 Definitive Edition ----------------
+function v5End(state) {
+  if (!state.executed.length) state.executed = ['test-marker'];
+  const result = L.endRound(state);
+  assert.equal(result.ok, true, result.error || 'endRound failed');
+  const interlude = state.interlude;
+  if (state.phase === 'interlude') L.continueFromInterlude(state);
+  return { result: result, interlude: interlude };
+}
+
+function v5Route(route, withIntervention) {
+  const state = fresh();
+  route.forEach(function (day) {
+    if (state.ending) return;
+    const issued = L.issueCommand(state, day[0]);
+    assert.equal(issued.ok, true, 'issue ' + day[0] + ': ' + issued.error);
+    if (issued.command.status === 'issued') L.authorizeCommand(state, issued.command.id);
+    if (withIntervention) {
+      const open = state.commands.filter(function (c) { return c.id === issued.command.id && ['blocked', 'executing'].indexOf(c.status) !== -1; })[0];
+      if (open && state.ap > 0) L.followUpCommand(state, open.id);
+    } else if (day[1]) {
+      L.coordinateAgency(state, day[1]);
+    }
+    if (state.ending) return;
+    L.endRound(state);
+    if (state.phase === 'interlude') L.continueFromInterlude(state);
+  });
+  return state;
+}
+
+test('v0.5 时间属性：紧急/短期/可持续/长期承诺窗口不同', function () {
+  const urgent = fresh(); urgent.round = 3;
+  const u = L.issueCommand(urgent, 'counterattack');
+  assert.equal(u.ok, true, u.error);
+  assert.equal(u.command.timeKind, 'urgent');
+  assert.equal(u.command.deadlineRound, 3, '紧急窗口只有当夜');
+  const short = L.issueCommand(fresh(), 'mobilize').command;
+  assert.equal(short.timeKind, 'short');
+  assert.equal(short.deadlineRound, 2);
+  const sustained = fresh(); sustained.round = 4;
+  const s = L.issueCommand(sustained, 'curfew').command;
+  assert.equal(s.timeKind, 'sustained');
+  assert.equal(s.deadlineRound, 6, '可持续任务给出两天余量');
+  const commit = fresh(); commit.round = 6;
+  const c = L.issueCommand(commit, 'eu').command;
+  assert.equal(c.timeKind, 'commitment');
+  assert.equal(c.slotRequired, true, '长期承诺必占机构席位');
+});
+
+test('v0.5 错过后果分化：紧急当夜失效，短期仍在排队', function () {
+  const urgent = fresh(); urgent.round = 3;
+  const u = L.issueCommand(urgent, 'counterattack').command;
+  urgent.agencies[u.agency].workload = 3;
+  if (u.status === 'issued') L.authorizeCommand(urgent, u.id);
+  v5End(urgent);
+  assert.equal(urgent.commands[0].status, 'expired', '紧急命令错过当夜即失效');
+  assert.equal(urgent.commands[0].effectsApplied, false);
+
+  const short = fresh();
+  short.agencies.general_staff.workload = 3;
+  const m = L.issueCommand(short, 'mobilize').command;
+  L.authorizeCommand(short, m.id);
+  v5End(short);
+  assert.equal(short.commands[0].status, 'blocked', '短期命令首夜受阻但仍有次日窗口');
+});
+
+test('v0.5 可持续任务失效后在次晨以更贵的形式重新浮现', function () {
+  const state = fresh(); state.round = 4;
+  const cmd = L.issueCommand(state, 'curfew').command;
+  if (cmd.status === 'issued') L.authorizeCommand(state, cmd.id);
+  let last = null;
+  for (let i = 0; i < 3; i += 1) {
+    state.agencies[cmd.agency].workload = 3;
+    last = v5End(state);
+    if (state.commands[0].status === 'expired') break;
+  }
+  assert.equal(state.commands[0].status, 'expired');
+  const dispatch = (last.interlude.dispatches || []).filter(function (d) { return d.type === 'resurface'; })[0];
+  assert.ok(dispatch, '失效的可持续任务应生成“重新浮现”电报');
+  const apBefore = state.ap;
+  const resolved = L.resolveDispatch(state, dispatch.id, 'reissue');
+  assert.equal(resolved.ok, true, resolved.error);
+  assert.equal(state.ap, apBefore - 2, '重新处理比原任务更贵');
+  assert.ok(state.commands.some(function (c) { return c.id.indexOf('r') === 0 && c.choiceId === 'curfew' && c.timeKind === 'urgent'; }));
+  assert.equal(L.resolveDispatch(state, dispatch.id, 'reissue').ok, false, '同一电报不能重复处理');
+});
+
+test('v0.5 长期承诺执行后继续占用机构席位', function () {
+  const state = fresh(); state.round = 4;
+  const cmd = L.issueCommand(state, 'security_rule').command;
+  if (cmd.status === 'issued') L.authorizeCommand(state, cmd.id);
+  L.coordinateAgency(state, cmd.agency);
+  v5End(state);
+  const command = state.commands[0];
+  assert.equal(command.effectsApplied, true, command.blockedReason || '');
+  assert.equal(command.holdUntilRound, 6);
+  const night = v5End(state);
+  assert.equal(command.status, 'awaiting_feedback', '承诺期内不归档');
+  assert.ok((night.result.commandResults || []).some(function (r) { return r.held; }), '夜间报告说明承诺仍在推进');
+});
+
+test('v0.5 路径依赖：前序完成放宽协调、前序失效收紧协调', function () {
+  const relaxed = fresh();
+  const a = L.issueCommand(relaxed, 'mobilize').command;
+  a.effectsApplied = true; a.status = 'completed';
+  relaxed.round = 4; relaxed.ap = 3;
+  assert.equal(L.getLinkEffect(relaxed, 'arm_citizens').coordination, 'relax');
+  const r = L.issueCommand(relaxed, 'arm_citizens').command;
+  assert.equal(Boolean(r.requiredCoordination), false, '动员落地后武装市民不必另行协调');
+
+  const strict = fresh();
+  const b = L.issueCommand(strict, 'mobilize').command;
+  b.status = 'expired';
+  strict.round = 4; strict.ap = 3;
+  assert.equal(L.getLinkEffect(strict, 'arm_citizens').coordination, 'require');
+  const s = L.issueCommand(strict, 'arm_citizens').command;
+  assert.equal(Boolean(s.requiredCoordination), true);
+  assert.equal(L.getLinkEffect(fresh(), 'arm_citizens'), null, '没有前序命令时不产生依赖');
+});
+
+test('v0.5 机构常设授权：自动授权、每夜协调漂移、介入代价更高', function () {
+  const state = fresh();
+  const granted = L.grantStanding(state, 'general_staff');
+  assert.equal(granted.ok, true, granted.error);
+  assert.equal(state.ap, 2);
+  assert.equal(L.grantStanding(state, 'general_staff').ok, false, '同一机构只授权一次');
+  const low = fresh(); low.agencies.office.coordination = 40;
+  assert.equal(L.grantStanding(low, 'office').ok, false, '协调不足 45 不能授权');
+
+  const auto = L.issueCommand(state, 'mobilize');
+  assert.equal(auto.autoAuthorized, true);
+  assert.notEqual(auto.command.status, 'issued');
+  const control = fresh();
+  const c = L.issueCommand(control, 'mobilize').command;
+  L.authorizeCommand(control, c.id);
+  v5End(state); v5End(control);
+  assert.equal(state.agencies.general_staff.coordination, control.agencies.general_staff.coordination - 1, '常设授权机构每夜协调 -1');
+});
+
+test('v0.5 连续亲自介入会生成积压电报，未处理则按默认结算', function () {
+  const state = fresh(); state.round = 4;
+  state.interventionRounds = [1, 2, 3, 4];
+  const night = v5End(state);
+  const backlog = (night.interlude.dispatches || []).filter(function (d) { return d.type === 'backlog'; })[0];
+  assert.ok(backlog, '连续三天介入应出现办公室积压');
+  const next = v5End(state);
+  assert.ok((next.interlude.settledDispatches || []).some(function (d) { return d.id === backlog.id; }), '未处理的电报在夜间按默认方案结算');
+});
+
+test('v0.5 无需每日介入也能撑过第一阶段（中央协调路线）', function () {
+  const route = [['disperse', 'office'], ['stay', 'office'], ['air_defense', 'general_staff'], ['curfew', 'interior'], ['delegate', 'general_staff'], ['talks', 'foreign'], ['logistics', 'logistics']];
+  const coordinated = v5Route(route, false);
+  assert.ok(coordinated.ending, '路线应走到结局');
+  assert.equal(coordinated.ending.id, 'held', coordinated.ending.id);
+  assert.equal((coordinated.interventionRounds || []).length, 0);
+  const handsOn = v5Route(route, true);
+  assert.equal(handsOn.ending.id, 'held');
+  assert.ok(handsOn.interventionRounds.length >= 5, '亲自介入路线同样可达，但治理方式不同');
+  assert.notEqual(coordinated.ending.governance.primary, handsOn.ending.governance.primary, '两条路线的治理风格回顾不同');
+});
+
+test('v0.5 结局记录：治理风格、时间轴与轻量记录只记一次', function () {
+  localStorage.clear();
+  const route = [['disperse', 'office'], ['stay', 'office'], ['air_defense', 'general_staff'], ['curfew', 'interior'], ['delegate', 'general_staff'], ['talks', 'foreign'], ['logistics', 'logistics']];
+  const state = v5Route(route, false);
+  assert.ok(state.ending.governance && state.ending.governance.primary);
+  assert.ok(Array.isArray(state.ending.turningPoints));
+  assert.ok(state.ending.timeline.length >= 7, '每天一条真实快照');
+  assert.equal(state.ending.timeline[0].stats.gov, 54);
+  assert.equal(L.getRecords().runs.length, 1);
+  L.saveGame(state); L.loadSavedGame();
+  assert.equal(L.getRecords().runs.length, 1, '读档不会重复记录');
+  v5Route(route, true);
+  assert.equal(L.getRecords().runs.length, 2);
+});
+
+test('v0.5 v2 存档迁移到 schema 3：补齐新字段且不伪造历史', function () {
+  localStorage.clear();
+  const state = fresh();
+  L.issueCommand(state, 'address');
+  L.saveGame(state);
+  const raw = JSON.parse(localStorage.getItem(L.saveKey));
+  raw.version = 2;
+  raw.state.version = 2; raw.state.schemaVersion = 2;
+  delete raw.state.standing; delete raw.state.dispatches; delete raw.state.interventionRounds; delete raw.state.timeline;
+  raw.state.commands.forEach(function (c) { delete c.timeKind; delete c.holdRounds; delete c.holdUntilRound; delete c.resurface; delete c.resurfaced; });
+  localStorage.setItem(L.saveKey, JSON.stringify(raw));
+  const loaded = L.loadSavedGame();
+  assert.ok(loaded && loaded.state, '旧档可读');
+  assert.equal(loaded.state.schemaVersion, 3);
+  assert.deepEqual(loaded.state.standing, {});
+  assert.deepEqual(loaded.state.dispatches, []);
+  assert.equal(loaded.state.timeline.length, 1);
+  assert.equal(loaded.state.timeline[0].partial, true);
+  assert.equal(loaded.state.commands[0].timeKind, 'short');
+  assert.equal(loaded.state.stats.gov, state.stats.gov, '不重算旧档数值');
+});
 console.log('\n----------------------------------------');
 console.log('通过 ' + passed + ' 项，失败 ' + failed + ' 项');
 

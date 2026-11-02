@@ -4,7 +4,7 @@
     "source": "production/audio/raw/menu.wav",
     "output": "assets/audio/music/menu.ogg",
     "seconds": 32,
-    "bytes": 488779,
+    "bytes": 488993,
     "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
   },
   {
@@ -12,7 +12,7 @@
     "source": "production/audio/raw/day.wav",
     "output": "assets/audio/music/day.ogg",
     "seconds": 32,
-    "bytes": 489141,
+    "bytes": 489321,
     "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
   },
   {
@@ -20,7 +20,7 @@
     "source": "production/audio/raw/night.wav",
     "output": "assets/audio/music/night.ogg",
     "seconds": 32,
-    "bytes": 489299,
+    "bytes": 489223,
     "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
   },
   {
@@ -28,7 +28,7 @@
     "source": "production/audio/raw/ending.wav",
     "output": "assets/audio/music/ending.ogg",
     "seconds": 32,
-    "bytes": 488147,
+    "bytes": 488500,
     "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
   },
   {
@@ -109,6 +109,70 @@
     "output": "assets/audio/sfx/modal.ogg",
     "seconds": 0.28,
     "bytes": 6204,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.phone",
+    "source": "production/audio/raw/phone.wav",
+    "output": "assets/audio/sfx/phone.ogg",
+    "seconds": 0.45,
+    "bytes": 5699,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.file",
+    "source": "production/audio/raw/file.wav",
+    "output": "assets/audio/sfx/file.ogg",
+    "seconds": 0.3,
+    "bytes": 6519,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.receive",
+    "source": "production/audio/raw/receive.wav",
+    "output": "assets/audio/sfx/receive.ogg",
+    "seconds": 0.42,
+    "bytes": 6216,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.blocked",
+    "source": "production/audio/raw/blocked.wav",
+    "output": "assets/audio/sfx/blocked.ogg",
+    "seconds": 0.5,
+    "bytes": 8186,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.complete",
+    "source": "production/audio/raw/complete.wav",
+    "output": "assets/audio/sfx/complete.ogg",
+    "seconds": 0.6,
+    "bytes": 7372,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.dayturn",
+    "source": "production/audio/raw/dayturn.wav",
+    "output": "assets/audio/sfx/dayturn.ogg",
+    "seconds": 1.65,
+    "bytes": 8081,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.archive",
+    "source": "production/audio/raw/archive.wav",
+    "output": "assets/audio/sfx/archive.ogg",
+    "seconds": 0.7,
+    "bytes": 10715,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.ending_costly",
+    "source": "production/audio/raw/ending_costly.wav",
+    "output": "assets/audio/sfx/ending_costly.ogg",
+    "seconds": 2.0,
+    "bytes": 16256,
     "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
   }
 ]

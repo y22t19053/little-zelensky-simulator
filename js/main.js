@@ -35,6 +35,7 @@
     eventMain: document.getElementById('event-main'),
     choicesPanel: document.getElementById('choices-panel'),
     commandPanel: document.getElementById('command-panel'),
+    deskPanel: document.getElementById('desk-panel'),
     opsBtn: document.getElementById('btn-ops'),
     statsPanel: document.getElementById('stats-panel'),
     forecastPanel: document.getElementById('forecast-panel'),
@@ -366,12 +367,15 @@
     const cards = L.intel.agencies.map(function (agency) {
       const load = L.getAgencyLoad(g, agency.id);
       const done = !!g.coordinationThisRound[agency.id];
+      const standing = g.standing && g.standing[agency.id] && g.standing[agency.id].active;
+      const spec = strat().standing || { cost: 1, minCoordination: 45 };
       const loadPct = Math.min(100, Math.round(load.workload / load.capacity * 100));
       return '<article class="agency-card' + (load.overloaded ? ' is-overloaded' : '') + (load.strained ? ' is-strained' : '') + '"><div class="agency-card-head"><span class="agency-code">' + escapeHtml(agency.short) + '</span><div><h3>' + escapeHtml(agency.label) + '</h3><p>' + escapeHtml(agency.focus) + '</p></div></div>' +
         '<div class="agency-meters"><span><small>协调余量</small><strong>' + load.coordination + '</strong></span><span><small>在办 / 容量</small><strong>' + load.workload + ' / ' + load.capacity + '</strong></span></div>' +
         '<div class="agency-load-track" role="img" aria-label="执行能力占用 ' + load.workload + ' / ' + load.capacity + '"><span style="width:' + loadPct + '%"></span></div>' +
         '<p class="agency-constraint">' + (load.overloaded ? '容量已满：新命令只能排队，无法今晚执行。' : load.strained ? '协调余量低于 35：跨部门命令会先阻塞。' : '可自主处理常规命令；跨部门行动仍需总统召集。') + '</p>' +
-        '<button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button></article>';
+        '<div class="agency-actions"><button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button>' +
+        (standing ? '<span class="standing-badge">常设授权 · 自第 ' + g.standing[agency.id].grantedRound + ' 日</span>' : '<button type="button" class="mini-action" data-standing="' + escapeHtml(agency.id) + '"' + (g.ap < spec.cost || load.coordination < spec.minCoordination ? ' disabled' : '') + ' title="此后该机构命令自动授权；每夜协调 -1，总统介入该机构命令额外 -3">常设授权 · ' + spec.cost + ' AP</button>') + '</div></article>';
     }).join('');
     body.innerHTML = '<p class="ops-lead">每个机构只有 3 个在办名额。跨日命令会持续占用名额，直到完成、撤回或失效；容量满时新命令不会执行。召集会恢复协调余量并放行本回合的跨部门阻塞，但会消耗 1 AP。委派不耗注意力的代价是交接延迟一夜与两个机构各 -3 协调余量。</p><div class="agency-grid">' + cards + '</div>';
     Array.prototype.forEach.call(body.querySelectorAll('[data-coordinate]'), function (button) {
@@ -383,6 +387,17 @@
         renderGame();
         renderOpsBody(card);
         toast('协调会已召集；相关命令本回合不再因跨部门条件阻塞。');
+      });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-standing]'), function (button) {
+      button.addEventListener('click', function () {
+        const result = L.grantStanding(g, button.getAttribute('data-standing'));
+        if (!result.ok) { toast(result.error || '无法授予常设授权。', true); return; }
+        if (A) A.playSfx('issue');
+        saveGame(false);
+        renderGame();
+        renderOpsBody(card);
+        toast('常设授权已生效：该机构此后签发的命令自动进入执行。');
       });
     });
   }
@@ -455,7 +470,8 @@
     const art = EVENT_ART[event.id] || EVENT_ART.e1;
     const intel = event.intel || { level: '未知', note: '' };
     const situation = event.situation || [];
-    el.eventMain.innerHTML =
+    if (el.deskPanel) el.deskPanel.innerHTML = deskStateHtml();
+    el.eventMain.innerHTML = 
       '<div class="event-stage">' +
         '<figure class="scene scene-' + escapeHtml(event.id) + '">' +
           '<div class="scene-index"><span>事件视觉 / ' + String(g.round).padStart(2, '0') + '</span><span>模拟示意</span></div>' +
@@ -477,11 +493,105 @@
           '</div></details>' +
           '<div class="dossier-foot"><span>文电为合成文本</span><span>参数为模拟设计值</span></div>' +
         '</article>' +
-      '</div>';
+      '</div>' + dispatchTrayHtml() + echoesHtml();
+    bindDispatches(el.eventMain);
   }
 
-  function listHtml(items) {
-    if (!items || !items.length) return '<ul class="epistemic-list"><li>暂无可靠条目。</li></ul>';
+  /* ---------- v0.5：日焦点、办公桌状态、前序回响、事务电报 ---------- */
+  function strat() { return L.strategyData || window.LZS_STRATEGY || {}; }
+
+  const TIME_KIND_NOTES = {
+    urgent: '紧急窗口：今晚不执行就失效，不会顺延。',
+    short: '短期窗口：今晚或明晚执行；超过窗口失效。',
+    sustained: '可持续推进：有两天余量；失效后会以更贵的形式重新浮现一次。',
+    commitment: '长期承诺：执行后继续占用机构席位数夜，换取更长的作用。',
+    conditional: '有条件任务：执行条件取决于此前相关命令是否落地。'
+  };
+
+  function timeKindLabel(kind) {
+    const labels = strat().kindLabels || {};
+    return labels[kind] || labels.short || '短期窗口';
+  }
+
+  function deskStateHtml() {
+    const g = ui.game;
+    const event = L.getEvent(g);
+    const focus = (strat().dayFocus || {})[g.round] || null;
+    const open = L.getDispatches ? L.getDispatches(g).length : 0;
+    const counts = L.getCommandCounts(g);
+    const alarms = L.getAlarms(g);
+    const critical = alarms.some(function (alarm) { return alarm.level === 'critical'; });
+    const lamp = critical ? 'critical' : alarms.length ? 'warning' : 'steady';
+    const days = Array.from({ length: L.finalRound }, function (_, i) {
+      const day = i + 1;
+      return '<li class="' + (day < g.round ? 'is-past' : day === g.round ? 'is-today' : '') + '"' + (day === g.round ? ' aria-current="step"' : '') + '><span class="sr-only">第 ' + day + ' 日</span></li>';
+    }).join('');
+    return '<section class="desk-state lamp-' + lamp + '" aria-label="今日重心与办公桌状态">' +
+      '<div class="day-focus tone-' + escapeHtml(focus ? focus.tone : 'arrival') + '"><span class="day-focus-label">第 ' + g.round + ' 日 · ' + escapeHtml(focus ? focus.label : '') + '</span><p>' + escapeHtml(focus ? focus.question : '') + '</p><ol class="day-track" aria-hidden="true">' + days + '</ol></div>' +
+      '<ul class="desk-items">' +
+        '<li class="desk-item desk-phone' + (open ? ' is-ringing' : '') + '"><span class="desk-glyph" aria-hidden="true">☎</span><span>' + (open ? open + ' 份电报待处理' : '无待处理电报') + '</span></li>' +
+        '<li class="desk-item desk-files' + (counts.blocked ? ' is-heavy' : '') + '"><span class="desk-glyph" aria-hidden="true">▤</span><span>' + counts.active + ' 件在办' + (counts.blocked ? ' · ' + counts.blocked + ' 件受阻' : '') + '</span></li>' +
+        '<li class="desk-item desk-clock"><span class="desk-glyph" aria-hidden="true">◷</span><span>' + escapeHtml(event ? event.time : '') + '</span></li>' +
+      '</ul></section>';
+  }
+
+  function echoesHtml() {
+    const g = ui.game;
+    if (g.round <= 1) return '';
+    const prev = g.round - 1;
+    const rows = [];
+    (g.commands || []).forEach(function (command) {
+      if (command.kind === 'communication') return;
+      if (command.status === 'expired' && command.expiredRound === prev) rows.push({ cls: 'is-lost', text: '「' + command.title + '」已超过窗口失效，效果没有发生。' });
+      else if (command.effectsApplied && command.executedRound === prev) rows.push({ cls: 'is-done', text: '「' + command.title + '」昨夜执行' + (command.executedLate ? '（延迟执行）' : '') + '，今天进入反馈期。' });
+      else if (command.status === 'blocked') rows.push({ cls: 'is-blocked', text: '「' + command.title + '」仍受阻：' + (command.blockedReason || '等待处理') });
+      else if (command.holdUntilRound && command.holdUntilRound >= g.round && command.effectsApplied) rows.push({ cls: 'is-held', text: '「' + command.title + '」作为长期承诺继续占用' + agencyLabel(command.agency) + '席位至第 ' + command.holdUntilRound + ' 夜。' });
+    });
+    const links = (strat().links || []);
+    (g.commands || []).forEach(function (command) {
+      links.forEach(function (link) {
+        if (link.from !== command.choiceId) return;
+        const event = L.getEvent(g);
+        if (!event || !(event.choices || []).some(function (choice) { return choice.id === link.target; })) return;
+        const effect = L.getLinkEffect(g, link.target);
+        if (effect && effect.sourceCommandId === command.id && effect.when === link.when) rows.push({ cls: effect.coordination === 'relax' ? 'is-done' : 'is-lost', text: effect.note });
+      });
+    });
+    if (!rows.length) return '';
+    return '<section class="echoes" aria-label="此前决定的回响"><h2>此前决定的回响</h2><ul>' + rows.slice(0, 5).map(function (row) { return '<li class="' + row.cls + '">' + escapeHtml(row.text) + '</li>'; }).join('') + '</ul><p class="echo-note">只列出由你此前签发、授权或放弃的事务引起的变化。</p></section>';
+  }
+
+  function dispatchTrayHtml() {
+    const g = ui.game;
+    if (!L.getDispatches) return '';
+    const items = L.getDispatches(g, true);
+    if (!items.length) return '';
+    return '<section class="dispatch-tray" aria-label="晨间电报"><div class="dispatch-head"><h2>晨间电报</h2><span>由此前命令与机构状态触发 · 模拟反馈</span></div><ol class="dispatch-list">' + items.map(function (item) {
+      const actions = item.resolved ? '<p class="dispatch-outcome">已处理：' + escapeHtml(item.outcome && item.outcome.label ? item.outcome.label : '已阅') + '</p>' :
+        '<div class="dispatch-actions">' + (item.options || []).map(function (option) {
+          const cost = option.ap ? option.ap + ' AP' : '不耗 AP';
+          const isDefault = option.id === item.defaultOption;
+          return '<button type="button" class="mini-action' + (option.ap ? ' is-primary' : '') + '" data-dispatch="' + escapeHtml(item.id) + '" data-option="' + escapeHtml(option.id) + '"' + ((option.ap || 0) > g.ap || g.phase !== 'briefing' ? ' disabled' : '') + '>' + escapeHtml(option.label) + (option.label.indexOf('AP') === -1 ? ' · ' + cost : '') + (isDefault && (item.options || []).length > 1 ? ' · 不处理则默认' : '') + '</button>';
+        }).join('') + '</div>';
+      return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' + (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + actions + '</li>';
+    }).join('') + '</ol></section>';
+  }
+
+  function bindDispatches(scope) {
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-dispatch]'), function (button) {
+      button.addEventListener('click', function () {
+        if (!ui.game || ui.busy) return;
+        const result = L.resolveDispatch(ui.game, button.getAttribute('data-dispatch'), button.getAttribute('data-option'));
+        if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法处理这份电报。', true); return; }
+        if (A) A.playSfx('file');
+        saveGame(false);
+        renderGame();
+        toast('电报已处理并归档。');
+      });
+    });
+  }
+
+  function listHtml(items) {    if (!items || !items.length) return '<ul class="epistemic-list"><li>暂无可靠条目。</li></ul>';
     return '<ul class="epistemic-list">' + items.map(function (item) { return '<li>' + escapeHtml(item) + '</li>'; }).join('') + '</ul>';
   }
 
@@ -540,6 +650,8 @@
       const record = (g.choices || []).find(function (item) { return item.round === g.round && item.choiceId === choice.id; });
       const preview = L.getCommandPreview(g, choice.id);
       const coordination = preview ? preview.requiresCoordination : L.requiresCoordination(choice);
+      const profile = L.timeProfileFor ? L.timeProfileFor(choice.id) : { kind: 'short' };
+      const link = L.getLinkEffect ? L.getLinkEffect(g, choice.id) : null;
       const classes = ['choice-card'];
       if (executed) classes.push('is-executed');
       if (locked) classes.push('is-locked');
@@ -552,12 +664,14 @@
         '<span class="choice-num" aria-hidden="true">' + String(index + 1).padStart(2, '0') + '</span>' +
         '<div class="choice-topline"><h3 class="choice-title">' + escapeHtml(choice.title) + '</h3><span class="choice-ap">' + choice.ap + ' AP</span></div>' +
         '<p class="choice-summary">' + escapeHtml(choice.summary) + '</p>' +
-        '<div class="effect-forecast" aria-label="签发前定性影响">' + effectForecast(choice.effects) + '</div>' +
+        (link ? '<p class="choice-link ' + (link.coordination === 'relax' ? 'is-relax' : 'is-require') + '"><strong>' + (link.coordination === 'relax' ? '前序已落地' : '前序已失效') + '：</strong>' + escapeHtml(link.note || '') + '</p>' : '') +
+        '<div class="effect-forecast" aria-label="时间属性与签发前定性影响"><span class="choice-time time-' + escapeHtml(profile.kind) + '">' + escapeHtml(timeKindLabel(profile.kind)) + '</span>' + effectForecast(choice.effects) + '</div>' +
         (lockNote) +
         '<div class="choice-detail"' + (expanded ? '' : ' hidden') + '>' +
           '<div class="staff-note"><span>幕僚评估</span><p>' + escapeHtml(choice.staff) + '</p></div>' +
           '<div class="choice-intel">信息基础：本回合情报可信度「' + escapeHtml(event.intel.level) + '」。' + escapeHtml(event.intel.note) + '</div>' +
           (preview ? '<section class="execution-preview"><h4>执行条件 · 签发前可见</h4><div class="execution-meta"><span>执行机构 <strong>' + escapeHtml(preview.agencyLabel) + '</strong></span><span>在办 <strong>' + preview.load.workload + ' / ' + preview.load.capacity + '</strong></span><span>协调余量 <strong>' + preview.load.coordination + '</strong></span><span>执行窗口 <strong>至第 ' + preview.deadlineRound + ' 夜</strong></span><span>优先级 <strong class="' + (preview.slotRequired ? 'is-warning' : 'is-ok') + '">' + (preview.slotRequired ? '占用优先席位' : '机构自行排队') + '</strong></span>' + (preview.requiresIntel ? '<span>情报确认 <strong class="' + (preview.intelSatisfied ? 'is-ok' : 'is-warning') + '">' + (preview.intelSatisfied ? '已追问总参' : '未完成') + '</strong></span>' : '') + '</div>' + (preview.risks.length ? '<ul class="execution-risks">' + preview.risks.map(function (risk) { return '<li>' + escapeHtml(risk) + '</li>'; }).join('') + '</ul>' : '<p class="execution-ok">当前没有容量或协调告警；命令仍可能因夜间压力或后续阻塞延迟。</p>') + '</section>' : '') +
+          '<p class="time-note"><strong>' + escapeHtml(timeKindLabel(profile.kind)) + '</strong> · ' + escapeHtml(profile.note || TIME_KIND_NOTES[profile.kind] || TIME_KIND_NOTES.short) + (profile.holdRounds ? ' 执行后占用席位 ' + profile.holdRounds + ' 夜。' : '') + '</p>' +
           '<section class="delay-details"><h4>延迟与副作用</h4>' + delayDetails(choice) + '</section>' +
         '</div>' +
         (executed && record ? '<div class="choice-actual"><span>命令执行反馈 · 实际即时变化</span><div class="effect-row">' + (effectChips(record.deltas, record.pressureDelta) || '<span class="empty-note">状态未发生可测量的变化</span>') + '</div></div>' : '') +
@@ -702,13 +816,15 @@
     if (command.delegated) note += ' · 已委派交接';
     if (command.expedited) note += ' · 总统已介入';
     if (command.executedLate) note += ' · 延迟执行';
+    if (command.autoAuthorized) note += ' · 常设授权自动执行';
+    if (command.holdUntilRound && command.effectsApplied && command.holdUntilRound >= ui.game.round) note = '长期承诺推进中：继续占用' + agencyLabel(command.agency) + '席位至第 ' + command.holdUntilRound + ' 夜。';
     const intelRecord = command.intelReportId ? (ui.game.intelState || {})[command.intelReportId] : null;
     if (command.requiresIntel && !(intelRecord && intelRecord.inquired) && command.status !== 'completed') note = '情报不足：先到情报桌追问总参，授权才可以执行。';
     if (command.status === 'blocked' && command.blockedReason) note = command.blockedReason;
     else if (command.status === 'expired' && command.blockedReason) note = command.blockedReason;
     const lastWindow = command.deadlineRound && ui.game.round >= command.deadlineRound && !command.effectsApplied && ['issued', 'executing', 'blocked'].indexOf(command.status) !== -1;
     return '<li class="command-row is-' + escapeHtml(command.status) + '">' +
-      '<div class="command-row-top"><span class="command-status">' + escapeHtml(commandStatusLabel(command.status)) + '</span><span class="command-agency">' + escapeHtml(agencyLabel(command.agency)) + '</span>' + (windowText ? '<span class="command-window">' + escapeHtml(windowText) + '</span>' : '') + '</div>' +
+      '<div class="command-row-top"><span class="command-status">' + escapeHtml(commandStatusLabel(command.status)) + '</span><span class="command-agency">' + escapeHtml(agencyLabel(command.agency)) + '</span>' + (command.timeKind && command.timeKind !== 'short' ? '<span class="command-kind time-' + escapeHtml(command.timeKind) + '">' + escapeHtml(timeKindLabel(command.timeKind)) + '</span>' : '') + (windowText ? '<span class="command-window">' + escapeHtml(windowText) + '</span>' : '') + '</div>' +
       '<strong>' + escapeHtml(command.title) + '</strong>' +
       '<p class="command-note">' + escapeHtml(note) + '</p>' +
       (lastWindow ? '<p class="command-wait-note">最后执行窗口：委派已来不及；只能总统介入、接受延误或撤回。</p>' : '') +
@@ -779,7 +895,7 @@
     if (ui.busy || !ui.game || ui.game.phase !== 'briefing') return;
     const result = L.authorizeCommand(ui.game, commandId);
     if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法授权。', true); return; }
-    if (A) A.playSfx('issue');
+    if (A) A.playSfx('receive');
     saveGame(false);
     renderGame();
     toast('已授权：' + result.command.title + '。本夜将结算执行情况。');
@@ -970,7 +1086,7 @@
     const pressure = data.pressure || { before: 0, rise: 0, delayed: 0, after: 0 };
     const delayed = data.delayed || [];
     const alarms = data.alarms || [];
-    if (A) A.playSfx(alarms.length ? 'alert' : delayed.length ? 'delayed' : 'round');
+    if (A) A.playSfx(alarms.length ? 'alert' : (data.commandResults || []).some(function (r) { return r.status === 'blocked' || r.status === 'expired'; }) ? 'blocked' : delayed.length ? 'delayed' : 'complete');
     const todayRecords = (ui.game.choices || []).filter(function (record) { return record.round === data.round - 1; });
     const allResults = (data.commandResults || []).filter(function (result) { return !result.archived; });
     const seenCommands = {};
@@ -982,6 +1098,10 @@
       if (seenCommands[record.commandId]) return;
       commandRows.push({ result: null, record: record });
     });
+    const dispatches = data.dispatches || [];
+    const settled = data.settledDispatches || [];
+    const dispatchHtml = (dispatches.length ? '<ul class="settlement-list">' + dispatches.map(function (item) { return '<li><div><strong>' + escapeHtml(item.title) + '</strong><span>' + escapeHtml(item.kicker || '模拟反馈') + '</span></div><p>' + escapeHtml(item.body) + '</p></li>'; }).join('') + '</ul><p class="settlement-archive-note">明早在事件简报下方处理；不处理则当夜按默认方式结算。</p>' : '<p class="all-clear">没有新的事务电报。</p>') +
+      (settled.length ? '<p class="settlement-archive-note">按默认方式结算：' + settled.map(function (item) { return escapeHtml(item.title + '（' + (item.outcome && item.outcome.label ? item.outcome.label : '已阅') + '）'); }).join('；') + '</p>' : '');
     const archivedCount = (data.commandResults || []).filter(function (result) { return result.archived; }).length;
     const commandHtml = commandRows.length ? commandRows.map(function (row) {
       const outcome = row.result;
@@ -991,7 +1111,7 @@
       const ap = outcome ? outcome.ap : record.ap;
       const deltas = outcome && outcome.deltas ? outcome.deltas : (record.deltas || {});
       const pressureDelta = outcome && outcome.pressureDelta != null ? outcome.pressureDelta : record.pressureDelta;
-      const note = outcome && outcome.blockedReason ? outcome.blockedReason : status === 'awaiting_feedback' ? '效果已在本夜执行；下一夜核验反馈，或由总统提前核验。' : status === 'expired' ? '超过执行窗口，效果不再发生。' : status === 'executing' ? '仍在执行，明夜继续占用机构名额。' : '';
+      const note = outcome && outcome.held ? outcome.note : outcome && outcome.blockedReason ? outcome.blockedReason : status === 'awaiting_feedback' ? '效果已在本夜执行；下一夜核验反馈，或由总统提前核验。' : status === 'expired' ? '超过执行窗口，效果不再发生。' : status === 'executing' ? '仍在执行，明夜继续占用机构名额。' : '';
       return '<li><div><strong>' + escapeHtml(title) + '</strong><span>' + ap + ' AP · ' + escapeHtml(commandStatusLabel(status)) + '</span></div>' + (note ? '<p class="settlement-block-note">' + escapeHtml(note) + '</p>' : '') + '<div class="effect-row">' + (effectChips(deltas, pressureDelta) || '<span class="empty-note">' + (status === 'expired' ? '没有结算效果。' : status === 'blocked' ? '夜间未能执行；组织卡可以选择介入、委派或接受延误。' : '无即时数值变化') + '</span>') + '</div></li>';
     }).join('') : '<li>今天没有签发新命令；注意力已用于追问、召集协调、介入既有命令或其他总统事务。本回合仍会按既有局势结算。</li>';
     const archivedNote = archivedCount ? '<p class="settlement-archive-note">另有 ' + archivedCount + ' 项旧命令的反馈已归档；可在命令追踪中查看完整历史。</p>' : '';
@@ -1008,6 +1128,7 @@
           '<li><span class="settlement-index">03</span><section><h3>国家状态侵蚀 · 实际变化</h3><div class="effect-row">' + (effectChips(data.attrition || {}) || '<span class="empty-note">本晚没有可测量侵蚀。</span>') + '</div></section></li>' +
           '<li><span class="settlement-index">04</span><section><h3>战争压力推进 · 实际变化</h3><div class="interlude-pressure"><span>' + pressure.before + '</span><b>→</b><strong>' + pressure.after + '</strong><small>战场 +' + pressure.rise + (pressure.delayed ? ' · 延迟 ' + formatSigned(pressure.delayed) : '') + '</small></div></section></li>' +
           '<li><span class="settlement-index">05</span><section><h3>新风险</h3>' + alarmHtml + '</section></li>' +
+          '<li><span class="settlement-index">06</span><section><h3>明早的事务电报</h3>' + dispatchHtml + '</section></li>' +
         '</ol></div>',
       actions: [{ label: '进入 ' + (data.dateLabel || '下一日') + ' · ' + data.ap + ' AP', className: 'btn btn-primary', close: false, onClick: function () {
         if (ui.busy) return;
@@ -1016,7 +1137,7 @@
         ui.busy = false;
         if (!result.ok) { toast(result.error || '无法进入下一回合。', true); return; }
         closeModal();
-        if (A) { A.setTheme('day'); A.playSfx('round'); }
+        if (A) { A.setTheme('day'); A.playSfx(L.getDispatches(ui.game).length ? 'phone' : 'dayturn'); }
         saveGame(false);
         renderGame();
       } }],
@@ -1096,6 +1217,7 @@
   }
 
   function openHistoryReview() {
+    if (A) A.playSfx('archive');
     if (!ui.game) return;
     const historyHtml = window.LZS_REVIEW ? window.LZS_REVIEW.render(ui.game) : '<section class="history-review"><h2>历史复盘</h2><p>复盘资料未能载入。</p></section>';
     openModal({
@@ -1105,8 +1227,57 @@
     });
   }
 
-  function showEnding() {
-    if (!ui.game) return;
+  function governanceHtml(ending) {
+    const gov = ending.governance;
+    if (!gov) return '';
+    const meta = strat().styleMeta || {};
+    const c = gov.counts || {};
+    const tendencies = (gov.tendencies || []).map(function (item) {
+      const m = meta[item.id] || {};
+      return '<li><strong>' + escapeHtml(item.label || m.label || item.id) + '</strong><p>' + escapeHtml(item.note || m.note || '') + '</p></li>';
+    }).join('');
+    const facts = [['签发', c.issued], ['亲自介入', c.interventions], ['介入天数', c.interventionDays], ['委派', c.delegations], ['常设授权', c.standing], ['召集协调', c.coordination], ['追问情报', c.inquiries], ['沟通', c.communications], ['处理电报', c.dispatchesHandled], ['默认结算', c.dispatchesDefaulted]];
+    return '<section class="ending-section governance"><span class="section-kicker">HOW ATTENTION WAS SPENT</span><h2>治理方式回顾</h2><p class="stat-hint">只统计本局实际发生的动作，描述注意力花在哪里；不打分，也不评价这种方式好坏。</p><ul class="governance-tendencies">' + tendencies + '</ul>' +
+      '<dl class="governance-counts">' + facts.map(function (pair) { return '<div><dt>' + pair[0] + '</dt><dd>' + (pair[1] || 0) + '</dd></div>'; }).join('') + '</dl></section>';
+  }
+
+  function trendHtml(ending) {
+    const points = (ending.timeline || []).filter(function (item) { return item && item.stats; });
+    if (points.length < 2) return '<section class="ending-section"><h2>七项状态轨迹</h2><p class="empty-note">这局来自旧版本存档，只有迁移时的当前状态，不补造逐日轨迹。</p></section>';
+    const w = 120, h = 30;
+    function line(values) {
+      return values.map(function (v, i) { return (i ? 'L' : 'M') + (i / (values.length - 1) * w).toFixed(1) + ' ' + (h - Math.max(0, Math.min(100, v)) / 100 * h).toFixed(1); }).join(' ');
+    }
+    const thresholds = (L.thresholds && L.thresholds.held) || {};
+    const rows = L.statKeys.map(function (key) {
+      const values = points.map(function (p) { return p.stats[key] || 0; });
+      const first = values[0], last = values[values.length - 1];
+      const t = thresholds[key];
+      return '<li><span class="trend-label">' + escapeHtml(statFullLabel(key)) + '</span><svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="' + escapeHtml(statFullLabel(key)) + ' 从 ' + first + ' 到 ' + last + '">' + (t ? '<line class="trend-threshold" x1="0" x2="' + w + '" y1="' + (h - t / 100 * h).toFixed(1) + '" y2="' + (h - t / 100 * h).toFixed(1) + '"></line>' : '') + '<path d="' + line(values) + '"></path></svg><span class="trend-values">' + first + ' → <strong>' + last + '</strong></span></li>';
+    });
+    const pressure = points.map(function (p) { return p.pressure || 0; });
+    rows.push('<li class="is-pressure"><span class="trend-label">战争压力</span><svg viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="战争压力 从 ' + pressure[0] + ' 到 ' + pressure[pressure.length - 1] + '"><path d="' + line(pressure) + '"></path></svg><span class="trend-values">' + pressure[0] + ' → <strong>' + pressure[pressure.length - 1] + '</strong></span></li>');
+    return '<section class="ending-section"><h2>七项状态轨迹</h2><p class="stat-hint">每天开局时的真实快照（共 ' + points.length + ' 点）；虚线为本阶段存续参考线。</p><ul class="trend-list">' + rows.join('') + '</ul></section>';
+  }
+
+  function turningPointsHtml(ending) {
+    const points = ending.turningPoints || [];
+    const labels = { lost: '失去的窗口', timely: '及时完成', shelved: '被搁置的事务', unforeseen: '当时无法预知的后果' };
+    if (!points.length) return '';
+    return '<section class="ending-section"><h2>关键节点</h2><ol class="turning-points">' + points.map(function (p) {
+      return '<li class="tp-' + escapeHtml(p.type) + '"><span>R' + p.round + ' · ' + escapeHtml(labels[p.type] || p.type) + '</span><strong>' + escapeHtml(p.title) + '</strong><p>' + escapeHtml(p.note || '') + '</p></li>';
+    }).join('') + '</ol></section>';
+  }
+
+  function recordsHtml() {
+    const runs = L.getRecords ? L.getRecords().runs.slice(-5).reverse() : [];
+    if (!runs.length) return '';
+    return '<section class="ending-section run-records"><h2>本机记录</h2><p class="stat-hint">只保存在这台设备上：结局、主要倾向和路线。没有积分或排行。</p><ol>' + runs.map(function (run) {
+      return '<li><strong>' + escapeHtml(run.endingTitle || run.endingId) + '</strong><span>' + escapeHtml(run.styleLabel || '') + ' · 第 ' + run.round + ' 回合</span></li>';
+    }).join('') + '</ol></section>';
+  }
+
+  function showEnding() {    if (!ui.game) return;
     if (!ui.game.ending && ui.game.phase === 'ending') L.evaluateFinal(ui.game);
     const ending = ui.game.ending;
     if (!ending) { toast('结局数据缺失，已返回封面。', true); renderIntro(); return; }
@@ -1114,7 +1285,7 @@
     closeModal();
     clearToasts();
     showScreen('ending');
-    if (A) A.playSfx(ending.tone === 'danger' ? 'collapse' : 'ending');
+    if (A) A.playSfx(ending.tone === 'danger' ? 'collapse' : ending.id === 'held' ? 'ending' : 'ending_costly');
     const stats = ending.finalStats || ui.game.stats || {};
     const choices = ending.keyChoices || [];
     const chain = ending.chain || [];
@@ -1134,10 +1305,11 @@
     el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / 阶段档案</span><span>2022.02.24 — 03.02</span></header>' +
       '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta"><span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span><span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
       '<div class="ending-layout"><div class="ending-column"><section class="ending-section"><span class="section-kicker">AFTER ACTION</span><h2>阶段记录</h2><div class="ending-copy">' + (ending.epilogue || []).map(function (p) { return '<p>' + escapeHtml(p) + '</p>'; }).join('') + '</div></section>' +
+      governanceHtml(ending) + turningPointsHtml(ending) +
       '<section class="ending-section"><h2>命令如何走向后果</h2><p class="stat-hint">这里优先展示失效、阻塞、撤回与等待核验的命令：总统注意力、机构容量和窗口如何改变结果。</p>' + commandChainHtml + '</section>' +
       '<section class="ending-section"><h2>完整决策链</h2>' + timeline + '</section><section class="ending-section"><h2>延迟后果链</h2>' + chainHtml + '</section></div>' +
       '<aside class="ending-column"><section class="ending-section"><h2>七项最终状态</h2><div class="ending-stats">' + endingStatsHtml(stats) + '</div><div class="ending-pressure"><span>战争压力</span><strong>' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + ' / 100</strong></div></section>' +
-      '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section></aside></div>' +
+      '' + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
       '<section class="ending-review-invite"><span class="section-kicker">SEALED UNTIL THE END</span><h2>现在，打开事后才能看见的资料。</h2><p>完整模拟参数、逐日事实、当时认知、后来确认、争议与资料来源已独立归档，不再接在结局正文之后。</p><button type="button" class="btn btn-primary" id="btn-history">进入历史复盘</button></section>' +
       '<div class="ending-disclaimer"><strong>模拟说明：</strong>' + escapeHtml(ending.disclaimer || L.meta.disclaimer || '') + '<br>本结局只描述本局模拟参数下的国家状态，不评价真实历史人物。<br>版本 ' + escapeHtml(L.meta.version || '') + ' · 所有数值均为模拟设计参数。</div>' +
       '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';

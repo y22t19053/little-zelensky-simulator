@@ -465,6 +465,11 @@ async function main() {
     assert(await evaluate(cdp, 'document.querySelector(".ending-reasons li") !== null'), '判定依据可见');
     assert(await evaluate(cdp, '!document.querySelector("#screen-ending > .history-review") && !!document.getElementById("btn-history")'), '历史复盘不再直接接在结局正文后');
     console.log('  结局：' + await evaluate(cdp, 'document.querySelector(".ending-title").textContent') + ' / ' + await evaluate(cdp, 'document.querySelector(".ending-kicker").textContent'));
+    assert(await evaluate(cdp, '!!document.querySelector(".governance") && document.querySelectorAll(".governance-tendencies li").length >= 1'), 'v0.5 结局显示治理风格回顾');
+    assert(await evaluate(cdp, '!/(\\d+\\s*分|评级|等级|优秀|失职|称职|好总统|坏总统)/.test(document.querySelector(".governance").textContent)'), '治理回顾不打分、不评好坏');
+    assert(await evaluate(cdp, 'document.querySelectorAll(".trend-list li").length === 8 && document.querySelectorAll(".trend-list svg path").length >= 8'), '结局显示七状态+压力的真实日轨迹');
+    assert(await evaluate(cdp, 'document.querySelectorAll(".turning-points li").length >= 1'), '结局列出关键节点');
+    assert(await evaluate(cdp, 'document.querySelectorAll(".run-records li").length >= 1 && JSON.parse(localStorage.getItem("lzs_records_v1")).runs.length >= 1'), '轻量局记录写入并显示');
     await screenshot('06-ending-desktop.png');
     await click('#btn-history');
     await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .history-review")'); }, 5000);
@@ -768,6 +773,112 @@ async function main() {
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     assert(await evaluate(cdp, 'window.matchMedia("(prefers-reduced-motion: reduce)").matches && getComputedStyle(document.querySelector(".btn")).animationDuration === "1e-05s"'), '减少动态效果模式生效');
 
+    console.log('\n[8e] v0.5 桌面状态、时间属性、常设授权与事务电报');
+    await setViewport(1280, 900, false);
+    const v5Setup = await evaluate(cdp, `(() => {
+      const s = LZS.createGame();
+      for (let day = 0; day < 3; day += 1) {
+        const ev = LZS.events[s.round - 1];
+        const pick = ev.choices.filter(function (c) { return c.ap === 1; })[0] || ev.choices[0];
+        const res = LZS.issueCommand(s, pick.id);
+        if (res.command && res.command.status === 'issued') LZS.authorizeCommand(s, res.command.id);
+        if (res.command) LZS.followUpCommand(s, res.command.id);
+        LZS.endRound(s);
+        LZS.continueFromInterlude(s);
+      }
+      LZS.saveGame(s);
+      return {round:s.round, open:LZS.getDispatches(s).length, types:LZS.getDispatches(s).map(function(d){return d.type;})};
+    })()`);
+    assert(v5Setup.round === 4 && v5Setup.open >= 1 && v5Setup.types.indexOf('backlog') !== -1, '连续三日介入后第四日出现积压电报', JSON.stringify(v5Setup));
+    await reloadScenario();
+    assert(await evaluate(cdp, '!!document.querySelector("#desk-panel .desk-state") && /第\\s*4\\s*日/.test(document.querySelector(".day-focus").textContent)'), '侧栏显示第4日焦点');
+    assert(await evaluate(cdp, 'document.querySelectorAll(".day-track li").length === 7 && document.querySelectorAll(".day-track li.is-past").length === 3'), '七日轨道标记已过日期');
+    assert(await evaluate(cdp, 'document.querySelector(".desk-phone").classList.contains("is-ringing")'), '有未处理电报时电话标记为待接');
+    assert(await evaluate(cdp, 'document.querySelectorAll(".choice-card .choice-time").length === document.querySelectorAll(".choice-card").length'), '每张决策卡标明时间属性');
+    assert(await evaluate(cdp, '!!document.querySelector(".echoes li")'), '第4日显示前序选择回响');
+    await screenshot('22-dispatch-tray-desktop.png');
+    const apBefore = (await savedState()).ap;
+    await click('.dispatch-item[class*="type-backlog"] [data-option]');
+    await sleep(250);
+    const afterDispatch = await savedState();
+    const backlog = afterDispatch.dispatches.filter(function (d) { return d.type === 'backlog'; })[0];
+    assert(backlog && backlog.resolved && afterDispatch.ap === apBefore - ((backlog.options.filter(function (o) { return o.id === backlog.outcome.optionId; })[0] || {}).ap || 0), '点击处理电报只结算一次并按选项扣 AP', JSON.stringify({apBefore:apBefore, ap:afterDispatch.ap, outcome:backlog && backlog.outcome}));
+    await click('.dispatch-item[class*="type-backlog"] [data-option]').catch(function () {});
+    const again = await savedState();
+    assert(again.ap === afterDispatch.ap, '已处理电报不能重复结算');
+    await click('#btn-ops');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .ops-tabs")'); }, 5000);
+    await evaluate(cdp, 'Array.from(document.querySelectorAll("#modal-root .ops-tabs button")).filter(function(b){return b.textContent.includes("机构");})[0].click()');
+    await sleep(200);
+    const standingBtn = await evaluate(cdp, '(() => { const b = document.querySelector("#modal-root [data-standing]:not([disabled])"); return b ? b.getAttribute("data-standing") : null; })()');
+    if (standingBtn && again.ap >= 1) {
+      await click('#modal-root [data-standing="' + standingBtn + '"]');
+      await sleep(250);
+      const st = await savedState();
+      assert(st.standing[standingBtn] && st.standing[standingBtn].active && st.ap === again.ap - 1, '机构台授予常设授权扣 1AP');
+      assert(await evaluate(cdp, '!!document.querySelector("#modal-root .standing-badge")'), '常设授权后显示徽标');
+    } else {
+      assert(await evaluate(cdp, '!!document.querySelector("#modal-root [data-standing]") || !!document.querySelector("#modal-root .standing-badge")'), '机构台提供常设授权入口');
+    }
+    await screenshot('23-agency-standing-desktop.png');
+    await click('#modal-root .modal-actions .btn-primary').catch(function () {});
+    await evaluate(cdp, 'document.querySelectorAll("#modal-root [data-modal-close]").forEach(function(b){b.click();})');
+    await sleep(200);
+    await setViewport(390, 844, true);
+    await sleep(150);
+    const order = await evaluate(cdp, '(() => { const t = function(sel){ const n = document.querySelector(sel); return n ? n.getBoundingClientRect().top + window.scrollY : -1; }; return {event:t(".event-stage"), desk:t("#desk-panel .desk-state"), tray:t(".dispatch-tray"), choices:t(".choice-card"), sw:document.documentElement.scrollWidth, cw:document.documentElement.clientWidth, minFont: Math.min.apply(null, Array.from(document.querySelectorAll(".desk-state *, .dispatch-tray *, .choice-time")).filter(function(n){return n.childNodes.length && n.textContent.trim();}).map(function(n){return parseFloat(getComputedStyle(n).fontSize);}))}; })()');
+    assert(order.event >= 0 && order.tray > order.event && order.choices > order.tray && order.sw <= order.cw + 2, '390px 手机：事件→电报→决策顺序且无横向溢出', JSON.stringify(order));
+    assert(order.minFont >= 11, '390px 手机 v0.5 新组件字号不低于 11px', JSON.stringify(order));
+    await screenshot('24-dispatch-mobile-390.png');
+    await setViewport(1280, 900, false);
+
+    console.log('\n[8f] 第二局完整游玩：中央协调路线（全程点击，不亲自介入）');
+    await setViewport(1280, 900, false);
+    await evaluate(cdp, '(() => { localStorage.removeItem("lzs_save_v1"); const s = LZS.createGame(); return LZS.saveGame(s); })()');
+    await reloadScenario();
+    const COORD_ROUTE = [['disperse','office'],['stay','office'],['air_defense','general_staff'],['curfew','interior'],['delegate','general_staff'],['talks','foreign'],['logistics','logistics']];
+    for (let day = 0; day < COORD_ROUTE.length; day += 1) {
+      const step = COORD_ROUTE[day];
+      await click('.choice-card[data-choice-id="' + step[0] + '"]');
+      await click('#btn-issue');
+      await authorizeAll();
+      await click('#btn-ops');
+      await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .ops-tabs")'); }, 5000);
+      await evaluate(cdp, 'Array.from(document.querySelectorAll("#modal-root .ops-tabs button")).filter(function(b){return b.textContent.includes("机构");})[0].click()');
+      await sleep(150);
+      await click('#modal-root [data-coordinate="' + step[1] + '"]');
+      await sleep(150);
+      if (day === 2) await screenshot('25-coord-day3-agency.png');
+      await evaluate(cdp, 'document.querySelectorAll("#modal-root [data-modal-close]").forEach(function(b){b.click();})');
+      await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+      if (day === 2) await screenshot('26-coord-day3-desktop.png');
+      await click('#btn-end-round');
+      const phase = await waitFor(async function () { const st = await savedState(); return st.phase === 'interlude' || st.phase === 'ending' ? st.phase : false; }, 5000);
+      if (phase === 'interlude') {
+        await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+        if (day === 3) await screenshot('27-coord-night4.png');
+        await click('#modal-root .modal-actions .btn-primary');
+        await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+      }
+    }
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-ending").hidden'); }, 5000);
+    const coordEnd = await savedState();
+    assert(coordEnd.phase === 'ending' && coordEnd.ending.id === 'held', '中央协调路线（UI 全程点击）撑过本阶段', JSON.stringify({id: coordEnd.ending && coordEnd.ending.id, stats: coordEnd.stats, pressure: coordEnd.pressure}));
+    assert((coordEnd.interventionRounds || []).length === 0, '中央协调路线全程没有总统介入');
+    assert(coordEnd.ending.governance && coordEnd.ending.governance.primary !== 'hands_on', '治理回顾不把中央协调误判为亲自介入', coordEnd.ending.governance && coordEnd.ending.governance.primary);
+    console.log('  第二局结局：' + coordEnd.ending.title + ' / 倾向 ' + coordEnd.ending.governance.primary + ' / 压力 ' + coordEnd.pressure);
+    await screenshot('28-coord-ending-held.png');
+    await evaluate(cdp, 'document.querySelector(".governance").scrollIntoView({block:"start"})');
+    await sleep(100);
+    await screenshot('29-coord-governance.png');
+    await setViewport(390, 844, true);
+    await evaluate(cdp, 'document.querySelector(".trend-list").scrollIntoView({block:"start"})');
+    await sleep(120);
+    const endMobile = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+    assert(endMobile.sw <= endMobile.cw + 2, '390px 结局趋势/治理回顾无横向溢出');
+    await screenshot('30-ending-trend-mobile.png');
+    await setViewport(1280, 900, false);
+
     console.log('\n[9b] AP 全部用于既有事务时仍可结束回合');
     await setViewport(1280, 900, false);
     await evaluate(cdp, '(() => { const state = LZS.createGame(); state.ap = 0; return LZS.saveGame(state); })()');
@@ -788,7 +899,7 @@ async function main() {
     const beforeListening = audioRequests.length;
     await cdp.send('Page.navigate', { url: pathToFileURL(path.join(ROOT, 'production', 'listening-room.html')).href });
     await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && document.querySelectorAll("audio").length === 4'); }, 10000);
-    assert(await evaluate(cdp, 'document.querySelectorAll("audio[preload=none]").length === 4 && document.querySelectorAll("[data-sound]").length === 10 && Array.from(document.querySelectorAll("audio")).every(function(a){return a.paused;})') && audioRequests.length === beforeListening, '试听页包含四段音乐与十类音效且不自动播放');
+    assert(await evaluate(cdp, 'document.querySelectorAll("audio[preload=none]").length === 4 && document.querySelectorAll("[data-sound]").length === 18 && Array.from(document.querySelectorAll("audio")).every(function(a){return a.paused;})') && audioRequests.length === beforeListening, '试听页包含四段音乐与十类音效且不自动播放');
     await click('[data-sound="select"]');
     await waitFor(async function () { return audioRequests.length > beforeListening; }, 5000);
     assert(audioRequests.some(function(url){return /select\.ogg(?:$|\?)/.test(url);}), '试听页按需加载并播放本地 SFX');
@@ -834,6 +945,7 @@ async function evaluate(cdp, expression) {
 
 main().catch(function (error) {
   console.error(error);
+  if (consoleErrors.length) console.error('控制台错误：\n  ' + consoleErrors.join('\n  '));
   try {
     process.exitCode = 1;
   } catch (ignored) { /* ignore */ }

@@ -16,6 +16,7 @@ globalThis.localStorage = {
 };
 require('../js/events.js');
 require('../js/intel.js');
+require('../js/strategy.js');
 require('../js/engine.js');
 const L = globalThis.LZS;
 
@@ -47,15 +48,49 @@ function plansFor(state) {
   });
 }
 
-function playPlan(base, plan) {
+function spendWithoutIntervention(state, commands, style) {
+  let used = null;
+  while (!state.ending && state.ap > 0) {
+    const pending = state.commands.filter(function (command) {
+      return commands.indexOf(command.id) !== -1 && ['blocked', 'executing', 'issued'].indexOf(command.status) !== -1 && !command.effectsApplied;
+    });
+    let acted = false;
+    if (style === 'delegating') {
+      for (const command of pending) {
+        if (state.standing && state.standing[command.agency]) continue;
+        const granted = L.grantStanding(state, command.agency);
+        if (granted.ok) { used = (used ? used + '+' : '') + 'standing:' + command.agency; acted = true; break; }
+      }
+    }
+    if (!acted) {
+      for (const command of pending) {
+        if (state.coordinationThisRound && state.coordinationThisRound[command.agency]) continue;
+        const coordinated = L.coordinateAgency(state, command.agency);
+        if (coordinated.ok) { used = (used ? used + '+' : '') + 'coord:' + command.agency; acted = true; break; }
+      }
+    }
+    if (!acted) break;
+  }
+  return used;
+}
+
+function playPlan(base, plan, style) {
   const state = clone(base);
   const commands = [];
   for (const id of plan) {
     if (state.ending) break;
     const issued = L.issueCommand(state, id);
     if (!issued.ok) continue;
-    L.authorizeCommand(state, issued.command.id);
+    if (issued.command.status === 'issued') L.authorizeCommand(state, issued.command.id);
     commands.push(issued.command.id);
+  }
+  if (style && style !== 'hands_on') {
+    const used = spendWithoutIntervention(state, commands, style);
+    if (state.ending) return { state: state, plan: plan, followed: used };
+    const ended = L.endRound(state);
+    assert.equal(ended.ok, true, ended.error || '结束回合失败');
+    if (state.phase === 'interlude') L.continueFromInterlude(state);
+    return { state: state, plan: plan, followed: used };
   }
   // 总统用手上剩余 AP 推进一项阻塞命令——这是可达 held 所需的关键介入。
   let followed = null;
@@ -93,7 +128,7 @@ function heuristic(state, target) {
   return score;
 }
 
-function search(target, beamSize) {
+function search(target, beamSize, style) {
   let beam = [{ state: L.createGame(), plan: [] }];
   for (let round = 1; round <= L.finalRound; round += 1) {
     const candidates = [];
@@ -103,7 +138,7 @@ function search(target, beamSize) {
         continue;
       }
       for (const plan of plansFor(node.state)) {
-        const result = playPlan(node.state, plan);
+        const result = playPlan(node.state, plan, style);
         candidates.push({
           state: result.state,
           plan: node.plan.concat([{ round: round, choices: plan, followed: result.followed }])
@@ -119,17 +154,29 @@ function search(target, beamSize) {
   return beam.filter(function (node) { return node.state.ending && node.state.ending.id === target; })[0] || null;
 }
 
-for (const target of ['held', 'hollow']) {
-  const found = search(target, 900);
-  console.log('\n目标：' + target);
-  if (!found) {
-    console.log('  在 900 宽束搜索与最多三项/日组合内未找到。不能据此断言 UI 不可达，但说明该结局至少需要更精确的路线。');
-    continue;
-  }
-  console.log('  找到：' + found.state.ending.title + ' / 压力 ' + found.state.pressure);
-  console.log('  状态：' + L.statKeys.map(function (key) { return key + '=' + found.state.stats[key]; }).join(' '));
-  console.log('  路线：');
-  for (const day of found.plan) {
-    console.log('    第 ' + day.round + ' 日：' + (day.choices.join(' + ') || '无') + (day.followed ? '；总统介入 ' + day.followed : ''));
+const STYLES = [
+  { id: 'hands_on', label: '亲自介入（剩余 AP 介入阻塞命令）' },
+  { id: 'delegating', label: '机构授权（常设授权 + 召集协调，不亲自介入）' },
+  { id: 'coordinating', label: '中央协调（只召集协调，不亲自介入）' }
+];
+const summary = [];
+for (const style of STYLES) {
+  for (const target of ['held', 'hollow']) {
+    const found = search(target, 900, style.id);
+    console.log('\n风格：' + style.label + ' / 目标：' + target);
+    if (!found) {
+      console.log('  在 900 宽束搜索与最多三项/日组合内未找到。不能据此断言 UI 不可达，但说明该结局至少需要更精确的路线。');
+      summary.push({ style: style.id, target: target, found: false });
+      continue;
+    }
+    const interventions = found.state.interventionRounds ? found.state.interventionRounds.length : 0;
+    console.log('  找到：' + found.state.ending.title + ' / 压力 ' + found.state.pressure + ' / 总统介入 ' + interventions + ' 次');
+    console.log('  状态：' + L.statKeys.map(function (key) { return key + '=' + found.state.stats[key]; }).join(' '));
+    console.log('  路线：');
+    for (const day of found.plan) {
+      console.log('    第 ' + day.round + ' 日：' + (day.choices.join(' + ') || '无') + (day.followed ? '；' + (style.id === 'hands_on' ? '总统介入 ' : '') + day.followed : ''));
+    }
+    summary.push({ style: style.id, target: target, found: true, pressure: found.state.pressure, interventions: interventions });
   }
 }
+console.log('\nSUMMARY ' + JSON.stringify(summary));
