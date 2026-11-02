@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0f0d">
+  <meta name="description" content="小泽模拟器：一款总统视角的战争危机决策模拟。2022年2月24日，你能顶住几天？">
+  <title>小泽模拟器 · 你能顶住几天？</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a class="skip-link" href="#screen-intro">跳至主要内容</a>
+  <div class="ambient" aria-hidden="true">
+    <div class="ambient-grid"></div>
+    <div class="ambient-glow"></div>
+  </div>
+
+  <div id="app">
+    <!-- 开场 -->
+    <section id="screen-intro" class="screen intro-screen" aria-labelledby="intro-title">
+      <header class="masthead">
+        <div class="masthead-left">
+          <span class="masthead-mark" aria-hidden="true">УК</span>
+          <div>
+            <p class="masthead-kicker">总统办公室 · 最高统帅部</p>
+            <p class="masthead-sub">危机决策模拟 / Situation Room</p>
+          </div>
+        </div>
+        <div class="masthead-right">
+          <span>02.24 — 03.02</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span>7 个回合</span>
+        </div>
+      </header>
+
+      <main class="intro-grid">
+        <div class="intro-main">
+          <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span>历史情景 · 单人决策</p>
+          <h1 id="intro-title" class="game-title">小泽模拟器</h1>
+          <p class="game-subtitle">Little Zelensky Simulator</p>
+          <p class="tagline">你能顶住几天？</p>
+
+          <div class="intro-copy">
+            <p>2022年2月24日凌晨，俄罗斯从多个方向全面入侵乌克兰。你坐在总统办公室里，面前没有一张完整的战况图。</p>
+            <p>你不是将军。你不能直接调动营连，也不能替前线士兵做战术决定。你能做的是分配有限的注意力：先处理哪一份电报，先签哪一道命令，先见哪一个人。</p>
+            <p>每个决定都可能解决一个问题，同时制造下一个问题。七天后，这个国家会变成什么样，取决于你今天先看什么。</p>
+          </div>
+
+          <div class="intro-actions">
+            <button id="btn-start" class="btn btn-primary" type="button">
+              <span>进入总统办公室</span>
+              <span class="btn-arrow" aria-hidden="true">→</span>
+            </button>
+            <button id="btn-continue" class="btn btn-ghost" type="button" hidden>继续上一局</button>
+            <button id="btn-clear-save" class="text-btn" type="button" hidden>清除存档</button>
+          </div>
+          <p id="save-summary" class="save-summary" hidden></p>
+
+          <ul class="intro-facts" aria-label="游戏概览">
+            <li>
+              <span class="fact-value">3</span>
+              <span class="fact-label">每回合注意力 AP</span>
+            </li>
+            <li>
+              <span class="fact-value">7</span>
+              <span class="fact-label">项国家状态</span>
+            </li>
+            <li>
+              <span class="fact-value">11</span>
+              <span class="fact-label">种阶段结局</span>
+            </li>
+          </ul>
+        </div>
+
+        <aside class="intro-file" aria-label="情景摘要">
+          <div class="file-topline">
+            <span>最高统帅部 / 值班室</span>
+            <span>02.24 · 凌晨接报</span>
+          </div>
+          <figure class="intro-portrait">
+            <div class="portrait-pair">
+              <img class="portrait-zelensky" src="assets/zelensky.svg" alt="原创政治漫画：穿军绿色抓绒、神情疲惫而坚定的泽连斯基" width="960" height="1080">
+              <img class="portrait-putin" src="assets/putin.svg" alt="原创政治漫画：冷灰长桌尽头、显得疏离的普京" width="1200" height="900">
+            </div>
+            <figcaption>两种战争视角 · 原创漫画，不是历史照片</figcaption>
+          </figure>
+          <div class="file-stamp" aria-hidden="true">模拟推演</div>
+          <h2>你接手的不是一支军队。</h2>
+          <p class="file-lead">是一台正在同时失去余量的国家机器：政府要运转，军队要组织，首都要守住，社会要相信还有明天。</p>
+          <dl class="brief-list">
+            <div>
+              <dt>身份</dt>
+              <dd>乌克兰总统</dd>
+            </div>
+            <div>
+              <dt>时间</dt>
+              <dd>2022.02.24 — 03.02</dd>
+            </div>
+            <div>
+              <dt>一局</dt>
+              <dd>约 5—10 分钟</dd>
+            </div>
+            <div>
+              <dt>目标</dt>
+              <dd>让国家撑过第一阶段</dd>
+            </div>
+          </dl>
+          <div class="file-note">
+            <p>没有“正确答案”。只有你愿意先承担哪一种代价。</p>
+            <p class="fine">本作是历史情景模拟，不是纪实作品。数值均为模拟设计参数。</p>
+          </div>
+          <div class="file-signature" aria-hidden="true">
+            <span>已阅</span>
+            <span class="signature-line"></span>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="intro-footer">
+        <p>历史时间线参考公开报道；人物对话、文电与幕僚评估为合成文本，不虚构真实人物引语。</p>
+        <p>本作不对真实历史人物作优劣评判。所有参数仅服务于模拟机制。</p>
+      </footer>
+    </section>
+
+    <!-- 游戏 -->
+    <section id="screen-game" class="screen game-screen" aria-label="总统办公室" hidden>
+      <div class="game-top">
+        <header class="command-bar">
+          <div class="brand">
+            <span class="seal" aria-hidden="true">УК</span>
+            <div class="brand-text">
+              <span class="brand-title">总统办公室</span>
+              <span class="brand-sub">最高统帅部 · 战时简报</span>
+            </div>
+          </div>
+          <div class="command-meta">
+            <span id="game-date" class="command-date">2月24日</span>
+            <span id="game-phase" class="command-phase">第 1 回合 · 模拟接报</span>
+          </div>
+          <div class="command-actions">
+            <button id="btn-save" class="icon-btn" type="button" title="保存进度" aria-label="保存进度">
+              <span aria-hidden="true">存</span>
+            </button>
+            <button id="btn-log" class="icon-btn" type="button" title="查看决策日志" aria-label="查看决策日志">
+              <span aria-hidden="true">录</span>
+            </button>
+            <button id="btn-menu" class="icon-btn" type="button" title="菜单" aria-label="菜单">
+              <span aria-hidden="true">⋯</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="status-rail">
+          <div class="pressure-block">
+            <div class="pressure-head">
+              <span class="rail-label">战争压力</span>
+              <span class="pressure-reading"><strong id="pressure-value">12</strong><span class="pressure-unit">/100</span></span>
+              <span id="pressure-tag" class="pressure-tag">低</span>
+            </div>
+            <div class="pressure-track" role="img" aria-label="战争压力" id="pressure-track">
+              <div id="pressure-fill" class="pressure-fill" style="width:12%"></div>
+              <span class="pressure-threshold" style="left:55%"></span>
+              <span class="pressure-threshold" style="left:75%"></span>
+              <span class="pressure-threshold" style="left:90%"></span>
+            </div>
+            <p id="pressure-note" class="pressure-note">压力越高，每晚对国家和总统的侵蚀越重。</p>
+          </div>
+          <div class="ap-block">
+            <div class="ap-head">
+              <span class="rail-label">总统注意力</span>
+              <span class="ap-count"><strong id="ap-value">3</strong><span> / 3 AP</span></span>
+            </div>
+            <div id="ap-pips" class="ap-pips" aria-label="剩余注意力 3 点">
+              <span class="ap-pip"></span><span class="ap-pip"></span><span class="ap-pip"></span>
+            </div>
+            <p id="ap-note" class="ap-note">本回合未使用的 AP 不会保留。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="game-grid">
+        <main id="event-main" class="event-column" aria-live="polite"></main>
+
+        <aside class="side-column" aria-label="国家状态与记录">
+          <section id="stats-panel" class="panel stats-panel" aria-labelledby="stats-title"></section>
+          <section id="forecast-panel" class="panel forecast-panel" aria-labelledby="forecast-title"></section>
+          <section id="pending-panel" class="panel pending-panel" aria-labelledby="pending-title"></section>
+          <section id="log-panel" class="panel log-panel" aria-labelledby="log-title"></section>
+        </aside>
+      </div>
+
+      <div class="order-bar" id="order-bar" aria-label="签发命令">
+        <div class="order-inner">
+          <div class="order-selection">
+            <span class="order-kicker">待签文件</span>
+            <span id="order-title" class="order-title">从上方选择一项决策</span>
+            <span id="order-meta" class="order-meta">点击决策文件查看代价</span>
+          </div>
+          <div class="order-actions">
+            <button id="btn-end-round" class="btn btn-ghost btn-end" type="button">结束本回合</button>
+            <button id="btn-issue" class="btn btn-primary btn-issue" type="button" disabled>
+              <span id="issue-label">签发命令</span>
+              <span id="issue-cost" class="issue-cost">—</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 结局 -->
+    <section id="screen-ending" class="screen ending-screen" aria-label="阶段结局" hidden></section>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="js/events.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/review.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
