@@ -1,0 +1,12 @@
+# Test artifacts
+tests/.edge-profile/
+tests/screenshots/
+
+# Local legacy archive (not part of the game or Pages artifact)
+css.zip
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
