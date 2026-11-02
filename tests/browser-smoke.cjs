@@ -19,7 +19,7 @@ const PAGE_URL = process.env.PAGE_URL || pathToFileURL(path.join(ROOT, 'index.ht
 const SEQUENCE = {
   1: ['aid_call', 'address'],
   2: ['stay', 'record'],
-  3: ['air_defense'],
+  3: ['block_runway'],
   4: ['curfew', 'arm_citizens'],
   5: ['delegate'],
   6: ['talks'],
@@ -216,6 +216,14 @@ async function main() {
       await sleep(80);
     };
 
+    const authorizeAll = async function () {
+      for (let index = 0; index < 5; index += 1) {
+        const hasIssued = await evaluate(cdp, '!!document.querySelector("#command-panel [data-authorize]")');
+        if (!hasIssued) return;
+        await click('#command-panel [data-authorize]');
+      }
+    };
+
     const keyPress = async function (key, code, virtualKey) {
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: key, code: code, windowsVirtualKeyCode: virtualKey });
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: key, code: code, windowsVirtualKeyCode: virtualKey });
@@ -342,12 +350,15 @@ async function main() {
     console.log('\n[4] 第一夜结算与延迟后果');
     const beforeEnd = await savedState();
     const event1 = await evaluate(cdp, 'window.LZS.getEvent(JSON.parse(localStorage.getItem("lzs_save_v1")).state)');
+    const firstChoiceDef = await evaluate(cdp, 'window.LZS.getChoice(window.LZS.getEvent(JSON.parse(localStorage.getItem("lzs_save_v1")).state), ' + JSON.stringify(firstChoice) + ')');
+    await authorizeAll();
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("btn-end-round").disabled'); }, 5000);
     await click('#btn-end-round');
     await waitFor(function () {
       return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")');
     }, 5000);
     state = await savedState();
-    assert(state.pressure === beforeEnd.pressure + event1.pressureRise, '战争压力按事件上升');
+    assert(state.pressure === beforeEnd.pressure + event1.pressureRise + (firstChoiceDef.effects.pressure || 0), '战争压力按事件与命令成本上升');
     assert(state.phase === 'interlude', '结算后进入夜间态势');
     await sleep(1000);
     assert(await evaluate(cdp, 'LZS_AUDIO.getTheme() === "night"') && audioRequests.some(function(url){return /night\.ogg(?:$|\?)/.test(url);}), '夜间平滑切换并加载夜间主题');
@@ -366,6 +377,7 @@ async function main() {
     console.log('\n[5] 互斥命令与完整一局（固定策略）');
     await click('.choice-card[data-choice-id="stay"]');
     await click('#btn-issue');
+    await authorizeAll();
     const conflictBefore = await savedState();
     assert(await evaluate(cdp, 'document.querySelector(".choice-card[data-choice-id=\\"relocate\\"]").classList.contains("is-conflict")'), 'UI 将转移命令标为互斥');
     assert(await evaluate(cdp, 'document.querySelector(".choice-card[data-choice-id=\\"relocate\\"] .is-conflict-note").textContent.includes("留在班科夫街")'), '互斥说明指出冲突命令与原因');
@@ -378,7 +390,7 @@ async function main() {
     await click('#btn-continue');
     await waitFor(function () { return evaluate(cdp, '!!document.querySelector(".choice-card[data-choice-id=\\"relocate\\"]")'); }, 5000);
     assert(await evaluate(cdp, 'document.querySelector(".choice-card[data-choice-id=\\"relocate\\"]").classList.contains("is-conflict")'), '刷新恢复后互斥状态保持');
-    let sawDelayedPressureSummary = false;
+    let sawDelayedEffect = false;
     for (let round = 2; round <= 7; round += 1) {
       state = await savedState();
       if (state.phase === 'ending') break;
@@ -395,6 +407,7 @@ async function main() {
         if (state.phase === 'ending') break;
       }
       if (state.phase === 'ending') break;
+      await authorizeAll();
       assert(await evaluate(cdp, '!document.getElementById("btn-end-round").disabled'), '第 ' + round + ' 回合可结束');
       await click('#btn-end-round');
       const ended = await waitFor(async function () {
@@ -411,16 +424,17 @@ async function main() {
           const s = JSON.parse(localStorage.getItem('lzs_save_v1')).state;
           return {
             pressure: s.interlude.pressure,
+            delayedCount: (s.interlude.delayed || []).length,
             text: document.querySelector('.interlude-pressure').textContent
           };
         })()`);
+        if (pressureView.delayedCount) sawDelayedEffect = true;
         assert(pressureView.pressure.after - pressureView.pressure.before === pressureView.pressure.rise + pressureView.pressure.delayed,
           '第 ' + round + ' 夜压力摘要满足 before + rise + delayed = after');
         assert(pressureView.text.includes('战场 +' + pressureView.pressure.rise), '第 ' + round + ' 夜显示战场压力上升');
         if (pressureView.pressure.delayed) {
           const delayedText = pressureView.pressure.delayed > 0 ? '+' + pressureView.pressure.delayed : String(pressureView.pressure.delayed);
           assert(pressureView.text.includes('延迟 ' + delayedText), '第 ' + round + ' 夜显示延迟压力');
-          sawDelayedPressureSummary = true;
         }
         if (round === 2) await screenshot('05-interlude-round2.png');
         await click('#modal-root .modal-actions .btn-primary');
@@ -435,7 +449,7 @@ async function main() {
       }
     }
 
-    assert(sawDelayedPressureSummary, '至少一夜展示延迟压力，且与总压力变化一致');
+    assert(sawDelayedEffect, '至少一夜展示来自命令或决策的延迟后果');
 
     console.log('\n[6] 结局页');
     await waitFor(function () {
@@ -547,6 +561,79 @@ async function main() {
       }
     }
     assert(displayedChoices === 29, '全部 29 项决策均显示并可选择', String(displayedChoices));
+    await evaluate(cdp, 'LZS.saveGame(' + JSON.stringify(mid) + ')');
+
+    console.log('\n[8c] 情报桌、命令生命周期与跨日阻塞');
+    await setViewport(1280, 900, false);
+    await evaluate(cdp, 'localStorage.removeItem("lzs_save_v1")');
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await sleep(300);
+    await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-start")'); }, 15000);
+    await click('#btn-start');
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
+    const apBeforeIntel = (await savedState()).ap;
+    await click('#btn-ops');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root #ops-body [data-intel-category]")'); }, 5000);
+    assert((await evaluate(cdp, 'document.querySelectorAll("[data-ops-tab]").length')) === 4, '幕僚台有情报/命令/机构/沟通四个栏目');
+    assert((await evaluate(cdp, 'document.querySelectorAll("[data-intel-category]").length')) === 6, '情报桌覆盖六个来源类别');
+    const readState = await savedState();
+    assert(readState.ap === apBeforeIntel, '阅读情报不扣 AP');
+    assert(readState.intelState && Object.keys(readState.intelState).some(function (id) { return readState.intelState[id].read; }), '打开报告即记录已读');
+    await click('[data-pin]');
+    const pinned = await savedState();
+    assert(Object.keys(pinned.intelState).some(function (id) { return pinned.intelState[id].pinned; }), '情报可以收藏且写入存档');
+    await screenshot('11-ops-intel-desktop.png');
+    await click('#modal-root .modal-actions .btn');
+
+    await click('.choice-card[data-choice-id="mobilize"]');
+    await click('#btn-issue');
+    let controlled = await savedState();
+    assert(controlled.ap === 1 && controlled.commands.some(function (command) { return command.choiceId === 'mobilize' && command.status === 'issued'; }), '2 AP 命令签发后进入待授权');
+    await click('#command-panel [data-authorize]');
+    controlled = await savedState();
+    assert(controlled.commands.some(function (command) { return command.choiceId === 'mobilize' && command.status === 'executing'; }), '授权后命令进入执行机构');
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await sleep(300);
+    await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue")'); }, 15000);
+    await click('#btn-continue');
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden'); }, 5000);
+    controlled = await savedState();
+    assert(controlled.commands.some(function (command) { return command.choiceId === 'mobilize' && command.status === 'executing'; }), '刷新后执行中命令与生命周期保持');
+    await click('#btn-ops');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root [data-ops-tab=\\"commands\\"]")'); }, 5000);
+    await click('[data-ops-tab="commands"]');
+    assert(await evaluate(cdp, 'document.querySelector(".lifecycle") && document.querySelectorAll(".lifecycle span").length === 5 && document.body.textContent.includes("签署全国总动员令")'), '命令追踪展示五阶段与跨日命令');
+    await screenshot('12-ops-command-desktop.png');
+    await click('#modal-root .modal-actions .btn');
+    await click('#btn-end-round');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.querySelector("#modal-root .modal-card").textContent.includes("阻塞")'), '跨部门命令夜间因未召集而阻塞');
+    await click('#modal-root .modal-actions .btn-primary');
+    await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    const blocked = await savedState();
+    assert(blocked.phase === 'briefing' && blocked.round === 2 && blocked.commands.some(function (command) { return command.choiceId === 'mobilize' && command.status === 'blocked'; }), '阻塞状态跨日保留');
+    const pendingBeforeFollow = blocked.pending.length;
+    const statsBeforeFollow = Object.assign({}, blocked.stats);
+    assert(!(await evaluate(cdp, 'document.querySelector("#command-panel [data-followup]") ? document.querySelector("#command-panel [data-followup]").disabled : true')), '次日可对阻塞命令跟进');
+    await click('#command-panel [data-followup]');
+    const followed = await savedState();
+    const followedCommand = followed.commands.filter(function (command) { return command.choiceId === 'mobilize'; })[0];
+    assert(followed.ap === blocked.ap - 1 && followedCommand.status === 'awaiting_feedback', '跟进消耗 1 AP 并解除阻塞、开始结算');
+    assert(followedCommand.effectsApplied && followed.pending.length > pendingBeforeFollow, '跟进只结算一次并登记延迟后果');
+    assert(!Object.keys(statsBeforeFollow).every(function (key) { return followed.stats[key] === statsBeforeFollow[key]; }), '命令结算产生实际国家状态变化');
+
+    await click('#btn-ops');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root [data-ops-tab=\\"intel\\"]")'); }, 5000);
+    const beforeInquiry = (await savedState()).ap;
+    const statsBeforeInquiry = Object.assign({}, (await savedState()).stats);
+    const inquiryId = await evaluate(cdp, 'document.querySelector("[data-inquire]").getAttribute("data-inquire")');
+    await click('[data-inquire]');
+    const inquired = await savedState();
+    assert(inquired.ap === beforeInquiry - 1, '追问情报消耗 1 AP');
+    assert(inquired.intelState[inquiryId].inquired, '追问结果记录在情报台账');
+    assert(Object.keys(statsBeforeInquiry).every(function (key) { return inquired.stats[key] === statsBeforeInquiry[key]; }), '追问不直接修改国家状态');
+    await click('#modal-root .modal-actions .btn');
+    assert(await evaluate(cdp, 'document.querySelectorAll("#toast-root .toast").length === 1'), '情报与命令操作不叠加通知');
     await evaluate(cdp, 'LZS.saveGame(' + JSON.stringify(mid) + ')');
 
     console.log('\n[9] 320 / 360 / 390 / 430 手机端与真实触摸事件');

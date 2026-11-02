@@ -9,10 +9,27 @@
 
   const EVENTS = root.LZS_EVENTS || [];
   const META = root.LZS_META || {};
-  const VERSION = 1;
+  const INTEL = root.LZS_INTEL || { categories: [], agencies: [], communications: [] };
+  const VERSION = 2;
   const SAVE_KEY = 'lzs_save_v1';
+  const BACKUP_KEY = 'lzs_save_v1_legacy_backup';
   const AP_MAX = META.apPerRound || 3;
   const FINAL_ROUND = EVENTS.length;
+  const COMMAND_STATUSES = ['issued', 'executing', 'blocked', 'awaiting_feedback', 'completed'];
+  const COMMAND_LABELS = {
+    issued: '已签发', executing: '已接收 · 执行中', blocked: '遇到阻塞',
+    awaiting_feedback: '等待反馈', completed: '已完成'
+  };
+  const CHOICE_AGENCY = {
+    address: 'communications', mobilize: 'general_staff', aid_call: 'foreign', disperse: 'office',
+    stay: 'office', relocate: 'office', split: 'office', record: 'communications',
+    counterattack: 'general_staff', block_runway: 'general_staff', air_defense: 'general_staff',
+    city_defense: 'general_staff', curfew: 'interior', arm_citizens: 'interior', bunker: 'office',
+    unity_gov: 'office', security_rule: 'interior', south: 'general_staff', east: 'general_staff',
+    delegate: 'general_staff', firepower: 'general_staff', eu: 'foreign', weapons: 'foreign',
+    talks: 'foreign', refuse: 'foreign', logistics: 'logistics', evacuate: 'interior',
+    requisition: 'logistics', speech: 'communications'
+  };
 
   const STAT_KEYS = ['gov', 'army', 'kyiv', 'will', 'intl', 'reserve', 'safety'];
   const STAT_META = {
@@ -146,6 +163,94 @@
     });
   }
 
+  function defaultAgencies() {
+    const agencies = {};
+    INTEL.agencies.forEach(function (agency) {
+      agencies[agency.id] = { coordination: 50, workload: 0, lastActionRound: null };
+    });
+    return agencies;
+  }
+
+  function getAgency(id) {
+    return INTEL.getAgency ? INTEL.getAgency(id) : null;
+  }
+
+  function agencyForChoice(choice) {
+    return CHOICE_AGENCY[choice.id] || 'office';
+  }
+
+  function needsCoordination(choice) {
+    const affected = STAT_KEYS.filter(function (key) { return !!choice.effects && !!choice.effects[key]; }).length;
+    return choice.ap >= 2 || affected >= 5;
+  }
+
+  function activeCommands(state) {
+    return (state.commands || []).filter(function (command) {
+      return command.status !== 'completed';
+    });
+  }
+
+  function findCommand(state, id) {
+    return (state.commands || []).filter(function (command) { return command.id === id; })[0] || null;
+  }
+
+  function addCommandLog(state, command, title, text) {
+    addLog(state, 'command', title, text);
+    if (command) command.lastNote = title;
+  }
+
+  function getIntelReports(state) {
+    const event = getEvent(state);
+    if (!event) return [];
+    const alarms = alarmMapLocal(getAlarms(state));
+    const baseTime = event.dateLabel + ' · ' + event.time;
+    return INTEL.categories.map(function (category, index) {
+      const id = event.id + ':' + category.id;
+      const saved = (state.intelState && state.intelState[id]) || {};
+      const values = category.stats.map(function (key) { return { key: key, value: state.stats[key] }; });
+      const flagged = category.stats.filter(function (key) { return !!alarms[key]; });
+      const min = Math.min.apply(null, values.map(function (item) { return item.value; }));
+      const status = flagged.length ? (flagged.some(function (key) { return alarms[key].level === 'critical'; }) ? '危急' : '承压') : min >= 60 ? '可用' : '受限';
+      const known = event.known[index % event.known.length];
+      const secondary = event.known[(index + 1) % event.known.length];
+      const unknown = event.unknown[index % event.unknown.length];
+      const unknown2 = event.unknown[(index + 1) % event.unknown.length];
+      const inquiryKnown = event.known[(index + 2) % event.known.length];
+      return {
+        id: id,
+        eventId: event.id,
+        category: category.id,
+        label: category.label,
+        kicker: category.kicker,
+        source: category.source,
+        time: baseTime,
+        status: status,
+        values: values,
+        confidence: event.intel.level,
+        confidenceNote: category.confidenceNote,
+        focus: category.focus,
+        confirmed: [known, secondary],
+        unconfirmed: [unknown, unknown2],
+        relatedChoiceIds: event.choices.map(function (choice) { return choice.id; }),
+        read: !!saved.read,
+        pinned: !!saved.pinned,
+        inquired: !!saved.inquired,
+        inquiry: saved.inquired ? '已追问：' + category.inquiry + ' 模拟回报：' + inquiryKnown + '；仍未确认：' + unknown2 : category.inquiry,
+        disclaimer: '来源角色与文电均为游戏模拟抽象，不是真实机构文件。'
+      };
+    });
+  }
+
+  function alarmMapLocal(alarms) {
+    const map = {};
+    (alarms || []).forEach(function (alarm) { map[alarm.key] = alarm; });
+    return map;
+  }
+
+  function getIntelReport(state, id) {
+    return getIntelReports(state).filter(function (report) { return report.id === id; })[0] || null;
+  }
+
   function createGame() {
     const stats = {};
     STAT_KEYS.forEach(function (key) {
@@ -153,6 +258,7 @@
     });
     const state = {
       version: VERSION,
+      schemaVersion: 2,
       round: 1,
       ap: AP_MAX,
       apMax: AP_MAX,
@@ -161,15 +267,22 @@
       flags: {},
       executed: [],
       choices: [],
+      commands: [],
+      effects: [],
+      agencies: defaultAgencies(),
+      intelState: {},
+      coordinationThisRound: {},
+      communicationsThisRound: {},
       pending: [],
       resolved: [],
+      lastSettledRound: 0,
       log: [],
       phase: 'briefing',
       interlude: null,
       ending: null,
       startedAt: new Date().toISOString()
     };
-    addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 3 点注意力，用来决定这个国家先处理什么。');
+    addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 3 点注意力，用来决定这个国家先处理什么。信息可以免费阅读，追问与协调会占用注意力。');
     return state;
   }
 
@@ -201,7 +314,7 @@
     return { deltas: deltas, pressureDelta: pressureDelta };
   }
 
-  function scheduleDelayed(state, event, choice) {
+  function scheduleDelayed(state, event, choice, commandId) {
     if (!choice.delayed || !choice.delayed.length) return [];
     const scheduled = [];
     choice.delayed.forEach(function (item, index) {
@@ -210,6 +323,7 @@
         id: event.id + ':' + choice.id + ':' + index,
         sourceEventId: event.id,
         sourceChoiceId: choice.id,
+        sourceCommandId: commandId || null,
         sourceLabel: choice.title,
         dueRound: dueRound,
         label: item.label,
@@ -217,9 +331,41 @@
         effects: Object.assign({}, item.effects || {})
       };
       state.pending.push(record);
+      state.effects.push({
+        id: 'delayed:' + record.id + ':r' + dueRound,
+        commandId: commandId || null,
+        kind: 'delayed',
+        status: 'pending',
+        dueRound: dueRound,
+        issuedRound: state.round,
+        label: item.label
+      });
       scheduled.push(record);
     });
     return scheduled;
+  }
+
+  function applyImmediateRecord(state, command, choice) {
+    const effectId = command.id + ':immediate';
+    const existing = state.effects.filter(function (item) { return item.id === effectId; })[0];
+    if (existing && existing.status === 'applied') {
+      return { deltas: existing.deltas || {}, pressureDelta: existing.pressureDelta || 0 };
+    }
+    const result = applyEffectValues(state, choice.effects);
+    if (choice.flags && choice.flags.length) {
+      choice.flags.forEach(function (flag) { state.flags[flag] = true; });
+    }
+    state.effects.push({
+      id: effectId,
+      commandId: command.id,
+      kind: 'immediate',
+      status: 'applied',
+      appliedRound: state.round,
+      effects: Object.assign({}, choice.effects),
+      deltas: result.deltas,
+      pressureDelta: result.pressureDelta
+    });
+    return result;
   }
 
   function formatDeltaText(deltas, pressureDelta) {
@@ -233,6 +379,255 @@
       parts.push('战争压力' + (pressureDelta > 0 ? ' +' : ' ') + pressureDelta);
     }
     return parts.length ? parts.join('；') : '状态未发生可测量的变化';
+  }
+
+  function issueCommand(state, choiceId, options) {
+    if (!state || state.phase !== 'briefing') {
+      return { ok: false, error: '当前阶段不能签发命令。', code: 'PHASE' };
+    }
+    const event = getEvent(state);
+    const choice = getChoice(event, choiceId);
+    if (!choice) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
+    const status = getChoiceStatus(state, choiceId);
+    if (!status.canIssue) {
+      const code = status.state === 'issued' ? 'DUPLICATE' : status.state === 'conflict' ? 'CONFLICT' : status.state === 'ap' ? 'AP' : 'UNAVAILABLE';
+      return { ok: false, error: status.message, code: code, conflict: status.conflict };
+    }
+    const id = 'r' + state.round + ':' + event.id + ':' + choice.id;
+    if (findCommand(state, id)) return { ok: false, error: '这项命令已经建档。', code: 'DUPLICATE' };
+    const agency = agencyForChoice(choice);
+    const command = {
+      id: id,
+      kind: 'authorization',
+      round: state.round,
+      dateLabel: event.dateLabel,
+      eventId: event.id,
+      choiceId: choice.id,
+      title: choice.title,
+      ap: choice.ap,
+      agency: agency,
+      executorId: agency,
+      status: 'issued',
+      authorizedAt: null,
+      requiredCoordination: needsCoordination(choice),
+      coordinated: !!state.coordinationThisRound[agency],
+      delegated: false,
+      effectsApplied: false,
+      blockedReason: null,
+      followedRounds: [],
+      createdAt: new Date().toISOString()
+    };
+    state.ap -= choice.ap;
+    state.executed.push(choice.id);
+    state.commands.push(command);
+    state.choices.push({
+      round: state.round,
+      dateLabel: event.dateLabel,
+      eventId: event.id,
+      eventTitle: event.title,
+      choiceId: choice.id,
+      commandId: command.id,
+      label: choice.title,
+      ap: choice.ap,
+      agency: agency,
+      status: 'issued',
+      deltas: {},
+      pressureDelta: 0,
+      scheduled: []
+    });
+    addCommandLog(state, command, '签发：' + choice.title, '命令已建档并交给' + (getAgency(agency) ? getAgency(agency).label : '总统办公室') + '。尚未授权执行。');
+    return { ok: true, command: command, choice: choice };
+  }
+
+  function authorizeCommand(state, commandId, executorId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能授权。', code: 'PHASE' };
+    const command = findCommand(state, commandId);
+    if (!command) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
+    if (command.status !== 'issued') return { ok: false, error: '这项命令不在待授权状态。', code: 'STATUS' };
+    const executor = executorId && getAgency(executorId) ? executorId : command.agency;
+    command.executorId = executor;
+    command.agency = executor;
+    command.status = 'executing';
+    command.authorizedAt = new Date().toISOString();
+    if (state.agencies[executor]) {
+      state.agencies[executor].workload += 1;
+      state.agencies[executor].lastActionRound = state.round;
+    }
+    addCommandLog(state, command, '授权：' + command.title, '总统授权由' + (getAgency(executor) ? getAgency(executor).label : executor) + '执行。本夜将回报接收与执行情况。');
+    return { ok: true, command: command };
+  }
+
+  function completeCommand(command, state) {
+    if (command.status === 'completed') return;
+    command.status = 'completed';
+    command.completedRound = state.round;
+    if (state.agencies[command.executorId] && state.agencies[command.executorId].workload > 0) {
+      state.agencies[command.executorId].workload -= 1;
+    }
+  }
+
+  function executeCommandNow(state, command, source) {
+    if (!command || command.effectsApplied) return { ok: true, command: command, deltas: {}, pressureDelta: 0 };
+    if (command.requiredCoordination && !command.coordinated && !state.coordinationThisRound[command.agency]) {
+      command.status = 'blocked';
+      command.blockedReason = '跨部门执行条件未满足：需要总统召集' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '，或把任务委派出去。';
+      addCommandLog(state, command, '阻塞：' + command.title, command.blockedReason);
+      return { ok: true, command: command, blocked: true, deltas: {}, pressureDelta: 0 };
+    }
+    const event = EVENTS.filter(function (item) { return item.id === command.eventId; })[0];
+    const choice = event ? getChoice(event, command.choiceId) : null;
+    if (!choice) return { ok: false, error: '命令来源数据缺失。', code: 'EVENT' };
+    const result = applyImmediateRecord(state, command, choice);
+    const scheduled = scheduleDelayed(state, event, choice, command.id);
+    command.effectsApplied = true;
+    command.status = 'awaiting_feedback';
+    command.result = { deltas: result.deltas, pressureDelta: result.pressureDelta, scheduled: scheduled.map(function (item) { return item.label; }) };
+    command.lastNote = '执行完成，等待总统跟进或下一日反馈。';
+    const record = state.choices.filter(function (item) { return item.commandId === command.id; })[0];
+    if (record) {
+      record.deltas = result.deltas;
+      record.pressureDelta = result.pressureDelta;
+      record.scheduled = command.result.scheduled;
+      record.status = command.status;
+    }
+    addLog(state, 'execution', (source === 'followup' ? '跟进执行：' : '执行回报：') + command.title,
+      '执行机构：' + (getAgency(command.agency) ? getAgency(command.agency).label : command.agency) + '。' + formatDeltaText(result.deltas, result.pressureDelta));
+    return result;
+  }
+
+  function followUpCommand(state, commandId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能跟进。', code: 'PHASE' };
+    if (state.ap < 1) return { ok: false, error: '跟进需要 1 AP。', code: 'AP' };
+    const command = findCommand(state, commandId);
+    if (!command) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
+    if (command.status === 'completed') return { ok: false, error: '这项命令已经完成。', code: 'STATUS' };
+    if (command.followedRounds.indexOf(state.round) !== -1) return { ok: false, error: '这项命令本回合已经跟进过。', code: 'DUPLICATE' };
+    if (command.status === 'issued') return { ok: false, error: '命令尚未授权或委派，无法检查执行。', code: 'STATUS' };
+    state.ap -= 1;
+    command.followedRounds.push(state.round);
+    let result = { deltas: {}, pressureDelta: 0 };
+    if (command.status === 'blocked' || command.status === 'executing') {
+      command.status = 'executing';
+      command.blockedReason = null;
+      command.coordinated = true;
+      result = executeCommandNow(state, command, 'followup');
+      if (result.ok && !result.blocked) {
+        addCommandLog(state, command, '跟进放行：' + command.title, '总统亲自跟进后，阻塞被解除，命令开始执行。');
+      }
+    } else if (command.status === 'awaiting_feedback') {
+      completeCommand(command, state);
+      addCommandLog(state, command, '跟进完成：' + command.title, '执行反馈已核验，命令归档为已完成；不会重复结算原效果。');
+    }
+    const collapse = checkCollapse(state);
+    return { ok: true, command: command, deltas: result.deltas || {}, pressureDelta: result.pressureDelta || 0, ending: collapse ? finalizeEnding(state, collapse) : null };
+  }
+
+  function delegateCommand(state, commandId, agencyId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能委派。', code: 'PHASE' };
+    if (state.ap < 1) return { ok: false, error: '委派需要 1 AP。', code: 'AP' };
+    const command = findCommand(state, commandId);
+    if (!command) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
+    if (['issued', 'blocked', 'executing'].indexOf(command.status) === -1) return { ok: false, error: '这项命令当前不能委派。', code: 'STATUS' };
+    if (!agencyId || !getAgency(agencyId)) return { ok: false, error: '没有选择接收机构。', code: 'AGENCY' };
+    state.ap -= 1;
+    command.delegated = true;
+    command.coordinated = true;
+    command.executorId = agencyId;
+    command.agency = agencyId;
+    if (command.status !== 'executing') command.status = 'executing';
+    command.blockedReason = null;
+    if (state.agencies[agencyId]) {
+      state.agencies[agencyId].workload += 1;
+      state.agencies[agencyId].lastActionRound = state.round;
+    }
+    addCommandLog(state, command, '委派：' + command.title, '任务改由' + (getAgency(agencyId) ? getAgency(agencyId).label : agencyId) + '持续处理，总统保留跟进权。');
+    return { ok: true, command: command };
+  }
+
+  function coordinateAgency(state, agencyId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能召集。', code: 'PHASE' };
+    if (state.ap < 1) return { ok: false, error: '召集协调会需要 1 AP。', code: 'AP' };
+    if (!getAgency(agencyId) || !state.agencies[agencyId]) return { ok: false, error: '未找到这个机构。', code: 'AGENCY' };
+    if (state.coordinationThisRound[agencyId]) return { ok: false, error: '本回合已经召集过这个机构。', code: 'DUPLICATE' };
+    state.ap -= 1;
+    state.coordinationThisRound[agencyId] = true;
+    state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination + 8, 0, 100);
+    state.agencies[agencyId].lastActionRound = state.round;
+    state.commands.forEach(function (command) {
+      if (command.round === state.round && command.agency === agencyId && ['issued', 'executing'].indexOf(command.status) !== -1) command.coordinated = true;
+    });
+    addLog(state, 'coordination', '召集协调：' + getAgency(agencyId).label, '总统亲自主持跨部门协调，相关命令本回合不再因协调条件阻塞；机构协调余量 +8。');
+    return { ok: true, agencyId: agencyId };
+  }
+
+  function communicate(state, channelId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能沟通。', code: 'PHASE' };
+    if (state.ap < 1) return { ok: false, error: '这次沟通需要 1 AP。', code: 'AP' };
+    const channel = (INTEL.communications || []).filter(function (item) { return item.id === channelId; })[0];
+    if (!channel) return { ok: false, error: '未找到这个沟通渠道。', code: 'CHANNEL' };
+    if (state.communicationsThisRound[channelId]) return { ok: false, error: '本回合已经使用过这个渠道。', code: 'DUPLICATE' };
+    state.ap -= 1;
+    state.communicationsThisRound[channelId] = true;
+    const id = 'comm:r' + state.round + ':' + channelId;
+    const dueRound = Math.min(FINAL_ROUND, state.round + 1);
+    const command = {
+      id: id, kind: 'communication', round: state.round, title: channel.label,
+      agency: channel.agency, executorId: channel.agency, status: 'awaiting_feedback',
+      ap: 1, effectsApplied: true, requiredCoordination: false, coordinated: true,
+      followedRounds: [], result: { deltas: {}, pressureDelta: 0, scheduled: [channel.note] }
+    };
+    state.commands.push(command);
+    state.pending.push({
+      id: id, sourceEventId: 'communication', sourceChoiceId: channelId,
+      sourceCommandId: id, sourceLabel: channel.label, dueRound: dueRound,
+      label: channel.label + ' · 反馈', note: channel.note, effects: Object.assign({}, channel.effects)
+    });
+    state.effects.push({
+      id: 'delayed:' + id + ':r' + dueRound, commandId: id, kind: 'communication',
+      status: 'pending', dueRound: dueRound, issuedRound: state.round, label: channel.label
+    });
+    addLog(state, 'communication', '沟通：' + channel.label, channel.note + ' 实际状态变化将在下一夜结算。');
+    return { ok: true, command: command };
+  }
+
+  function markIntelRead(state, reportId) {
+    if (!state || !reportId) return { ok: false };
+    if (!state.intelState[reportId]) state.intelState[reportId] = { read: false, pinned: false, inquired: false };
+    state.intelState[reportId].read = true;
+    return { ok: true, report: getIntelReport(state, reportId) };
+  }
+
+  function toggleIntelPin(state, reportId) {
+    if (!state || !reportId) return { ok: false };
+    if (!state.intelState[reportId]) state.intelState[reportId] = { read: false, pinned: false, inquired: false };
+    state.intelState[reportId].pinned = !state.intelState[reportId].pinned;
+    return { ok: true, pinned: state.intelState[reportId].pinned };
+  }
+
+  function inquireIntel(state, reportId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能追问。', code: 'PHASE' };
+    if (state.ap < 1) return { ok: false, error: '追问需要 1 AP。', code: 'AP' };
+    const report = getIntelReport(state, reportId);
+    if (!report) return { ok: false, error: '未找到这份情报。', code: 'NOT_FOUND' };
+    if (!state.intelState[reportId]) state.intelState[reportId] = { read: true, pinned: false, inquired: false };
+    if (state.intelState[reportId].inquired) return { ok: false, error: '这份情报已经追问过。', code: 'DUPLICATE' };
+    state.ap -= 1;
+    state.intelState[reportId].inquired = true;
+    state.intelState[reportId].read = true;
+    addLog(state, 'intel', '追问：' + report.label, report.source + '提交补充说明；额外信息进入情报桌，未直接改变国家数值。');
+    return { ok: true, report: getIntelReport(state, reportId) };
+  }
+
+  function getCommandCounts(state) {
+    const counts = { total: 0, active: 0, blocked: 0, awaiting: 0, completed: 0 };
+    (state.commands || []).forEach(function (command) {
+      counts.total += 1;
+      if (command.status === 'completed') counts.completed += 1;
+      else counts.active += 1;
+      if (command.status === 'blocked') counts.blocked += 1;
+      if (command.status === 'awaiting_feedback') counts.awaiting += 1;
+    });
+    return counts;
   }
 
   function applyChoice(state, choiceId) {
@@ -258,47 +653,22 @@
       return { ok: false, error: '注意力不足：这项决策需要 ' + choice.ap + ' AP。', code: 'AP' };
     }
 
-    state.ap -= choice.ap;
-    state.executed.push(choice.id);
-
-    const result = applyEffectValues(state, choice.effects);
-    if (choice.flags && choice.flags.length) {
-      choice.flags.forEach(function (flag) { state.flags[flag] = true; });
-    }
-    const scheduled = scheduleDelayed(state, event, choice);
-
-    const record = {
-      round: state.round,
-      dateLabel: event.dateLabel,
-      eventId: event.id,
-      eventTitle: event.title,
-      choiceId: choice.id,
-      label: choice.title,
-      ap: choice.ap,
-      deltas: result.deltas,
-      pressureDelta: result.pressureDelta,
-      scheduled: scheduled.map(function (item) { return item.label; })
-    };
-    state.choices.push(record);
-
-    addLog(
-      state,
-      'decision',
-      '签发：' + choice.title,
-      '消耗 ' + choice.ap + ' AP。' + formatDeltaText(result.deltas, result.pressureDelta)
-    );
-
+    const issued = issueCommand(state, choiceId);
+    if (!issued.ok) return issued;
+    issued.command.coordinated = true;
+    const authorized = authorizeCommand(state, issued.command.id);
+    if (!authorized.ok) return authorized;
+    const result = executeCommandNow(state, issued.command, 'legacy');
     let ending = checkCollapse(state);
-    if (ending) {
-      return { ok: true, choice: choice, deltas: result.deltas, pressureDelta: result.pressureDelta, ending: finalizeEnding(state, ending) };
-    }
+    if (ending) ending = finalizeEnding(state, ending);
     return {
       ok: true,
       choice: choice,
-      deltas: result.deltas,
-      pressureDelta: result.pressureDelta,
+      command: issued.command,
+      deltas: result.deltas || {},
+      pressureDelta: result.pressureDelta || 0,
       available: getAvailableChoices(state).length,
-      ending: null
+      ending: ending || null
     };
   }
 
@@ -335,17 +705,27 @@
   }
 
   function resolveDueDelayed(state, round) {
-    const due = state.pending.filter(function (item) { return item.dueRound <= round; });
+    const seen = {};
+    (state.resolved || []).forEach(function (item) { seen[item.id] = true; });
+    const due = state.pending.filter(function (item) { return item.dueRound <= round && !seen[item.id]; });
     if (!due.length) return [];
     state.pending = state.pending.filter(function (item) { return item.dueRound > round; });
 
     return due.map(function (item) {
       const result = applyEffectValues(state, item.effects);
+      const effect = (state.effects || []).filter(function (entry) { return entry.id === 'delayed:' + item.id + ':r' + item.dueRound; })[0];
+      if (effect) {
+        effect.status = 'applied';
+        effect.appliedRound = round;
+        effect.deltas = result.deltas;
+        effect.pressureDelta = result.pressureDelta;
+      }
       const applied = {
         id: item.id,
         dueRound: item.dueRound,
         appliedRound: round,
         sourceEventId: item.sourceEventId,
+        sourceCommandId: item.sourceCommandId || null,
         sourceLabel: item.sourceLabel,
         label: item.label,
         note: item.note,
@@ -386,14 +766,53 @@
       return { ok: false, error: '当前阶段不能结束回合。', code: 'PHASE' };
     }
     if (!state.executed.length) {
-      return { ok: false, error: '至少签发一项决策，才能结束本回合。', code: 'NO_CHOICE' };
+      return { ok: false, error: '至少签发一项命令，才能结束本回合。', code: 'NO_CHOICE' };
+    }
+    if (state.lastSettledRound >= state.round) {
+      return { ok: false, error: '本回合已经结算过，不能重复。', code: 'DUPLICATE' };
     }
     const event = getEvent(state);
     if (!event) return { ok: false, error: '事件数据缺失。', code: 'EVENT' };
+    const unauthorized = (state.commands || []).filter(function (command) {
+      return command.round === state.round && command.status === 'issued';
+    });
+    if (unauthorized.length) {
+      return {
+        ok: false,
+        error: '还有 ' + unauthorized.length + ' 项命令没有授权或委派。请先处理，避免命令空转。',
+        code: 'UNAUTHORIZED',
+        commands: unauthorized
+      };
+    }
 
+    const commandResults = [];
+    const currentCommands = (state.commands || []).filter(function (command) {
+      return command.round === state.round && ['executing', 'blocked'].indexOf(command.status) !== -1;
+    });
+    for (let i = 0; i < currentCommands.length; i += 1) {
+      const command = currentCommands[i];
+      if (command.status === 'blocked') {
+        commandResults.push({ commandId: command.id, title: command.title, agency: command.agency, status: command.status, blockedReason: command.blockedReason, deltas: {}, pressureDelta: 0 });
+        continue;
+      }
+      const outcome = executeCommandNow(state, command, 'night');
+      commandResults.push({
+        commandId: command.id, title: command.title, agency: command.agency,
+        status: command.status, blockedReason: command.blockedReason,
+        deltas: outcome.deltas || {}, pressureDelta: outcome.pressureDelta || 0
+      });
+    }
+    state.lastSettledRound = state.round;
     const pressureBefore = state.pressure;
     const pressureRise = event.pressureRise;
     state.pressure = clamp(state.pressure + pressureRise, 0, 100);
+
+    let earlyEnding = checkCollapse(state);
+    if (earlyEnding) {
+      finalizeEnding(state, earlyEnding);
+      return { ok: true, ending: state.ending, commandResults: commandResults, delayed: [], attrition: {}, pressure: { before: pressureBefore, rise: pressureRise, after: state.pressure } };
+    }
+
     const attrition = calculateAttrition(state.pressure, state.flags);
     const attritionResult = applyEffectValues(state, attrition);
 
@@ -416,6 +835,7 @@
       return {
         ok: true,
         ending: state.ending,
+        commandResults: commandResults,
         pressure: { before: pressureBefore, rise: pressureRise, after: state.pressure },
         attrition: attritionResult.deltas
       };
@@ -424,6 +844,8 @@
     state.round += 1;
     state.ap = state.apMax;
     state.executed = [];
+    state.coordinationThisRound = {};
+    state.communicationsThisRound = {};
     const delayed = resolveDueDelayed(state, state.round);
 
     ending = checkCollapse(state);
@@ -432,6 +854,7 @@
       return {
         ok: true,
         ending: state.ending,
+        commandResults: commandResults,
         pressure: { before: pressureBefore, rise: pressureRise, after: state.pressure },
         attrition: attritionResult.deltas,
         delayed: delayed
@@ -454,6 +877,8 @@
       },
       attrition: attritionResult.deltas,
       delayed: delayed,
+      commandResults: commandResults,
+      blocked: commandResults.filter(function (item) { return item.status === 'blocked'; }),
       alarms: getAlarms(state),
       ap: state.ap
     };
@@ -463,7 +888,8 @@
       interlude: state.interlude,
       pressure: state.interlude.pressure,
       attrition: attritionResult.deltas,
-      delayed: delayed
+      delayed: delayed,
+      commandResults: commandResults
     };
   }
 
@@ -471,6 +897,9 @@
     if (!state || state.phase !== 'interlude') {
       return { ok: false, error: '当前没有待确认的夜间态势。', code: 'PHASE' };
     }
+    (state.commands || []).forEach(function (command) {
+      if (command.status === 'awaiting_feedback') completeCommand(command, state);
+    });
     state.phase = 'briefing';
     state.interlude = null;
     return { ok: true, event: getEvent(state) };
@@ -521,6 +950,9 @@
     ending.finalPressure = state.pressure;
     ending.finalRound = state.round;
     ending.keyChoices = state.choices.slice();
+    ending.commands = (state.commands || []).map(function (command) { return Object.assign({}, command); });
+    ending.commandSummary = getCommandCounts(state);
+    ending.agencies = JSON.parse(JSON.stringify(state.agencies || {}));
     ending.chain = state.resolved.slice();
     ending.disclaimer = META.disclaimer;
     ending.meta = {
@@ -733,6 +1165,17 @@
   function saveGame(state) {
     try {
       if (!root.localStorage) return false;
+      const existing = root.localStorage.getItem(SAVE_KEY);
+      if (existing) {
+        try {
+          const old = JSON.parse(existing);
+          if (old && old.version === 1 && !root.localStorage.getItem(BACKUP_KEY)) {
+            root.localStorage.setItem(BACKUP_KEY, existing);
+          }
+        } catch (ignore) {}
+      }
+      state.schemaVersion = 2;
+      state.version = VERSION;
       const payload = {
         version: VERSION,
         savedAt: new Date().toISOString(),
@@ -751,16 +1194,16 @@
       const raw = root.localStorage.getItem(SAVE_KEY);
       if (!raw) return null;
       const data = JSON.parse(raw);
-      if (!data || data.version !== VERSION || !data.state) return null;
-      const state = normalizeLoadedState(data.state);
+      if (!data || !data.state || (data.version !== 1 && data.version !== 2)) return null;
+      const state = normalizeLoadedState(data.state, data.version);
       if (!state) return null;
-      return { version: data.version, savedAt: data.savedAt, state: state };
+      return { version: data.version, migratedFrom: data.version === 1 ? 1 : null, savedAt: data.savedAt, state: state };
     } catch (error) {
       return null;
     }
   }
 
-  function normalizeLoadedState(input) {
+  function normalizeLoadedState(input, sourceVersion) {
     if (!input || typeof input !== 'object') return null;
     if (!Number.isInteger(input.round) || input.round < 1 || input.round > FINAL_ROUND) return null;
     if (!input.stats || typeof input.stats !== 'object') return null;
@@ -770,8 +1213,42 @@
       stats[key] = clamp(input.stats[key], 0, 100);
     });
     const phase = ['briefing', 'interlude', 'ending'].indexOf(input.phase) !== -1 ? input.phase : 'briefing';
+    const choices = Array.isArray(input.choices) ? input.choices : [];
+    const commands = Array.isArray(input.commands) ? input.commands.filter(function (command) {
+      return command && typeof command.id === 'string';
+    }).map(function (command) {
+      const copy = Object.assign({}, command);
+      if (COMMAND_STATUSES.indexOf(copy.status) === -1) copy.status = copy.effectsApplied ? 'awaiting_feedback' : 'issued';
+      if (!Array.isArray(copy.followedRounds)) copy.followedRounds = [];
+      if (copy.requiredCoordination === undefined) copy.requiredCoordination = false;
+      return copy;
+    }) : choices.map(function (record, index) {
+      const id = record.commandId || ('legacy:' + record.round + ':' + record.choiceId + ':' + index);
+      return {
+        id: id, kind: 'authorization', round: record.round, eventId: record.eventId,
+        choiceId: record.choiceId, title: record.label, ap: record.ap, agency: record.agency || 'office',
+        executorId: record.agency || 'office', status: 'completed', authorizedAt: null,
+        requiredCoordination: false, coordinated: true, delegated: false, effectsApplied: true,
+        blockedReason: null, followedRounds: [], completedRound: record.round,
+        result: { deltas: record.deltas || {}, pressureDelta: record.pressureDelta || 0 }
+      };
+    });
+    const seenCommands = {};
+    const uniqueCommands = commands.filter(function (command) {
+      if (seenCommands[command.id]) return false;
+      seenCommands[command.id] = true;
+      return true;
+    });
+    const agencies = defaultAgencies();
+    if (input.agencies && typeof input.agencies === 'object') {
+      Object.keys(input.agencies).forEach(function (id) {
+        if (agencies[id]) agencies[id] = Object.assign(agencies[id], input.agencies[id]);
+      });
+    }
     const state = {
       version: VERSION,
+      schemaVersion: 2,
+      migratedFrom: sourceVersion === 1 ? 1 : (input.migratedFrom || null),
       round: input.round,
       ap: clamp(input.ap, 0, AP_MAX),
       apMax: AP_MAX,
@@ -779,9 +1256,16 @@
       pressure: clamp(input.pressure, 0, 100),
       flags: input.flags && typeof input.flags === 'object' ? input.flags : {},
       executed: Array.isArray(input.executed) ? input.executed.filter(function (v) { return typeof v === 'string'; }) : [],
-      choices: Array.isArray(input.choices) ? input.choices : [],
+      choices: choices,
+      commands: uniqueCommands,
+      effects: Array.isArray(input.effects) ? input.effects : [],
+      agencies: agencies,
+      intelState: input.intelState && typeof input.intelState === 'object' ? input.intelState : {},
+      coordinationThisRound: input.coordinationThisRound && typeof input.coordinationThisRound === 'object' ? input.coordinationThisRound : {},
+      communicationsThisRound: input.communicationsThisRound && typeof input.communicationsThisRound === 'object' ? input.communicationsThisRound : {},
       pending: Array.isArray(input.pending) ? input.pending : [],
       resolved: Array.isArray(input.resolved) ? input.resolved : [],
+      lastSettledRound: Number.isInteger(input.lastSettledRound) ? input.lastSettledRound : Math.max(0, input.round - 1),
       log: Array.isArray(input.log) ? input.log.slice(-160) : [],
       phase: phase,
       interlude: input.interlude || null,
@@ -826,6 +1310,7 @@
   root.LZS = {
     version: VERSION,
     saveKey: SAVE_KEY,
+    backupKey: BACKUP_KEY,
     events: EVENTS,
     meta: META,
     statKeys: STAT_KEYS,
@@ -834,14 +1319,30 @@
     finalRound: FINAL_ROUND,
     thresholds: FINAL_THRESHOLDS,
     collapseLines: COLLAPSE_LINES,
+    intel: INTEL,
+    commandStatuses: COMMAND_STATUSES,
+    commandLabels: COMMAND_LABELS,
     createGame: createGame,
     getEvent: getEvent,
     getChoice: getChoice,
     getChoiceStatus: getChoiceStatus,
     getExclusiveConflict: getExclusiveConflict,
+    requiresCoordination: needsCoordination,
     getAvailableChoices: getAvailableChoices,
     getPressureForecast: getPressureForecast,
     getAlarms: getAlarms,
+    getIntelReports: getIntelReports,
+    getIntelReport: getIntelReport,
+    markIntelRead: markIntelRead,
+    toggleIntelPin: toggleIntelPin,
+    inquireIntel: inquireIntel,
+    getCommandCounts: getCommandCounts,
+    issueCommand: issueCommand,
+    authorizeCommand: authorizeCommand,
+    followUpCommand: followUpCommand,
+    delegateCommand: delegateCommand,
+    coordinateAgency: coordinateAgency,
+    communicate: communicate,
     applyChoice: applyChoice,
     endRound: endRound,
     continueFromInterlude: continueFromInterlude,

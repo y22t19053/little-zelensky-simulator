@@ -16,6 +16,7 @@ globalThis.localStorage = {
 };
 
 require('../js/events.js');
+require('../js/intel.js');
 require('../js/engine.js');
 
 const L = globalThis.LZS;
@@ -30,7 +31,7 @@ function test(name, fn) {
   } catch (error) {
     failed += 1;
     console.error('  FAIL ' + name);
-    console.error('       ' + (error && error.stack ? error.stack.split('\n').slice(0, 4).join('\n       ') : error));
+    console.error('       ' + (error && error.stack ? error.stack.split('\n').slice(0, 8).join('\n       ') : error));
   }
 }
 
@@ -432,6 +433,151 @@ test('压力预测与事件 pressureRise 一致', function () {
   assert.equal(forecast.rise, event.pressureRise);
   assert.equal(forecast.next, Math.min(100, state.pressure + event.pressureRise));
   assert.ok(forecast.attrition.kyiv < 0);
+});
+
+console.log('\n[v0.4 情报桌与总统操作]');
+test('六类情报桌齐备，阅读免费且追问只扣 AP、不改国家状态', function () {
+  const state = fresh();
+  const reports = L.getIntelReports(state);
+  assert.equal(reports.length, 6);
+  ['military', 'governance', 'local', 'diplomatic', 'logistics', 'society'].forEach(function (category) {
+    assert.ok(reports.some(function (report) { return report.category === category; }));
+  });
+  const apBefore = state.ap;
+  const statsBefore = Object.assign({}, state.stats);
+  const read = reports[0];
+  L.markIntelRead(state, read.id);
+  assert.equal(state.ap, apBefore, '阅读情报不应扣 AP');
+  const inquiry = L.inquireIntel(state, read.id);
+  assert.equal(inquiry.ok, true);
+  assert.equal(state.ap, apBefore - 1, '追问应扣 1 AP');
+  assert.deepEqual(state.stats, statsBefore, '追问不应直接改变国家状态');
+  assert.equal(L.inquireIntel(state, read.id).code, 'DUPLICATE', '同一情报不可重复追问');
+  assert.equal(state.ap, apBefore - 1, '重复追问不应再次扣 AP');
+});
+
+test('签发只扣 AP 并建立 issued 命令，授权后也不立即结算', function () {
+  const state = fresh();
+  const statsBefore = Object.assign({}, state.stats);
+  const issued = L.issueCommand(state, 'mobilize');
+  assert.equal(issued.ok, true);
+  assert.equal(issued.command.status, 'issued');
+  assert.equal(state.ap, 1, '2 AP 命令应立即扣除注意力');
+  assert.deepEqual(state.stats, statsBefore, '签发瞬间不应提前结算效果');
+  const authorized = L.authorizeCommand(state, issued.command.id);
+  assert.equal(authorized.ok, true);
+  assert.equal(issued.command.status, 'executing');
+  assert.deepEqual(state.stats, statsBefore, '授权也不应立即结算效果');
+  assert.equal(state.agencies[issued.command.agency].workload, 1);
+});
+
+test('跨部门命令在夜间阻塞，跟进解除后只结算一次', function () {
+  const state = fresh();
+  const issued = L.issueCommand(state, 'mobilize');
+  L.authorizeCommand(state, issued.command.id);
+  const armyBefore = state.stats.army;
+  const end = L.endRound(state);
+  assert.equal(end.ok, true);
+  assert.equal(issued.command.status, 'blocked', '未协调的跨部门命令应阻塞');
+  assert.ok(state.stats.army < armyBefore, '阻塞命令的自身效果不应结算，只有夜间侵蚀');
+  L.continueFromInterlude(state);
+  const armyAfterNight = state.stats.army;
+  const follow = L.followUpCommand(state, issued.command.id);
+  assert.equal(follow.ok, true);
+  assert.equal(issued.command.status, 'awaiting_feedback');
+  assert.equal(state.stats.army, Math.min(100, armyAfterNight + 8), '跟进放行后应结算一次命令效果');
+  assert.equal(L.followUpCommand(state, issued.command.id).code, 'DUPLICATE', '同一回合不可重复跟进');
+});
+
+test('召集协调满足跨部门条件，且每机构每回合只能一次', function () {
+  const state = fresh();
+  const issued = L.issueCommand(state, 'mobilize');
+  L.authorizeCommand(state, issued.command.id);
+  const agency = issued.command.agency;
+  assert.equal(L.coordinateAgency(state, agency).ok, true);
+  assert.equal(state.ap, 0);
+  assert.equal(issued.command.coordinated, true, '召集应把本轮相关命令标记为已协调');
+  state.ap = 1;
+  assert.equal(L.coordinateAgency(state, agency).code, 'DUPLICATE');
+  assert.equal(state.ap, 1, '重复召集不应扣 AP');
+});
+
+test('总统跟进命令消耗 1 AP，且跨日保留生命周期状态', function () {
+  const state = fresh();
+  const issued = L.issueCommand(state, 'address');
+  L.authorizeCommand(state, issued.command.id);
+  state.ap = 2;
+  const follow = L.followUpCommand(state, issued.command.id);
+  assert.equal(follow.ok, true);
+  assert.equal(state.ap, 1);
+  assert.equal(issued.command.status, 'awaiting_feedback');
+  L.deleteSave();
+  const emptyLoad = L.loadSavedGame();
+  assert.equal(emptyLoad, null, '未保存时不应凭空恢复');
+  assert.equal(L.saveGame(state), true);
+  const restored = L.loadSavedGame();
+  assert.ok(restored && restored.state);
+  const command = restored.state.commands.filter(function (item) { return item.id === issued.command.id; })[0];
+  assert.ok(command);
+  assert.equal(command.status, 'awaiting_feedback');
+});
+
+test('夜间结算后命令进入等待反馈，继续到下日不重复结算原效果', function () {
+  const state = fresh();
+  const issued = L.issueCommand(state, 'address');
+  L.authorizeCommand(state, issued.command.id);
+  L.coordinateAgency(state, issued.command.agency);
+  const statsBefore = Object.assign({}, state.stats);
+  const end = L.endRound(state);
+  assert.equal(end.ok, true);
+  assert.equal(issued.command.status, 'awaiting_feedback');
+  const immediateArmy = state.stats.army;
+  L.continueFromInterlude(state);
+  const nextRound = state.round;
+  assert.equal(issued.command.effectsApplied, true);
+  const round2 = L.issueCommand(state, 'record');
+  assert.equal(round2.ok, true);
+  L.authorizeCommand(state, round2.command.id);
+  const second = L.endRound(state);
+  assert.equal(second.ok, true);
+  assert.equal(issued.command.effectsApplied, true);
+  assert.equal(issued.command.status, 'completed', '旧命令在夜间确认后归档，不会重复执行');
+  assert.equal(state.lastSettledRound >= nextRound, true);
+});
+
+test('沟通渠道消耗 1 AP 并在下一夜建立延迟反馈', function () {
+  const state = fresh();
+  const result = L.communicate(state, 'public');
+  assert.equal(result.ok, true);
+  assert.equal(state.ap, 2);
+  assert.equal(result.command.status, 'awaiting_feedback');
+  assert.equal(state.pending.length, 1);
+  assert.equal(state.pending[0].dueRound, 2);
+  assert.equal(L.communicate(state, 'public').code, 'DUPLICATE');
+});
+
+test('v1 存档迁移为 v2 台账，保留旧决策且不重复结算', function () {
+  const state = fresh();
+  L.applyChoice(state, 'address');
+  const old = JSON.parse(JSON.stringify(state));
+  old.version = 1;
+  old.schemaVersion = 1;
+  delete old.commands;
+  delete old.effects;
+  delete old.agencies;
+  delete old.intelState;
+  delete old.coordinationThisRound;
+  delete old.communicationsThisRound;
+  delete old.lastSettledRound;
+  localStorage.setItem('lzs_save_v1', JSON.stringify({ version: 1, savedAt: new Date().toISOString(), state: old }));
+  const loaded = L.loadSavedGame();
+  assert.ok(loaded && loaded.state);
+  assert.equal(loaded.state.version, 2);
+  assert.equal(loaded.state.schemaVersion, 2);
+  assert.equal(loaded.state.commands.length, 1);
+  assert.equal(loaded.state.commands[0].status, 'completed');
+  assert.equal(loaded.state.choices.length, 1);
+  assert.deepEqual(loaded.state.stats, old.stats, '迁移不得重算旧状态');
 });
 
 console.log('\n----------------------------------------');

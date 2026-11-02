@@ -1,13 +1,13 @@
 {
   "name": "little-zelensky-simulator",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "A single-player, presidential-perspective crisis decision simulator set in the first week of the 2022 Russian invasion of Ukraine.",
   "scripts": {
     "test": "node tests/engine.test.cjs",
     "test:engine": "node tests/engine.test.cjs",
     "test:browser": "node tests/browser-smoke.cjs",
-    "check": "node --check js/events.js && node --check js/engine.js && node --check js/history.js && node --check js/review.js && node --check js/audio.js && node --check js/main.js"
+    "check": "node --check js/events.js && node --check js/intel.js && node --check js/engine.js && node --check js/history.js && node --check js/review.js && node --check js/audio.js && node --check js/main.js"
   },
   "keywords": [
     "game",

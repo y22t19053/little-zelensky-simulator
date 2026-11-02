@@ -87,6 +87,7 @@
             <div class="ap-head"><span class="rail-label">总统注意力</span><span class="ap-count"><strong id="ap-value">3</strong><span> / 3 AP</span></span></div>
             <div id="ap-pips" class="ap-pips" aria-label="剩余注意力 3 点"></div>
             <p id="ap-note" class="ap-note"></p>
+            <button id="btn-ops" class="ops-open" type="button" aria-haspopup="dialog">幕僚台 · 情报与命令</button>
           </div>
         </div>
       </div>
@@ -96,7 +97,8 @@
           <main id="event-main" class="event-column" aria-live="polite"></main>
           <section id="choices-panel" class="choices-section" aria-labelledby="choices-title"></section>
         </div>
-        <aside class="side-column" aria-label="国家状态与夜间预测">
+        <aside class="side-column" aria-label="国家状态、命令追踪与夜间预测">
+          <section id="command-panel" class="panel command-panel" aria-labelledby="command-title"></section>
           <section id="stats-panel" class="panel stats-panel" aria-labelledby="stats-title"></section>
           <section id="forecast-panel" class="panel forecast-panel" aria-labelledby="forecast-title"></section>
           <section id="pending-panel" class="panel pending-panel" aria-labelledby="pending-title"></section>
@@ -120,6 +122,7 @@
   <div id="modal-root"></div>
   <div id="toast-root" class="toast-root" role="status" aria-live="polite" aria-atomic="true"></div>
   <script src="js/events.js"></script>
+  <script src="js/intel.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/review.js"></script>

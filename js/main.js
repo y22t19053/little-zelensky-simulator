@@ -34,6 +34,8 @@
     apNote: document.getElementById('ap-note'),
     eventMain: document.getElementById('event-main'),
     choicesPanel: document.getElementById('choices-panel'),
+    commandPanel: document.getElementById('command-panel'),
+    opsBtn: document.getElementById('btn-ops'),
     statsPanel: document.getElementById('stats-panel'),
     forecastPanel: document.getElementById('forecast-panel'),
     pendingPanel: document.getElementById('pending-panel'),
@@ -64,10 +66,15 @@
     modalLastFocus: null,
     modalDismissible: true,
     toastTimer: null,
-    statesOpen: !window.matchMedia('(max-width: 700px)').matches
+    statesOpen: !window.matchMedia('(max-width: 700px)').matches,
+    intelCategory: 'military',
+    opsTab: 'intel'
   };
 
-  const LOG_TYPE_LABEL = { system: '系统', decision: '决策', pressure: '压力', attrition: '侵蚀', delayed: '延迟', ending: '判定' };
+  const LOG_TYPE_LABEL = {
+    system: '系统', decision: '决策', pressure: '压力', attrition: '侵蚀', delayed: '延迟', ending: '判定',
+    command: '命令', execution: '执行', intel: '情报', coordination: '协调', communication: '沟通'
+  };
   const EVENT_ART = {
     e1: { id: 'invasion', alt: '总统办公室、危机简报与多方向入侵模拟示意', caption: '总统办公室 · 危机简报 · 国土示意' },
     e2: { id: 'location', alt: '总统办公室、城市空间与指挥连续性处境的编辑拼贴', caption: '总统所在地 · 政治可见性与指挥连续性' },
@@ -127,6 +134,12 @@
     node.textContent = message;
     el.toastRoot.appendChild(node);
     ui.toastTimer = window.setTimeout(function () { el.toastRoot.replaceChildren(); }, 3200);
+  }
+
+  function clearToasts() {
+    if (!el.toastRoot) return;
+    window.clearTimeout(ui.toastTimer);
+    el.toastRoot.replaceChildren();
   }
 
   function saveGame(manual) {
@@ -227,6 +240,171 @@
     });
   }
 
+  function openOperations(tab) {
+    if (!ui.game) return;
+    ui.opsTab = tab || 'intel';
+    openModal({
+      kicker: '总统幕僚台 / ATTENTION IS THE SCARCE RESOURCE',
+      title: '情报、命令与协调',
+      wide: true,
+      className: 'ops-modal',
+      body: '<div class="ops-tabs" role="tablist" aria-label="幕僚台栏目">' +
+        '<button type="button" role="tab" data-ops-tab="intel">情报桌</button>' +
+        '<button type="button" role="tab" data-ops-tab="commands">命令追踪</button>' +
+        '<button type="button" role="tab" data-ops-tab="agencies">机构协调</button>' +
+        '<button type="button" role="tab" data-ops-tab="comms">沟通渠道</button>' +
+        '</div><div id="ops-body" class="ops-body"></div>',
+      actions: [{ label: '关闭幕僚台', className: 'btn btn-ghost', onClick: function () {} }],
+      onMount: function (card) {
+        function bindTabs() {
+          Array.prototype.forEach.call(card.querySelectorAll('[data-ops-tab]'), function (button) {
+            button.addEventListener('click', function () {
+              ui.opsTab = button.getAttribute('data-ops-tab');
+              renderOpsBody(card);
+            });
+          });
+        }
+        bindTabs();
+        renderOpsBody(card);
+      }
+    });
+  }
+
+  function rerenderOps(card) {
+    if (!card || !document.contains(card)) return;
+    renderOpsBody(card);
+  }
+
+  function renderOpsBody(card) {
+    const body = card.querySelector('#ops-body');
+    if (!body) return;
+    Array.prototype.forEach.call(card.querySelectorAll('[data-ops-tab]'), function (button) {
+      const active = button.getAttribute('data-ops-tab') === ui.opsTab;
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    if (ui.opsTab === 'intel') renderIntelDesk(body, card);
+    else if (ui.opsTab === 'commands') renderCommandDesk(body, card);
+    else if (ui.opsTab === 'agencies') renderAgencyDesk(body, card);
+    else renderCommsDesk(body, card);
+  }
+
+  function renderIntelDesk(body, card) {
+    const g = ui.game;
+    const reports = L.getIntelReports(g);
+    if (!reports.length) { body.innerHTML = '<p class="empty-note">当前没有可读情报。</p>'; return; }
+    let report = reports.filter(function (item) { return item.category === ui.intelCategory; })[0] || reports[0];
+    ui.intelCategory = report.category;
+    if (!report.read) {
+      L.markIntelRead(g, report.id);
+      saveGame(false);
+      report = L.getIntelReport(g, report.id) || report;
+    }
+    const tabs = reports.map(function (item) {
+      return '<button type="button" class="intel-tab' + (item.category === report.category ? ' is-active' : '') + '" data-intel-category="' + escapeHtml(item.category) + '"><span>' + escapeHtml(item.label) + '</span><small>' + escapeHtml(item.status) + (item.pinned ? ' · 收藏' : '') + '</small></button>';
+    }).join('');
+    const related = report.relatedChoiceIds.map(function (id) {
+      const event = L.getEvent(g);
+      const choice = L.getChoice(event, id);
+      if (!choice) return '';
+      const status = L.getChoiceStatus(g, id);
+      return '<button type="button" class="intel-related" data-related-choice="' + escapeHtml(id) + '"' + (!status.canIssue ? ' disabled' : '') + '><strong>' + escapeHtml(choice.title) + '</strong><span>' + choice.ap + ' AP · ' + (status.canIssue ? '可签发' : status.message) + '</span></button>';
+    }).join('');
+    const rows = report.values.map(function (item) { return '<span class="intel-reading"><small>' + escapeHtml(statFullLabel(item.key)) + '</small><strong>' + item.value + '</strong></span>'; }).join('');
+    body.innerHTML = '<div class="intel-layout"><nav class="intel-nav" aria-label="六类情报桌">' + tabs + '</nav><article class="intel-report">' +
+      '<div class="intel-report-head"><div><span class="intel-kicker">' + escapeHtml(report.kicker) + ' / ' + escapeHtml(report.status) + '</span><h3>' + escapeHtml(report.label) + '</h3></div><button type="button" class="mini-action" data-pin="' + escapeHtml(report.id) + '">' + (report.pinned ? '取消收藏' : '收藏') + '</button></div>' +
+      '<div class="intel-meta"><span>' + escapeHtml(report.source) + '</span><span>' + escapeHtml(report.time) + '</span><span>可信度 <strong>' + escapeHtml(report.confidence) + '</strong></span></div>' +
+      '<p class="intel-focus">' + escapeHtml(report.focus) + '<span class="intel-readings">' + rows + '</span></p>' +
+      '<div class="intel-columns"><section><h4>已确认</h4><ul>' + report.confirmed.map(function (text) { return '<li>' + escapeHtml(text) + '</li>'; }).join('') + '</ul></section>' +
+      '<section class="is-unknown"><h4>无法确认</h4><ul>' + report.unconfirmed.map(function (text) { return '<li>' + escapeHtml(text) + '</li>'; }).join('') + '</ul></section></div>' +
+      '<div class="intel-inquiry"><span>追问 / INQUIRY</span><p>' + escapeHtml(report.inquiry) + '</p><button type="button" class="mini-action is-primary" data-inquire="' + escapeHtml(report.id) + '"' + (report.inquired || g.ap < 1 ? ' disabled' : '') + '>' + (report.inquired ? '已追问 · 不重复消耗' : '追问补充 · 1 AP') + '</button></div>' +
+      '<p class="intel-boundary">' + escapeHtml(report.confidenceNote) + ' ' + escapeHtml(report.disclaimer) + '</p>' +
+      '<div class="intel-related-wrap"><span>关联决策</span><div class="intel-related-list">' + (related || '<span class="empty-note">当前没有关联命令。</span>') + '</div></div>' +
+      '</article></div>';
+    Array.prototype.forEach.call(body.querySelectorAll('[data-intel-category]'), function (button) {
+      button.addEventListener('click', function () { ui.intelCategory = button.getAttribute('data-intel-category'); renderOpsBody(card); });
+    });
+    const pin = body.querySelector('[data-pin]');
+    if (pin) pin.addEventListener('click', function () {
+      L.toggleIntelPin(g, pin.getAttribute('data-pin'));
+      saveGame(false);
+      renderOpsBody(card);
+    });
+    const inquire = body.querySelector('[data-inquire]');
+    if (inquire) inquire.addEventListener('click', function () {
+      const result = L.inquireIntel(g, report.id);
+      if (!result.ok) { toast(result.error || '无法追问。', true); return; }
+      if (A) A.playSfx('select');
+      saveGame(false);
+      renderGame();
+      renderOpsBody(card);
+      toast('补充说明已放入情报桌。追问只改变信息，不直接改国家数值。');
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-related-choice]'), function (button) {
+      button.addEventListener('click', function () {
+        closeModal();
+        selectChoice(button.getAttribute('data-related-choice'));
+        el.choicesPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      });
+    });
+  }
+
+  function renderCommandDesk(body, card) {
+    const g = ui.game;
+    const commands = (g.commands || []).slice().reverse();
+    const stage = '<div class="lifecycle" aria-label="命令生命周期"><span>已签发</span><span>已接收</span><span>执行中</span><span>等待反馈</span><span>已完成</span></div>';
+    const bodyHtml = commands.length ? '<ol class="command-desk-list">' + commands.map(function (command) {
+      return '<li class="command-desk-row"><div class="command-row-top"><span class="command-status">' + escapeHtml(commandStatusLabel(command.status)) + '</span><span class="command-agency">' + escapeHtml(agencyLabel(command.agency)) + '</span><span class="command-round">R' + command.round + '</span></div><h3>' + escapeHtml(command.title) + '</h3><p>' + escapeHtml(command.blockedReason || command.lastNote || '等待下一步总统动作。') + '</p>' + commandActions(command) + '</li>';
+    }).join('') + '</ol>' : '<p class="empty-note">还没有命令。选择一项决策并签发给相应机构后，它会在这里进入生命周期。</p>';
+    body.innerHTML = '<p class="ops-lead">阅读情报不耗 AP；签发命令按卡面扣 AP；授权不额外消耗，但夜间才会执行。跨部门命令需要召集或委派，否则会阻塞。跟进消耗 1 AP，每个命令每回合最多一次。</p>' + stage + bodyHtml;
+    bindCommandActions(body);
+  }
+
+  function renderAgencyDesk(body, card) {
+    const g = ui.game;
+    const cards = L.intel.agencies.map(function (agency) {
+      const state = g.agencies[agency.id] || { coordination: 50, workload: 0 };
+      const active = (g.commands || []).filter(function (command) { return command.agency === agency.id && command.status !== 'completed'; }).length;
+      const done = !!g.coordinationThisRound[agency.id];
+      return '<article class="agency-card"><div class="agency-card-head"><span class="agency-code">' + escapeHtml(agency.short) + '</span><div><h3>' + escapeHtml(agency.label) + '</h3><p>' + escapeHtml(agency.focus) + '</p></div></div>' +
+        '<div class="agency-meters"><span><small>协调余量</small><strong>' + state.coordination + '</strong></span><span><small>在办命令</small><strong>' + active + '</strong></span></div>' +
+        '<button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button></article>';
+    }).join('');
+    body.innerHTML = '<p class="ops-lead">机构不是数值装饰：命令会进入具体执行机构。跨部门行动若没有总统召集，夜间会被阻塞；委派可以换一个执行者，但不能消除代价。</p><div class="agency-grid">' + cards + '</div>';
+    Array.prototype.forEach.call(body.querySelectorAll('[data-coordinate]'), function (button) {
+      button.addEventListener('click', function () {
+        const result = L.coordinateAgency(g, button.getAttribute('data-coordinate'));
+        if (!result.ok) { toast(result.error || '无法召集。', true); return; }
+        if (A) A.playSfx('issue');
+        saveGame(false);
+        renderGame();
+        renderOpsBody(card);
+        toast('协调会已召集；相关命令本回合不再因跨部门条件阻塞。');
+      });
+    });
+  }
+
+  function renderCommsDesk(body, card) {
+    const g = ui.game;
+    const cards = L.intel.communications.map(function (channel) {
+      const used = !!g.communicationsThisRound[channel.id];
+      return '<article class="comm-card"><div><span class="panel-kicker">' + escapeHtml(agencyLabel(channel.agency)) + '</span><h3>' + escapeHtml(channel.label) + '</h3><p>' + escapeHtml(channel.note) + '</p><div class="effect-row">' + effectChips(channel.effects) + '</div></div>' +
+        '<button type="button" class="mini-action' + (used ? '' : ' is-primary') + '" data-communicate="' + escapeHtml(channel.id) + '"' + (used || g.ap < 1 ? ' disabled' : '') + '>' + (used ? '本回合已使用' : '沟通 · 1 AP · 明夜反馈') + '</button></article>';
+    }).join('');
+    body.innerHTML = '<p class="ops-lead">沟通会占用 1 AP，并建立一个跨日反馈。它不是免费增益：效果在下一夜才进入台账，期间局势会继续变化。</p><div class="comm-grid">' + cards + '</div>';
+    Array.prototype.forEach.call(body.querySelectorAll('[data-communicate]'), function (button) {
+      button.addEventListener('click', function () {
+        const result = L.communicate(g, button.getAttribute('data-communicate'));
+        if (!result.ok) { toast(result.error || '无法沟通。', true); return; }
+        if (A) A.playSfx('issue');
+        saveGame(false);
+        renderGame();
+        renderOpsBody(card);
+        toast('沟通渠道已建立；反馈将在下一夜结算。');
+      });
+    });
+  }
+
   /* 核心渲染 */
   function renderGame() {
     if (!ui.game) return;
@@ -235,6 +413,7 @@
     if (!event) { toast('事件数据缺失，无法继续。', true); return; }
     renderTop();
     renderEvent();
+    renderCommandPanel();
     renderStats();
     renderForecast();
     renderPending();
@@ -356,6 +535,7 @@
       const locked = !executed && !status.canIssue;
       const selected = ui.selectedChoiceId === choice.id;
       const record = (g.choices || []).find(function (item) { return item.round === g.round && item.choiceId === choice.id; });
+      const coordination = L.requiresCoordination(choice);
       const classes = ['choice-card'];
       if (executed) classes.push('is-executed');
       if (locked) classes.push('is-locked');
@@ -376,7 +556,7 @@
           '<section class="delay-details"><h4>延迟与副作用</h4>' + delayDetails(choice) + '</section>' +
         '</div>' +
         (executed && record ? '<div class="choice-actual"><span>命令执行反馈 · 实际即时变化</span><div class="effect-row">' + (effectChips(record.deltas, record.pressureDelta) || '<span class="empty-note">状态未发生可测量的变化</span>') + '</div></div>' : '') +
-        '<div class="choice-footer"><span>' + (executed ? '已归档 · 不可重复结算' : choice.delayed && choice.delayed.length ? '含延迟后果' : '仅即时效果与夜间规则') + '</span><span class="select-label">' + stateText + '</span></div>' +
+        '<div class="choice-footer"><span>' + (executed ? '已归档 · 不可重复结算' : coordination ? '跨部门 · 需召集或委派' : choice.delayed && choice.delayed.length ? '含延迟后果' : '仅即时效果与夜间规则') + '</span><span class="select-label">' + stateText + '</span></div>' +
         (executed ? '<span class="choice-stamp">已签发</span>' : conflict ? '<span class="choice-stamp is-conflict-stamp">互斥</span>' : '') +
       '</article>';
     }).join('');
@@ -468,6 +648,119 @@
     el.pendingPanel.innerHTML = '<div class="panel-head"><div><span class="panel-kicker">PENDING</span><h2 id="pending-title">延迟后果</h2></div><span>' + pending.length + ' 项</span></div>' + body;
   }
 
+  function agencyLabel(id) {
+    const agency = L.intel && L.intel.agencies ? L.intel.agencies.filter(function (item) { return item.id === id; })[0] : null;
+    return agency ? agency.label : id;
+  }
+
+  function commandStatusLabel(status) {
+    return L.commandLabels && L.commandLabels[status] ? L.commandLabels[status] : status;
+  }
+
+  function commandActions(command, compact) {
+    const g = ui.game;
+    if (!g || g.phase !== 'briefing') return '';
+    const parts = [];
+    if (command.status === 'issued') {
+      parts.push('<button type="button" class="mini-action is-primary" data-authorize="' + escapeHtml(command.id) + '">授权执行</button>');
+    }
+    if (command.status === 'issued' || command.status === 'blocked' || command.status === 'executing') {
+      parts.push('<button type="button" class="mini-action" data-delegate="' + escapeHtml(command.id) + '"' + (g.ap < 1 ? ' disabled' : '') + '>委派 · 1AP</button>');
+    }
+    if (command.status === 'executing' || command.status === 'blocked' || command.status === 'awaiting_feedback') {
+      parts.push('<button type="button" class="mini-action" data-followup="' + escapeHtml(command.id) + '"' + (g.ap < 1 ? ' disabled' : '') + '>跟进 · 1AP</button>');
+    }
+    if (compact) return '<div class="command-actions">' + parts.join('') + '</div>';
+    return '<div class="command-actions">' + parts.join('') + '</div>';
+  }
+
+  function commandRowHtml(command) {
+    const record = (ui.game.choices || []).filter(function (item) { return item.commandId === command.id; })[0];
+    const delta = record && record.deltas ? effectChips(record.deltas, record.pressureDelta) : '';
+    return '<li class="command-row is-' + escapeHtml(command.status) + '">' +
+      '<div class="command-row-top"><span class="command-status">' + escapeHtml(commandStatusLabel(command.status)) + '</span><span class="command-agency">' + escapeHtml(agencyLabel(command.agency)) + '</span></div>' +
+      '<strong>' + escapeHtml(command.title) + '</strong>' +
+      '<p class="command-note">' + escapeHtml(command.status === 'blocked' ? command.blockedReason : '第 ' + command.round + ' 回合签发 · ' + (command.requiredCoordination ? '跨部门授权' : '单项执行') + (command.delegated ? ' · 已委派' : '')) + '</p>' +
+      (delta ? '<div class="effect-row command-result">' + delta + '</div>' : '') +
+      commandActions(command, true) +
+    '</li>';
+  }
+
+  function bindCommandActions(scope) {
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-authorize]'), function (button) {
+      button.addEventListener('click', function () { authorizeCommand(button.getAttribute('data-authorize')); });
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-delegate]'), function (button) {
+      button.addEventListener('click', function () { openDelegateModal(button.getAttribute('data-delegate')); });
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-followup]'), function (button) {
+      button.addEventListener('click', function () { followUp(button.getAttribute('data-followup')); });
+    });
+  }
+
+  function renderCommandPanel() {
+    const g = ui.game;
+    if (!el.commandPanel) return;
+    const counts = L.getCommandCounts(g);
+    const active = (g.commands || []).filter(function (command) { return command.status !== 'completed'; }).slice(-4).reverse();
+    const body = active.length ? '<ul class="command-list">' + active.map(commandRowHtml).join('') + '</ul>' :
+      '<p class="empty-note">尚未签发命令。情报阅读免费，但签发、追问、召集与委派都消耗总统注意力。</p>';
+    el.commandPanel.innerHTML = '<div class="panel-head"><div><span class="panel-kicker">COMMAND DESK</span><h2 id="command-title">命令中心</h2></div><span>' + counts.active + ' 进行中</span></div>' +
+      body + '<div class="command-panel-foot"><span>已签发 ' + counts.total + ' · 待授权 ' + (g.commands || []).filter(function (command) { return command.status === 'issued'; }).length + ' · 阻塞 ' + counts.blocked + '</span><button type="button" class="text-btn" id="btn-open-ops">打开幕僚台</button></div>';
+    bindCommandActions(el.commandPanel);
+    const btn = document.getElementById('btn-open-ops');
+    if (btn) btn.addEventListener('click', function () { openOperations('commands'); });
+  }
+
+  function authorizeCommand(commandId) {
+    if (ui.busy || !ui.game || ui.game.phase !== 'briefing') return;
+    const result = L.authorizeCommand(ui.game, commandId);
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法授权。', true); return; }
+    if (A) A.playSfx('issue');
+    saveGame(false);
+    renderGame();
+    toast('已授权：' + result.command.title + '。本夜将结算执行情况。');
+  }
+
+  function followUp(commandId) {
+    if (ui.busy || !ui.game) return;
+    const result = L.followUpCommand(ui.game, commandId);
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法跟进。', true); return; }
+    if (A) A.playSfx('issue');
+    ui.lastDeltas = result.deltas || {};
+    ui.lastPressureDelta = result.pressureDelta || 0;
+    saveGame(false);
+    if (result.ending) { showEnding(); return; }
+    renderGame();
+    toast(result.deltas && Object.keys(result.deltas).length ? '已跟进并放行执行，实际变化已记录。' : '已跟进：执行反馈核验完毕。');
+  }
+
+  function openDelegateModal(commandId) {
+    const command = (ui.game.commands || []).filter(function (item) { return item.id === commandId; })[0];
+    if (!command) return;
+    const buttons = L.intel.agencies.map(function (agency) {
+      return '<button type="button" class="agency-choice" data-delegate-agency="' + escapeHtml(agency.id) + '"><strong>' + escapeHtml(agency.label) + '</strong><span>' + escapeHtml(agency.focus) + '</span></button>';
+    }).join('');
+    openModal({
+      kicker: '委派 / 1 AP', title: '把“' + command.title + '”交给谁？',
+      body: '<p class="modal-lead">委派会改变执行机构，绕过原部门的协调阻塞；但仍需总统在夜间承担结果。此操作消耗 1 AP。</p><div class="agency-picker">' + buttons + '</div>',
+      actions: [{ label: '取消', className: 'btn btn-ghost', onClick: function () {} }],
+      onMount: function (card) {
+        Array.prototype.forEach.call(card.querySelectorAll('[data-delegate-agency]'), function (button) {
+          button.addEventListener('click', function () {
+            const result = L.delegateCommand(ui.game, commandId, button.getAttribute('data-delegate-agency'));
+            if (!result.ok) { toast(result.error || '无法委派。', true); return; }
+            if (A) A.playSfx('issue');
+            closeModal();
+            saveGame(false);
+            renderGame();
+            toast('已委派给' + agencyLabel(button.getAttribute('data-delegate-agency')) + '。');
+          });
+        });
+      }
+    });
+  }
+
   function logEntryHtml(entry, full) {
     return '<div class="log-entry is-' + escapeHtml(entry.type || 'system') + '"><div class="log-meta"><span>R' + escapeHtml(entry.round) + '</span><span>' + escapeHtml(LOG_TYPE_LABEL[entry.type] || entry.type) + '</span></div><strong>' + escapeHtml(entry.title) + '</strong>' + (full || entry.text ? '<p>' + escapeHtml(entry.text || '') + '</p>' : '') + '</div>';
   }
@@ -494,10 +787,11 @@
       el.orderMeta.textContent = g.phase === 'briefing' ? '先比较收益、代价与延迟后果' : '请完成夜间结算';
       el.issueCost.textContent = '—';
     }
+    const unauthorized = (g.commands || []).filter(function (command) { return command.round === g.round && command.status === 'issued'; });
     el.issue.disabled = !canIssue;
-    el.endRound.disabled = ui.busy || g.phase !== 'briefing' || g.executed.length === 0;
+    el.endRound.disabled = ui.busy || g.phase !== 'briefing' || g.executed.length === 0 || unauthorized.length > 0;
     el.endRound.textContent = g.round >= L.finalRound ? '结算本阶段' : '结束本回合';
-    el.endRound.title = g.executed.length === 0 ? '至少签发一项决策，才能结束本回合。' : '';
+    el.endRound.title = g.executed.length === 0 ? '至少签发一项命令，才能结束本回合。' : unauthorized.length ? '先授权或委派所有已签发命令。' : '';
   }
 
   /* 游戏操作：每次只调用一次引擎 */
@@ -507,22 +801,21 @@
     const choice = ui.selectedChoiceId && event ? L.getChoice(event, ui.selectedChoiceId) : null;
     if (!choice) { toast('请先选择一项决策。', true); return; }
     ui.busy = true;
-    const result = L.applyChoice(ui.game, choice.id);
+    const result = L.issueCommand(ui.game, choice.id);
     ui.busy = false;
-    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '这项决策无法签发。', true); renderGame(); return; }
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '这项命令无法签发。', true); renderGame(); return; }
     if (A) A.playSfx('issue');
     ui.selectedChoiceId = null;
-    ui.lastDeltas = result.deltas || {};
-    ui.lastPressureDelta = result.pressureDelta || 0;
+    ui.lastDeltas = null;
+    ui.lastPressureDelta = 0;
     saveGame(false);
-    if (result.ending || ui.game.phase === 'ending') { showEnding(); return; }
     renderGame();
-    toast('已签发并归档：' + choice.title + '。实际即时变化已写入文件。');
+    toast('已签发：' + choice.title + '。现在请授权执行，或把它委派出去。');
   }
 
   function endRound() {
     if (ui.busy || !ui.game || ui.game.phase !== 'briefing') return;
-    if (!ui.game.executed.length) { toast('至少签发一项决策，才能结束本回合。', true); return; }
+    if (!ui.game.executed.length) { toast('至少签发一项命令，才能结束本回合。', true); return; }
     ui.busy = true;
     const result = L.endRound(ui.game);
     ui.busy = false;
@@ -608,14 +901,20 @@
   function openInterlude(data) {
     if (!data || !ui.game) return;
     if (modalIsOpen() && el.modalRoot.querySelector('[data-interlude-round="' + data.round + '"]')) return;
+    clearToasts();
     if (A) A.setTheme('night');
     const pressure = data.pressure || { before: 0, rise: 0, delayed: 0, after: 0 };
     const delayed = data.delayed || [];
     const alarms = data.alarms || [];
     if (A) A.playSfx(alarms.length ? 'alert' : delayed.length ? 'delayed' : 'round');
     const commands = (ui.game.choices || []).filter(function (record) { return record.round === data.round - 1; });
+    const resultByCommand = {};
+    (data.commandResults || []).forEach(function (result) { resultByCommand[result.commandId] = result; });
     const commandHtml = commands.length ? commands.map(function (record) {
-      return '<li><div><strong>' + escapeHtml(record.label) + '</strong><span>' + record.ap + ' AP · 已归档</span></div><div class="effect-row">' + (effectChips(record.deltas, record.pressureDelta) || '<span class="empty-note">无即时数值变化</span>') + '</div></li>';
+      const outcome = resultByCommand[record.commandId];
+      const status = outcome ? outcome.status : record.status;
+      const blockedNote = outcome && outcome.blockedReason ? '<p class="settlement-block-note">' + escapeHtml(outcome.blockedReason) + '</p>' : '';
+      return '<li><div><strong>' + escapeHtml(record.label) + '</strong><span>' + record.ap + ' AP · ' + escapeHtml(commandStatusLabel(status)) + '</span></div>' + blockedNote + '<div class="effect-row">' + (effectChips(record.deltas, record.pressureDelta) || '<span class="empty-note">' + (status === 'blocked' ? '夜间未能执行，等待次日总统跟进或委派。' : '无即时数值变化') + '</span>') + '</div></li>';
     }).join('') : '<li>本回合没有命令记录。</li>';
     const delayedHtml = delayed.length ? delayed.map(function (item) {
       return '<li><div><strong>' + escapeHtml(item.label) + '</strong><span>第 ' + item.appliedRound + ' 回合实际触发</span></div><p>' + escapeHtml(item.note || '') + '</p><div class="effect-row">' + (effectChips(item.deltas, item.pressureDelta) || '<span class="empty-note">无数值变化</span>') + '</div></li>';
@@ -734,6 +1033,7 @@
     if (!ending) { toast('结局数据缺失，已返回封面。', true); renderIntro(); return; }
     saveGame(false);
     closeModal();
+    clearToasts();
     showScreen('ending');
     if (A) A.playSfx(ending.tone === 'danger' ? 'collapse' : 'ending');
     const stats = ending.finalStats || ui.game.stats || {};
@@ -777,6 +1077,7 @@
     el.menuBtn.addEventListener('click', openMenu);
     el.issue.addEventListener('click', issueSelected);
     el.endRound.addEventListener('click', endRound);
+    if (el.opsBtn) el.opsBtn.addEventListener('click', function () { openOperations('intel'); });
     renderIntro();
   }
 
