@@ -450,7 +450,8 @@
       dispatches: [],
       interventionRounds: [],
       timeline: [],
-      startedAt: new Date().toISOString()
+      startedAt: new Date().toISOString(),
+      runId: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
     };
     recordTimeline(state);
     addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 3 点注意力，用来决定这个国家先处理什么。信息可以免费阅读，追问与协调会占用注意力。');
@@ -1710,7 +1711,7 @@
     try {
       if (!root.localStorage) return null;
       const records = getRecords();
-      const key = state.startedAt || '';
+      const key = state.runId || state.startedAt || '';
       if (records.runs.some(function (run) { return run.key === key; })) return null;
       const run = {
         key: key,
@@ -2090,7 +2091,8 @@
       interventionRounds: Array.isArray(input.interventionRounds) ? input.interventionRounds.filter(Number.isInteger) : [],
       /* 旧存档没有逐日轨迹；只补当前时点，不伪造过去的数值。 */
       timeline: Array.isArray(input.timeline) && input.timeline.length ? input.timeline : [{ round: input.round, stats: Object.assign({}, stats), pressure: clamp(input.pressure, 0, 100), partial: true }],
-      startedAt: input.startedAt || new Date().toISOString()
+      startedAt: input.startedAt || new Date().toISOString(),
+      runId: typeof input.runId === 'string' ? input.runId : (input.startedAt || '')
     };
     if (state.phase === 'interlude' && !state.interlude) {
       state.phase = 'briefing';
