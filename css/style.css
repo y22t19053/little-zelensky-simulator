@@ -2839,7 +2839,28 @@ p {
   .history-table tbody td:last-child::before { content: "历史对照"; display: block; margin-bottom: 4px; color: var(--faint); font-family: var(--font-mono); font-size: 9px; }
 
   .command-bar {
-    min-height: 52px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "meta meta";
+    align-items: center;
+    gap: 3px 10px;
+    min-height: 0;
+    padding-top: 7px;
+    padding-bottom: 6px;
+  }
+
+  .brand {
+    grid-area: brand;
+  }
+
+  .command-actions {
+    grid-area: actions;
+  }
+
+  .brand-title {
+    white-space: nowrap;
   }
 
   .brand-sub {
@@ -2847,8 +2868,18 @@ p {
   }
 
   .command-meta {
-    align-items: flex-end;
+    grid-area: meta;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: 2px 10px;
     min-width: 0;
+  }
+
+  .command-date,
+  .command-phase {
+    white-space: nowrap;
   }
 
   .command-date {

@@ -193,6 +193,7 @@ async function main() {
     };
 
     const screenshot = async function (name) {
+      await sleep(380);
       const result = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       fs.writeFileSync(path.join(SHOTS, name), Buffer.from(result.data, 'base64'));
       console.log('  shot ' + name);
@@ -447,7 +448,10 @@ async function main() {
       }, 15000);
       const introLayout = await evaluate(cdp, '({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
       assert(introLayout.sw <= introLayout.cw + 2, size[0] + 'px 开场无横向溢出', JSON.stringify(introLayout));
-      if (size[0] === 390) await screenshot('07-intro-mobile.png');
+      if (size[0] === 390) {
+        await evaluate(cdp, 'window.scrollTo(0,0)');
+        await screenshot('07-intro-mobile.png');
+      }
       await touchClick('#btn-continue');
       await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden'); }, 5000);
       const mobile = await evaluate(cdp, `(() => {
