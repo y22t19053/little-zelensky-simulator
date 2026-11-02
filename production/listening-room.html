@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>小泽模拟器 · 本地音频试听</title>
+<style>
+:root{color-scheme:dark;background:#171a18;color:#e6e0d2;font:16px/1.65 system-ui,sans-serif}body{max-width:900px;margin:auto;padding:32px 20px}h1,h2{font-family:Georgia,serif;font-weight:500}h1{font-size:32px}h2{margin-top:36px;border-top:1px solid #55594c;padding-top:20px;color:#c9aa6b}p{color:#bdb9ac}.track{margin:18px 0}.track label{display:block;margin-bottom:6px}audio{width:100%;height:44px}.sfx{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}button{min-height:44px;border:1px solid #666b5a;background:#252a24;color:#e6e0d2;cursor:pointer}button:focus-visible{outline:2px solid #c9aa6b;outline-offset:2px}small{color:#999d90} @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<h1>危机档案 · 音频试听</h1>
+<p>全部为本地原创程序合成音频。无自动播放、无网络请求、无第三方采样。此页是制作验收工具，不是游戏运行依赖。</p>
+<h2>主题音乐 · 32 秒循环</h2>
+<div class="track"><label for="menu">菜单｜克制的 D 小调主题</label><audio id="menu" controls loop preload="none" src="../assets/audio/music/menu.ogg"></audio></div>
+<div class="track"><label for="day">日间｜低音脉冲与稀疏和声</label><audio id="day" controls loop preload="none" src="../assets/audio/music/day.ogg"></audio></div>
+<div class="track"><label for="night">夜间｜同主题的低速变奏</label><audio id="night" controls loop preload="none" src="../assets/audio/music/night.ogg"></audio></div>
+<div class="track"><label for="ending">结局｜不作胜利凯歌的收束</label><audio id="ending" controls loop preload="none" src="../assets/audio/music/ending.ogg"></audio></div>
+<h2>界面与结算音效</h2>
+<div class="sfx">
+<button data-sound="select">选择</button><button data-sound="issue">签发</button><button data-sound="invalid">拒绝</button><button data-sound="round">回合</button><button data-sound="delayed">延迟</button><button data-sound="alert">警报</button><button data-sound="collapse">崩溃</button><button data-sound="ending">结局</button><button data-sound="menu">菜单</button><button data-sound="modal">弹窗</button>
+</div>
+<p><small>Ogg Vorbis；音乐 q3，音效 q2。许可边界见 ASSET_PROVENANCE.md。</small></p>
+<script>
+document.querySelectorAll('[data-sound]').forEach(function(button){button.addEventListener('click',function(){document.querySelectorAll('audio').forEach(function(a){a.pause();});var a=new Audio('../assets/audio/sfx/'+button.dataset.sound+'.ogg');a.volume=.65;a.play().catch(function(){});});});
+</script>
+</body></html>

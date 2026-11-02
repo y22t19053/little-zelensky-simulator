@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#11140f">
+  <title>小泽模拟器 · 第一回合视觉样板</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="preview.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#decisions">跳至总统决策</a>
+  <header class="command-header">
+    <div class="brand">
+      <span class="brand-mark">小泽模拟器</span>
+      <span class="brand-note">视觉样板 / 非正式版本</span>
+    </div>
+    <div class="date-block">
+      <span>2022.02.24</span>
+      <small>第 1 / 7 回合 · 全面入侵</small>
+    </div>
+    <div class="ap-block" aria-label="本回合注意力 3 点">
+      <span>总统注意力</span>
+      <strong><b>3</b> AP</strong>
+      <i></i><i></i><i></i>
+    </div>
+  </header>
+
+  <main class="war-room">
+    <section class="event-column" aria-labelledby="event-title">
+      <figure class="scene">
+        <img src="scene-invasion.svg" alt="政治漫画与档案拼贴：总统办公室内的电话和地图，边境多向箭头指向基辅、哈尔科夫与敖德萨，标注为局势关系示意而非实时地图">
+        <figcaption><span>事件 01 / 全线入侵</span><span>政治漫画 · 档案拼贴 · 态势示意</span></figcaption>
+      </figure>
+
+      <section class="briefing" aria-labelledby="event-title">
+        <div class="section-kicker"><span>总统办公室 · 早间简报</span><span class="confidence">情报可信度 / 高</span></div>
+        <h1 id="event-title">全面入侵</h1>
+        <p class="brief-summary">基辅、哈尔科夫与敖德萨等方向传来爆炸和越境报告。霍斯托梅尔机场方向出现空降行动报告。对方公开要求乌克兰军队放下武器，全面战争已经开始。</p>
+        <div class="known-unknown">
+          <p><strong>当时已知</strong>多点遇袭与机场方向报告正在送达。</p>
+          <p><strong>当时未知</strong>各方向投入规模、基辅冲击速度与外援交付。</p>
+        </div>
+        <details class="intel-details">
+          <summary>展开情报边界与模拟说明</summary>
+          <div>
+            <p>以上只保留第一回合事件中的当时情报；不使用后来确认的结果引导决策。</p>
+            <p>本页仅展示界面设计。国家读数、AP 与决策内容取自现有项目数据；选择不会结算任何效果。</p>
+          </div>
+        </details>
+      </section>
+
+      <section class="decision-section" id="decisions" aria-labelledby="decision-title">
+        <div class="decision-heading">
+          <div><span class="section-kicker">决策文件 / 选择后签发</span><h2 id="decision-title">今天，总统先处理什么？</h2></div>
+          <span class="ap-rule">本回合 3 AP · 可组合签发</span>
+        </div>
+        <div class="choice-grid">
+          <button class="choice-card is-selected" type="button" data-choice="address" data-ap="1" aria-pressed="true">
+            <span class="choice-top"><span class="choice-index">A / 总统讲话</span><span class="choice-cost">1 AP</span></span>
+            <strong class="choice-title">向全国发表电视讲话</strong>
+            <span class="choice-summary">稳定政治预期与社会情绪，但把总统位置更紧密地绑定在首都。</span>
+            <span class="choice-effects"><span>政府 ↑ 轻微</span><span>意志 ↑ 明显</span><span class="cost">安全 ↓ 轻微</span></span>
+            <span class="choice-delay"><b>2 日后</b> 地方执行压力上升，储备轻微消耗</span>
+            <span class="choice-footer"><span>预期收益与代价 · 非实际结算</span><span class="select-label">已选</span></span>
+          </button>
+
+          <button class="choice-card" type="button" data-choice="mobilize" data-ap="2" aria-pressed="false">
+            <span class="choice-top"><span class="choice-index">B / 动员命令</span><span class="choice-cost">2 AP</span></span>
+            <strong class="choice-title">签署总动员令</strong>
+            <span class="choice-summary">迅速扩大抵抗动员，同时加重装备、储备与政府协调压力。</span>
+            <span class="choice-effects"><span>军队 ↑ 明显</span><span>意志 ↑ 轻微</span><span class="cost">储备 ↓ 明显</span></span>
+            <span class="choice-delay"><b>3 日后</b> 组织消化压力：军队与意志回落</span>
+            <span class="choice-footer"><span>预期收益与代价 · 非实际结算</span><span class="select-label">选择</span></span>
+          </button>
+
+          <button class="choice-card" type="button" data-choice="aid_call" data-ap="1" aria-pressed="false">
+            <span class="choice-top"><span class="choice-index">C / 国际线路</span><span class="choice-cost">1 AP</span></span>
+            <strong class="choice-title">向外国领导人请求紧急援助</strong>
+            <span class="choice-summary">争取未来国际支持，但不能立即解除基辅和机场方向压力。</span>
+            <span class="choice-effects"><span>国际 ↑ 明显</span><span>安全 ↑ 轻微</span><span class="cost">压力 ↑ 轻微</span></span>
+            <span class="choice-delay"><b>3 日后</b> 国际支持与军队组织可能改善</span>
+            <span class="choice-footer"><span>预期收益与代价 · 非实际结算</span><span class="select-label">选择</span></span>
+          </button>
+
+          <button class="choice-card" type="button" data-choice="disperse" data-ap="2" aria-pressed="false">
+            <span class="choice-top"><span class="choice-index">D / 政府连续性</span><span class="choice-cost">2 AP</span></span>
+            <strong class="choice-title">预先分散部分指挥职能</strong>
+            <span class="choice-summary">降低政府单点瘫痪风险，但削弱社会感知与国际协调。</span>
+            <span class="choice-effects"><span>政府 ↑ 明显</span><span>安全 ↑ 轻微</span><span class="cost">意志 ↓ 明显</span></span>
+            <span class="choice-delay"><b>2 日后</b> 协调成本：军队与储备轻微下降</span>
+            <span class="choice-footer"><span>预期收益与代价 · 非实际结算</span><span class="select-label">选择</span></span>
+          </button>
+        </div>
+      </section>
+    </section>
+
+    <aside class="state-rail" aria-label="国家状态">
+      <details class="state-details" open>
+        <summary><span><small>国家状态 / 初始读数</small><strong>七项国家指标</strong></span><span class="no-alarm">当前无告警</span></summary>
+        <div class="mobile-state-peek">政府 54 · 军队 48 · 基辅 52</div>
+        <div class="state-list">
+          <div class="state-row"><div><span>政府连续性</span><strong>54</strong></div><div class="meter"><i style="--value:54%"></i></div><small>中央与地方执行</small></div>
+          <div class="state-row"><div><span>军队组织度</span><strong>48</strong></div><div class="meter"><i style="--value:48%"></i></div><small>指挥与组织承接</small></div>
+          <div class="state-row"><div><span>基辅安全</span><strong>52</strong></div><div class="meter"><i style="--value:52%"></i></div><small>首都防御与通道</small></div>
+          <div class="state-row"><div><span>社会抵抗意志</span><strong>60</strong></div><div class="meter"><i style="--value:60%"></i></div><small>动员与社会承受</small></div>
+          <div class="state-row"><div><span>国际支持</span><strong>42</strong></div><div class="meter"><i style="--value:42%"></i></div><small>援助与政治支持</small></div>
+          <div class="state-row"><div><span>战略储备</span><strong>52</strong></div><div class="meter"><i style="--value:52%"></i></div><small>装备与补给余量</small></div>
+          <div class="state-row"><div><span>总统个人安全</span><strong>58</strong></div><div class="meter"><i style="--value:58%"></i></div><small>人身与位置暴露</small></div>
+        </div>
+      </details>
+      <div class="rail-note">
+        <span>风险显示原则</span>
+        <p>颜色与告警只服从正式引擎 <code>getAlarms()</code>。初始七项均未触发告警，因此这里不制造红色危机。</p>
+      </div>
+      <div class="archive-slip">
+        <span>档案附条 / 24—II</span>
+        <p>有限注意力意味着：一个上午里，有些命令只能排队。</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="issue-bar">
+    <div class="selection-copy"><span>待签发文件</span><strong id="selection-name">向全国发表电视讲话</strong></div>
+    <div class="selection-ap"><span id="selection-cost">成本 1 AP</span><strong id="remaining-ap">签发后剩余 2 AP</strong></div>
+    <button id="issue-button" type="button"><span>签发命令</span><small>仅视觉预览</small></button>
+  </footer>
+  <div class="toast" id="preview-toast" role="status" aria-live="polite"></div>
+</body>
+</html>

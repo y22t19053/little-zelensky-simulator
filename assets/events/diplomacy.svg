@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">基辅的请求：欧盟申请、武器清单与谈判渠道</title>
+  <desc id="desc">原创外交档案拼贴。桌面上有2022年2月28日加入欧盟申请、重型武器与禁飞区请求、制裁简报及边境谈判渠道文件；标签明确申请不等于入盟承诺，谈判不等于停火，不伪造签名或真实人物引语。</desc>
+  <defs>
+    <pattern id="grain" width="41" height="37" patternUnits="userSpaceOnUse"><circle cx="9" cy="10" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M27 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(32)"><path d="M0 0V8" stroke="#171b14" stroke-opacity=".18" stroke-width="2"/></pattern>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}.dark{fill:#171a13}.line{fill:none;stroke:#7e8770;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151910"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">28 / II / 2022 · FOREIGN MINISTRY</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">REQUESTS / SANCTIONS / NEGOTIATION CHANNEL</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">06 / 07</text>
+  <path d="M42 105H1158" stroke="#555c4b"/>
+  <path d="M42 563L202 126H1000L1158 563Z" fill="#252a20" stroke="#5f6754"/>
+  <path d="M72 544L218 149H983L1128 544" fill="none" stroke="#8a805b" stroke-opacity=".45"/>
+  <g transform="rotate(-5 329 337)">
+    <rect x="105" y="139" width="438" height="398" fill="#aaa17f"/>
+    <rect x="92" y="126" width="438" height="398" fill="#c8bc99" stroke="#171b14" stroke-width="2"/>
+    <text x="119" y="164" class="mono dark" font-size="12" letter-spacing="2">APPLICATION / 28—II—2022</text>
+    <path d="M119 181H502" stroke="#776e54"/>
+    <text x="119" y="225" class="serif dark" font-size="31">加入欧盟申请</text>
+    <text x="119" y="255" class="sans dark" font-size="15">正式签署 · 推动审议</text>
+    <path d="M120 292H494M120 316H474M120 340H493M120 364H445M120 388H487" stroke="#8b8265"/>
+    <circle cx="436" cy="439" r="47" fill="none" stroke="#796540" stroke-width="3"/>
+    <circle cx="436" cy="439" r="37" fill="none" stroke="#796540"/>
+    <text x="436" y="435" text-anchor="middle" class="mono dark" font-size="12">APPLICATION</text>
+    <text x="436" y="454" text-anchor="middle" class="sans dark" font-size="13">申请已签署</text>
+    <rect x="119" y="420" width="213" height="55" fill="#b4a783" stroke="#796540"/>
+    <text x="133" y="443" class="sans dark" font-size="14">申请 ≠ 入盟承诺</text>
+    <text x="133" y="464" class="sans dark" font-size="13">也不等于立即候选国地位</text>
+  </g>
+  <g transform="rotate(4 798 275)">
+    <rect x="607" y="126" width="397" height="304" fill="#20271e" stroke="#7a826b" stroke-width="2"/>
+    <text x="633" y="165" class="mono amber" font-size="12" letter-spacing="2">SECURITY REQUEST / URGENT</text>
+    <text x="633" y="207" class="serif paper" font-size="27">重型武器清单</text>
+    <path d="M633 226H972" stroke="#606954"/>
+    <text x="633" y="260" class="sans muted" font-size="15">交付时间：仍未明朗</text>
+    <text x="633" y="289" class="sans muted" font-size="15">禁飞区：各方立场待确认</text>
+    <path d="M633 315H943M633 339H907M633 363H957" stroke="#606954"/>
+    <rect x="821" y="372" width="151" height="34" fill="none" stroke="#c9a563"/>
+    <text x="896" y="395" text-anchor="middle" class="mono amber" font-size="12">NOT A DELIVERY NOTE</text>
+  </g>
+  <g transform="rotate(-2 824 493)">
+    <rect x="604" y="435" width="459" height="139" fill="#bdb18e" stroke="#171b14" stroke-width="2"/>
+    <text x="628" y="466" class="mono dark" font-size="12" letter-spacing="2">BORDER CHANNEL / TALKS</text>
+    <text x="628" y="501" class="serif dark" font-size="24">谈判渠道已经打开</text>
+    <text x="628" y="531" class="sans dark" font-size="15">参加谈判 ≠ 接受条件 ≠ 达成停火</text>
+    <path d="M628 549H1028" stroke="#82795c"/>
+    <path d="M1018 449L1039 470L1018 491" fill="none" stroke="#796540" stroke-width="2"/>
+  </g>
+  <g transform="rotate(3 237 558)">
+    <rect x="78" y="520" width="363" height="75" fill="#1c2219" stroke="#737b63"/>
+    <text x="98" y="548" class="mono amber" font-size="12">SANCTIONS / PUBLIC STATEMENTS</text>
+    <text x="98" y="575" class="sans paper" font-size="14">制裁范围与执行时间并不一致</text>
+  </g>
+  <path d="M549 132V540" stroke="#a5966d" stroke-opacity=".25" stroke-dasharray="2 8"/>
+  <rect x="42" y="611" width="1116" height="1" fill="#424738"/>
+  <text x="42" y="645" class="serif paper" font-size="23">把同情写成可执行的支持，也把未知留在文件边缘。</text>
+  <text x="1158" y="675" text-anchor="end" class="mono muted" font-size="12">合成档案视觉 · 非真实文件复制 · 无真实签名或人物引语</text>
+  <text x="42" y="675" class="mono amber" font-size="12">EVENT 06 · KYIV'S REQUESTS</text>
+</svg>

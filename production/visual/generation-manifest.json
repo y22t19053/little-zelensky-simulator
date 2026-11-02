@@ -1,0 +1,93 @@
+﻿[
+    {
+        "id":  "invasion",
+        "seed":  20261102,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "presidential office before dawn, heavy desk with black telephone and unsigned folders, tall window, incoming crisis conveyed by overlapping abstract papers and angular direction marks, solitary empty chair, tense stillness, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/invasion.png"
+    },
+    {
+        "id":  "location",
+        "seed":  20261103,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "empty presidential chair between a public microphone and a secure underground doorway, two pools of hard flat light, exposed location versus continuity, political symbolism, no person, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/location.png"
+    },
+    {
+        "id":  "hostomel",
+        "seed":  20261104,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "contested airport runway in oblique perspective, damaged hangar and empty aircraft apron, dark smoke cut from paper, broken runway markings without numbers, no troops, no aircraft count, uncertain control, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/hostomel.png"
+    },
+    {
+        "id":  "capital-night",
+        "seed":  20261105,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "capital city at night under curfew, abstract Kyiv roofline and domes, sandbag checkpoint and anti tank hedgehogs, one amber street lamp, quiet streets, no soldiers, no exact landmarks, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/capital-night.png"
+    },
+    {
+        "id":  "two-fronts",
+        "seed":  20261106,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "war room table with three overlapping abstract theater diagrams pulling at one small stack of reserve tokens, compass-like torn paper arrows, scarce fuel and ammunition boxes, strategic triage, no real map, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/two-fronts.png"
+    },
+    {
+        "id":  "diplomacy",
+        "seed":  20261107,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "diplomatic archive desk at night, unsigned application papers, telephone receiver, sealed envelopes and parallel communication channels, two desk lamps, no readable text, no flags, no institutional logos, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/diplomacy.png"
+    },
+    {
+        "id":  "seventh-night",
+        "seed":  20261108,
+        "model":  "sd_xl_base_1.0.safetensors",
+        "steps":  25,
+        "cfg":  7,
+        "sampler":  "euler",
+        "scheduler":  "normal",
+        "size":  "1152x640",
+        "prompt":  "night freight railway logistics, abstract train wagons and converging tracks, plain supply crates, fuel can and medical parcel with simple geometric marks, coordinated government logistics, no real route, no readable labels, independent strategy game editorial illustration, political archive cut paper collage, screen print on coarse recycled paper, angular cinematic composition, charcoal olive gray and desaturated amber only, flat carved shapes, restrained contrast, no gradients, no glow, no words, no letters, no numbers, no logos, no flags, no watermark, no photorealism",
+        "negative":  "text, letters, words, numbers, logo, flag, watermark, glossy 3d, neon, sci-fi hud, radar, glowing gradients, cute, caricature, celebrity portrait, gore, bodies, detailed military insignia",
+        "raw":  "raw/seventh-night.png"
+    }
+]

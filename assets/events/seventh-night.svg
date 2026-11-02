@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">第七夜：铁路、燃料与医疗物资的统一调度</title>
+  <desc id="desc">原创铁路后勤编辑插画。夜色中的货运列车与轨道通向一张调度桌，燃料、医疗、弹药和预备队文件争抢有限运力；轨道仅为构图符号，不对应真实路线、车次、运量或战线。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="39" patternUnits="userSpaceOnUse"><circle cx="9" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M28 29h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(30)"><path d="M0 0V9" stroke="#c5b483" stroke-opacity=".13" stroke-width="2"/></pattern>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}.dark{fill:#171a13}.line{fill:none;stroke:#7e8770;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#12170f"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">01—02 / III / 2022 · NIGHT DISPATCH</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">RAIL / FUEL / MEDICAL / RESERVE</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">07 / 07</text>
+  <path d="M42 105H1158" stroke="#555c4b"/>
+  <path d="M42 126H1158V361H42Z" fill="#1c231a"/>
+  <path d="M42 302L97 302V259H147V279H204V232H263V285H327V252H389V302H445V267H503V302H566V242H623V284H690V259H755V302H814V271H876V302H941V238H1004V282H1070V255H1158V370H42Z" fill="#252d22"/>
+  <g fill="#c9a563" opacity=".6"><rect x="221" y="253" width="9" height="13"/><rect x="584" y="263" width="9" height="13"/><rect x="959" y="258" width="9" height="13"/><rect x="1091" y="277" width="9" height="13"/></g>
+  <path d="M42 370L468 300H732L1158 370V579H42Z" fill="#252b21"/>
+  <path d="M406 579L541 310M777 579L663 310" stroke="#878974" stroke-width="6"/>
+  <path d="M469 579L572 310M715 579L632 310" stroke="#878974" stroke-width="6"/>
+  <path d="M450 540H753M470 501H730M490 462H707M508 428H688M524 395H675M539 366H660M552 339H647" stroke="#5f6854" stroke-width="8"/>
+  <path d="M42 579H1158" stroke="#77765d" stroke-width="3"/>
+  <g>
+    <path d="M500 330H690L714 410H478Z" fill="#394332" stroke="#879173" stroke-width="2"/>
+    <path d="M521 294H655L685 330H500Z" fill="#4a5540" stroke="#879173" stroke-width="2"/>
+    <rect x="542" y="307" width="43" height="31" fill="#b5a36f"/><rect x="602" y="307" width="43" height="31" fill="#b5a36f"/>
+    <path d="M492 354H700M513 330V405M674 330V405" stroke="#77846a"/>
+    <circle cx="522" cy="417" r="19" fill="#141910" stroke="#777f69" stroke-width="4"/><circle cx="668" cy="417" r="19" fill="#141910" stroke="#777f69" stroke-width="4"/>
+    <path d="M554 378H634" stroke="#c9a563" stroke-width="4"/>
+    <rect x="553" y="351" width="80" height="24" fill="#c2b384"/><text x="593" y="368" text-anchor="middle" class="mono dark" font-size="12">统一调度</text>
+  </g>
+  <g>
+    <path d="M93 379H316V496H93Z" fill="#30382b" stroke="#737d65" stroke-width="2"/>
+    <path d="M93 379L125 351H284L316 379M125 351V468M284 351V468" fill="none" stroke="#737d65"/>
+    <path d="M119 405H289M119 432H289M119 459H229" stroke="#69735d"/>
+    <rect x="114" y="394" width="82" height="27" fill="#c2b384"/><text x="126" y="413" class="mono dark" font-size="12">燃料配给</text>
+    <path d="M253 472V433M236 449H270" stroke="#c9a563" stroke-width="5"/>
+  </g>
+  <g>
+    <path d="M891 367H1105V489H891Z" fill="#30382b" stroke="#737d65" stroke-width="2"/>
+    <path d="M891 367L923 340H1075L1105 367M923 340V461M1075 340V461" fill="none" stroke="#737d65"/>
+    <rect x="914" y="390" width="76" height="66" fill="#bdb18e"/>
+    <path d="M952 402V443M931 422H973" stroke="#55513e" stroke-width="8"/>
+    <text x="1009" y="407" class="mono amber" font-size="12">MEDICAL</text>
+    <text x="1009" y="432" class="sans paper" font-size="14">医疗物资</text>
+    <text x="1009" y="458" class="sans muted" font-size="12">等待运力优先级</text>
+  </g>
+  <path d="M316 429L470 390M891 423L720 390" stroke="#c9a563" stroke-dasharray="5 7"/>
+  <g transform="rotate(-2 261 561)">
+    <rect x="74" y="521" width="373" height="85" fill="#bdb18e"/>
+    <text x="94" y="549" class="mono dark" font-size="12">CROSS-MINISTRY DISPATCH</text>
+    <text x="94" y="577" class="serif dark" font-size="21">铁路 · 燃料 · 弹药 · 预备队</text>
+    <path d="M95 590H409" stroke="#81785b"/>
+  </g>
+  <g transform="rotate(2 948 553)">
+    <rect x="774" y="515" width="349" height="88" fill="#1a2117" stroke="#7a8169"/>
+    <text x="795" y="544" class="mono amber" font-size="12">BOTTLENECK / COORDINATION</text>
+    <text x="795" y="571" class="sans paper" font-size="15">数据彼此矛盾，储备余量未明</text>
+    <text x="795" y="592" class="sans muted" font-size="12">下一轮主要突击方向仍未确认</text>
+  </g>
+  <path d="M42 625H1158" stroke="#424738"/>
+  <text x="42" y="656" class="serif paper" font-size="23">最后一夜，命令必须先变成一列真正能够发车的补给。</text>
+  <text x="42" y="682" class="mono muted" font-size="11">铁路后勤编辑示意 · 轨道不对应真实路线 · 不表示车次、运量或战线</text>
+  <text x="1158" y="682" text-anchor="end" class="mono amber" font-size="12">EVENT 07 · SEVENTH NIGHT</text>
+</svg>

@@ -1,0 +1,65 @@
+[
+  {
+    "id": "visual.event.capital-night",
+    "source": "production/visual/raw/capital-night.png",
+    "intermediate": "production/visual/processed/capital-night.png",
+    "output": "assets/visual/events/capital-night.webp",
+    "bytes": 189232,
+    "sha256": "e61ffaf32852f0bea81f5b9bf0241183412ba6fb97cb49dce7ba025ad61942b4",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  },
+  {
+    "id": "visual.event.diplomacy",
+    "source": "production/visual/raw/diplomacy.png",
+    "intermediate": "production/visual/processed/diplomacy.png",
+    "output": "assets/visual/events/diplomacy.webp",
+    "bytes": 139386,
+    "sha256": "5728439e3044172eff4f6525f339d6b9fc81be751c847693da1a6f22a1f1bca1",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  },
+  {
+    "id": "visual.event.hostomel",
+    "source": "production/visual/raw/hostomel.png",
+    "intermediate": "production/visual/processed/hostomel.png",
+    "output": "assets/visual/events/hostomel.webp",
+    "bytes": 220698,
+    "sha256": "586d7c3b82f1d1c6d6bc8e9892d967cd12509ee33acdec7248e0b8f81623a918",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  },
+  {
+    "id": "visual.event.invasion",
+    "source": "production/visual/raw/invasion.png",
+    "intermediate": "production/visual/processed/invasion.png",
+    "output": "assets/visual/events/invasion.webp",
+    "bytes": 135016,
+    "sha256": "a0ec9cda1391453fcbc3b48068148882628827d9d040458b2540baee0f226837",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  },
+  {
+    "id": "visual.event.location",
+    "source": "production/visual/raw/location.png",
+    "intermediate": "production/visual/processed/location.png",
+    "output": "assets/visual/events/location.webp",
+    "bytes": 154702,
+    "sha256": "2b0ab4309a63a69708b73d9bd2b61542e70ccde8c6b176ac67b09b7228501f19",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  },
+  {
+    "id": "visual.event.seventh-night",
+    "source": "production/visual/raw/seventh-night.png",
+    "intermediate": "production/visual/processed/seventh-night.png",
+    "output": "assets/visual/events/seventh-night.webp",
+    "bytes": 210474,
+    "sha256": "7315065d99a93889c14cee910e4e57e6043a0f6bccea464a22ac077e709646bf",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  },
+  {
+    "id": "visual.event.two-fronts",
+    "source": "production/visual/raw/two-fronts.png",
+    "intermediate": "production/visual/processed/two-fronts.png",
+    "output": "assets/visual/events/two-fronts.webp",
+    "bytes": 214568,
+    "sha256": "9560754d0955be2d83d4dc95c6be3ac38f8c2be0ace5845a114075ed23bd89d0",
+    "postprocess": "desaturate 0.28; contrast 1.12; 8-color charcoal/olive/amber grade; seeded paper grain; 1152x640; WebP q84"
+  }
+]

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">总统在哪里：公开存在与指挥暴露的政治处境</title>
+  <desc id="desc">原创政治编辑插画。中央为办公室内的总统剪影和一台摄像机，左右档案卡分别呈现留在班科夫街的公开可见性与转移方案的不确定性，不暗示任一选择的历史结果。</desc>
+  <defs>
+    <pattern id="grain" width="41" height="35" patternUnits="userSpaceOnUse"><circle cx="9" cy="8" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M27 27h4" stroke="#d0c398" stroke-opacity=".05"/></pattern>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)"><path d="M0 0V8" stroke="#171b14" stroke-opacity=".2" stroke-width="2"/></pattern>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}.dark{fill:#171a13}.line{fill:none;stroke:#7f8772;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151910"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="58" class="mono paper" font-size="17" letter-spacing="3">25 / II / 2022 · SECURITY BRIEF</text>
+  <text x="42" y="84" class="mono muted" font-size="12" letter-spacing="2">PRESENCE / CONTINUITY / EXPOSURE</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">02 / 07</text>
+  <path d="M42 103H1158" stroke="#555c4b"/>
+  <g transform="rotate(-2 225 327)">
+    <rect x="54" y="137" width="348" height="390" fill="#bdb18e"/>
+    <rect x="72" y="156" width="312" height="218" fill="#242b20"/>
+    <path d="M72 324L127 274L173 296L225 221L280 260L331 206L384 244V374H72Z" fill="#343d2e"/>
+    <path d="M92 343H365M110 314V365M174 291V365M280 259V365M333 235V365" stroke="#78816b" stroke-opacity=".55"/>
+    <rect x="93" y="177" width="121" height="27" fill="#c9a563"/><text x="103" y="196" class="mono dark" font-size="12">公开画面 / 基辅</text>
+    <path d="M73 398H382" stroke="#756d53"/>
+    <text x="75" y="428" class="serif dark" font-size="25">留在班科夫街</text>
+    <text x="75" y="458" class="sans dark" font-size="15">可见的存在，固定坐标的风险</text>
+    <text x="75" y="493" class="mono dark" font-size="11">PUBLIC PRESENCE ≠ SAFETY</text>
+    <rect x="54" y="137" width="348" height="390" fill="url(#hatch)" opacity=".24"/>
+  </g>
+  <g transform="rotate(2 977 327)">
+    <rect x="798" y="137" width="348" height="390" fill="#252b21" stroke="#707861" stroke-width="2"/>
+    <path d="M826 170H1118M826 191H1040" stroke="#69715e"/>
+    <text x="826" y="235" class="serif paper" font-size="26">转移方案</text>
+    <text x="826" y="265" class="sans muted" font-size="15">协助意愿已知，条件仍待核实</text>
+    <path d="M833 316H1098V431H833Z" fill="#1b2018" stroke="#59624f"/>
+    <path d="M857 403V342H885V403M905 403V322H937V403M960 403V354H990V403M1012 403V334H1042V403M1060 403V365H1080V403" fill="#3a4433"/>
+    <path d="M849 421H1088" stroke="#b99a60" stroke-dasharray="11 8"/>
+    <text x="826" y="468" class="serif paper" font-size="21">行政连续性 / 政治象征</text>
+    <text x="826" y="497" class="mono muted" font-size="11">RELIABILITY UNCONFIRMED</text>
+  </g>
+  <g>
+    <path d="M453 563H749L724 622H474Z" fill="#292b20" stroke="#776b4a" stroke-width="2"/>
+    <path d="M514 408Q522 361 562 350H635Q676 362 687 408L703 563H494Z" fill="#536047" stroke="#879273" stroke-width="2"/>
+    <path d="M565 326V365Q598 385 632 361V324" fill="#9f9478"/>
+    <path d="M554 238Q594 207 638 238L645 290Q636 332 599 340Q559 329 550 290Z" fill="#a99b7d"/>
+    <path d="M552 263Q548 222 594 218Q635 216 642 255Q599 238 552 263Z" fill="#33382d"/>
+    <path d="M558 291Q599 317 639 287Q633 330 599 340Q565 331 558 291Z" fill="#4c4b3c"/>
+    <path d="M568 276L584 274M615 274L631 276" stroke="#292d24" stroke-width="4"/>
+    <path d="M599 369V548M553 388L524 546M645 388L677 546" stroke="#7b876b" stroke-width="2"/>
+    <path d="M437 405H503V472H437Z" fill="#171b14" stroke="#9a987a" stroke-width="2"/>
+    <path d="M503 420L535 402V474L503 455Z" fill="#333b2c" stroke="#9a987a"/>
+    <circle cx="470" cy="438" r="21" fill="#0e110c" stroke="#c9a563" stroke-width="3"/><circle cx="470" cy="438" r="8" fill="#6f795f"/>
+    <path d="M455 472L430 552M482 472L502 552M468 472V552" stroke="#858b74" stroke-width="3"/>
+    <circle cx="450" cy="416" r="4" fill="#c9a563"/>
+    <path d="M411 438H390M529 438H546" stroke="#c9a563" stroke-dasharray="3 5"/>
+  </g>
+  <rect x="366" y="111" width="468" height="52" fill="#1d2219" stroke="#4f5747"/>
+  <text x="600" y="143" text-anchor="middle" class="serif paper" font-size="23">明天早上，全国会在哪里看到总统？</text>
+  <path d="M402 568L454 548M746 548L798 568" stroke="#b99a60" stroke-dasharray="4 6"/>
+  <rect x="42" y="642" width="1116" height="1" fill="#424738"/>
+  <text x="42" y="674" class="mono muted" font-size="12">同一间办公室 · 两种政治代价 · 不预演历史结果</text>
+  <text x="1158" y="674" text-anchor="end" class="mono amber" font-size="12">EVENT 02 · PRESIDENTIAL LOCATION</text>
+</svg>

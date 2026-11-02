@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">霍斯托梅尔：跑道、机库与未确定的机场控制权</title>
+  <desc id="desc">原创机场空间编辑插画。透视线勾出受损跑道、机库与进场空域，空降直升机仅以剪影表示；资料标签明确机场遭空降突击、双方争夺且控制权无法独立核实，不绘制兵力或精确战线。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M26 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><path d="M0 0V9" stroke="#c0af80" stroke-opacity=".13" stroke-width="2"/></pattern>
+    <clipPath id="field"><path d="M42 126H1158V583H42Z"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}.dark{fill:#171a13}.line{fill:none;stroke:#7e8770;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">HOSTOMEL / AIRFIELD FILE</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">RUNWAY · HANGARS · APPROACH AIRSPACE</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">03 / 07</text>
+  <g clip-path="url(#field)">
+    <path d="M42 126H1158V330H42Z" fill="#20271e"/>
+    <path d="M42 330H1158V583H42Z" fill="#272d22"/>
+    <path d="M42 330L469 278H745L1158 330V583H42Z" fill="url(#hatch)"/>
+    <path d="M510 292H699L908 583H272Z" fill="#353a30" stroke="#858973" stroke-width="2"/>
+    <path d="M603 311L600 349M596 377L588 431M581 470L568 553" stroke="#c0b589" stroke-width="8" stroke-dasharray="31 24"/>
+    <path d="M500 315L336 570M707 315L866 570" stroke="#a9a587" stroke-opacity=".38" stroke-width="2"/>
+    <path d="M469 372L518 388L492 412L553 434L514 464M692 356L654 380L702 401L665 426" stroke="#171b14" stroke-width="7" fill="none"/>
+    <path d="M82 326V251L156 203L230 251V326Z" fill="#30382b" stroke="#737e66" stroke-width="2"/>
+    <path d="M106 326V262H207V326M156 203V326" stroke="#69745d" stroke-width="2"/>
+    <path d="M923 320V252L1001 205L1079 252V320Z" fill="#30382b" stroke="#737e66" stroke-width="2"/>
+    <path d="M948 320V262H1054V320M1001 205V320" stroke="#69745d" stroke-width="2"/>
+    <path d="M42 346L285 319M914 317L1158 347" stroke="#727a64" stroke-dasharray="10 9"/>
+    <g fill="#11150f" stroke="#7c856e" stroke-width="2">
+      <path d="M294 193L332 181L377 190L388 207L364 218H318L294 207Z"/>
+      <path d="M373 193L449 166L455 174L389 207Z"/>
+      <path d="M310 184L282 154L291 151L332 181Z"/>
+      <path d="M789 159L824 149L863 157L875 172L852 183H810L789 172Z"/>
+      <path d="M861 160L928 137L933 145L875 173Z"/>
+    </g>
+    <path d="M266 174H406M774 143H891" stroke="#92977e" stroke-width="3"/>
+    <path d="M341 177V151M831 148V124" stroke="#92977e" stroke-width="2"/>
+    <path d="M449 166L457 130M451 149L477 151M928 137L936 105M930 121L953 123" stroke="#92977e" stroke-width="2"/>
+    <path d="M365 222L350 254M824 187L811 215" stroke="#c9a563" stroke-opacity=".55" stroke-dasharray="3 6"/>
+    <rect x="69" y="472" width="189" height="69" fill="#bdb18e" transform="rotate(-3 69 472)"/>
+    <text x="84" y="499" class="mono dark" font-size="12" transform="rotate(-3 84 499)">RUNWAY STATUS</text>
+    <text x="84" y="524" class="sans dark" font-size="16" transform="rotate(-3 84 524)">受损 / 能否使用未明</text>
+    <path d="M258 496L361 455" stroke="#c2b384" stroke-width="2"/>
+  </g>
+  <rect x="42" y="126" width="1116" height="457" fill="none" stroke="#545d4b"/>
+  <path d="M42 108H1158" stroke="#555c4b"/>
+  <rect x="746" y="500" width="374" height="58" fill="#171b14" stroke="#8a805b"/>
+  <text x="765" y="524" class="mono amber" font-size="12" letter-spacing="1">CONTROL NOT INDEPENDENTLY VERIFIED</text>
+  <text x="765" y="546" class="sans paper" font-size="14">双方争夺中 · 不确认任何一方完全控制</text>
+  <path d="M42 605H1158" stroke="#555c4b"/>
+  <text x="42" y="640" class="serif paper" font-size="24">一条跑道，牵动基辅北面的空中通道。</text>
+  <text x="42" y="669" class="mono muted" font-size="12">空间关系编辑重构 · 非实时航拍 · 不表示兵力与精确战线</text>
+  <text x="1158" y="669" text-anchor="end" class="mono amber" font-size="12">EVENT 03 · HOSTOMEL</text>
+</svg>

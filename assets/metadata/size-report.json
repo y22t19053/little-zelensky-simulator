@@ -1,0 +1,55 @@
+{
+  "eventWebP": {
+    "path": "assets/visual/events",
+    "files": 7,
+    "bytes": 1264076,
+    "MiB": 1.206
+  },
+  "mapsAndArchive": {
+    "path": "assets/visual",
+    "files": 9,
+    "bytes": 7428,
+    "MiB": 0.007
+  },
+  "music": {
+    "path": "assets/audio/music",
+    "files": 4,
+    "bytes": 1955366,
+    "MiB": 1.865
+  },
+  "sfx": {
+    "path": "assets/audio/sfx",
+    "files": 10,
+    "bytes": 89829,
+    "MiB": 0.086
+  },
+  "rawVisual": {
+    "path": "production/visual/raw",
+    "files": 7,
+    "bytes": 9724883,
+    "MiB": 9.274
+  },
+  "processedVisual": {
+    "path": "production/visual/processed",
+    "files": 7,
+    "bytes": 8982235,
+    "MiB": 8.566
+  },
+  "rawAudio": {
+    "path": "production/audio/raw",
+    "files": 12,
+    "bytes": 8614928,
+    "MiB": 8.216
+  },
+  "allProduction": {
+    "path": "production",
+    "files": 39,
+    "bytes": 27669651,
+    "MiB": 26.388
+  },
+  "newRuntimeAssets": {
+    "files": 30,
+    "bytes": 3316699,
+    "MiB": 3.163
+  }
+}

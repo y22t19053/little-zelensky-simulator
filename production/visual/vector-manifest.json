@@ -1,0 +1,56 @@
+[
+  {
+    "id": "map.invasion",
+    "output": "assets/visual/maps/invasion.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "map.location",
+    "output": "assets/visual/maps/location.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "map.hostomel",
+    "output": "assets/visual/maps/hostomel.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "map.capital-night",
+    "output": "assets/visual/maps/capital-night.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "map.two-fronts",
+    "output": "assets/visual/maps/two-fronts.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "map.diplomacy",
+    "output": "assets/visual/maps/diplomacy.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "map.seventh-night",
+    "output": "assets/visual/maps/seventh-night.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "对应回合抽象态势叠层"
+  },
+  {
+    "id": "archive.paper-fiber",
+    "output": "assets/visual/archive/paper-fiber.svg",
+    "license": "本项目原创程序纹理；随项目使用",
+    "use": "档案表面低对比纸纹"
+  },
+  {
+    "id": "archive.dossier-stamp",
+    "output": "assets/visual/archive/dossier-stamp.svg",
+    "license": "本项目原创 SVG；随项目使用",
+    "use": "合成档案标识，非真实印章"
+  }
+]

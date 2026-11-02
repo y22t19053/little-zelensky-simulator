@@ -29,6 +29,7 @@ const SEQUENCE = {
 const failures = [];
 const consoleErrors = [];
 const consoleWarnings = [];
+const externalRequests = [];
 
 function assert(condition, label, detail) {
   if (condition) {
@@ -141,7 +142,12 @@ async function openPage() {
     if (entry.level === 'error') consoleErrors.push(entry.text || entry.url || 'Log error');
     if (entry.level === 'warning') consoleWarnings.push(entry.text || 'Log warning');
   });
+  cdp.on('Network.requestWillBeSent', function (params) {
+    const url = params.request && params.request.url || '';
+    if (/^https?:/i.test(url)) externalRequests.push(url);
+  });
 
+  await cdp.send('Network.enable');
   await cdp.send('Page.enable');
   await cdp.send('Runtime.enable');
   await cdp.send('Log.enable');
@@ -177,6 +183,11 @@ async function main() {
     }, 15000, 200);
 
     cdp = await openPage();
+    const audioRequests = [];
+    cdp.on('Network.requestWillBeSent', function (event) {
+      if (/\.ogg(?:$|\?)/.test(event.request.url)) audioRequests.push(event.request.url);
+    });
+    await cdp.send('Network.enable');
     await cdp.send('Page.navigate', { url: PAGE_URL });
     await waitFor(function () {
       return evaluate(cdp, 'document.readyState === "complete" && !!window.LZS && !!document.getElementById("btn-start")');
@@ -202,6 +213,12 @@ async function main() {
     const click = async function (selector) {
       const result = await evaluate(cdp, '(() => { const el = document.querySelector(' + JSON.stringify(selector) + '); if (!el) return "MISSING"; el.click(); return "OK"; })()');
       if (result !== 'OK') throw new Error('点击失败，元素不存在：' + selector);
+      await sleep(80);
+    };
+
+    const keyPress = async function (key, code, virtualKey) {
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: key, code: code, windowsVirtualKeyCode: virtualKey });
+      await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: key, code: code, windowsVirtualKeyCode: virtualKey });
       await sleep(80);
     };
 
@@ -247,10 +264,61 @@ async function main() {
     assert(state && state.stats.gov === 54 && state.stats.safety === 58, '初始国家状态正确');
     assert((await evaluate(cdp, 'document.getElementById("ap-value").textContent')) === '3', 'AP 显示为 3');
     assert((await evaluate(cdp, 'document.querySelectorAll(".choice-card").length')) === 4, '事件有 4 个选项');
-    assert(await evaluate(cdp, 'document.querySelectorAll("#screen-game .epistemics > .epistemic-block").length === 2'), '游玩期只有当时已知与无法确认两栏');
+    assert(await evaluate(cdp, 'document.querySelectorAll("#screen-game .epistemic-grid > .epistemic-block").length === 2'), '游玩期只有当时已知与无法确认两栏');
     assert(await evaluate(cdp, '!document.getElementById("screen-game").textContent.includes("事后记录") && !document.getElementById("screen-game").textContent.includes("后来才确认")'), '游玩期没有历史结果泄漏');
     assert(await evaluate(cdp, 'document.querySelectorAll(".intro-portrait img").length === 2 && Array.from(document.querySelectorAll(".intro-portrait img")).every(function(img){ return img.complete && img.naturalWidth > 0; })'), '两幅原创 SVG 肖像离线加载成功');
     await screenshot('02-game-desktop.png');
+
+    console.log('\n[2b] 桌面首屏与七事件视觉');
+    for (const size of [[1280, 800], [1440, 900]]) {
+      await setViewport(size[0], size[1], false);
+      await evaluate(cdp, 'window.scrollTo(0,0)');
+      await sleep(80);
+      const firstScreen = await evaluate(cdp, `(() => {
+        const barTop = document.querySelector('.order-bar').getBoundingClientRect().top;
+        const cards = Array.from(document.querySelectorAll('.choice-card')).slice(0,2).map(function(card){
+          const title = card.querySelector('.choice-title').getBoundingClientRect();
+          const summary = card.querySelector('.choice-summary').getBoundingClientRect();
+          return {titleBottom:title.bottom,summaryBottom:summary.bottom};
+        });
+        const scene = document.querySelector('.scene img');
+        return {barTop:barTop,cards:cards,sceneLoaded:scene.complete && scene.naturalWidth > 0,eventVisible:document.querySelector('.dossier-title').getBoundingClientRect().top >= 0,headerBottom:document.querySelector('.game-top').getBoundingClientRect().bottom,sceneBottom:document.querySelector('.scene').getBoundingClientRect().bottom,briefingBottom:document.querySelector('.briefing-paper').getBoundingClientRect().bottom,choicesTop:document.getElementById('choices-panel').getBoundingClientRect().top};
+      })()`);
+      assert(firstScreen.sceneLoaded && firstScreen.eventVisible, size[0] + '×' + size[1] + ' 事件主体可见且本地 SVG 加载');
+      assert(firstScreen.cards.length === 2 && firstScreen.cards.every(function(card){return card.summaryBottom <= firstScreen.barTop - 4;}), size[0] + '×' + size[1] + ' 首屏显示两项决策标题与摘要', JSON.stringify(firstScreen));
+      if (size[0] === 1280) await screenshot('02b-game-1280x800.png');
+    }
+    await setViewport(1280, 900, false);
+
+    console.log('\n[2c] 键盘与模态焦点');
+    await evaluate(cdp, 'document.querySelector(\'[data-choice-id="address"]\').focus()');
+    await keyPress('Enter', 'Enter', 13);
+    assert(await evaluate(cdp, 'document.querySelector(\'[data-choice-id="address"]\').classList.contains("is-selected") && document.activeElement.dataset.choiceId === "address"'), 'Enter 选择决策并保留焦点');
+    await keyPress(' ', 'Space', 32);
+    assert(await evaluate(cdp, '!document.querySelector(\'[data-choice-id="address"]\').classList.contains("is-selected")'), 'Space 取消选择');
+    await evaluate(cdp, 'document.getElementById("btn-help").focus()');
+    await click('#btn-help');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.querySelector("#modal-root").contains(document.activeElement)'), '模态打开后焦点进入弹窗');
+    await keyPress('Escape', 'Escape', 27);
+    await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, 'document.activeElement.id === "btn-help"'), 'Escape 关闭弹窗并恢复焦点');
+
+    console.log('\n[2d] 本地音频、持久化与懒加载');
+    assert(await evaluate(cdp, '(() => { const s=LZS_AUDIO.getSettings(); return !s.music && !s.sfx; })()') && audioRequests.length === 0, '默认音乐与音效关闭，开局不加载音频');
+    await click('#btn-audio');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#audio-music")'); }, 5000);
+    assert(await evaluate(cdp, 'Array.from(document.querySelectorAll(".switch-control,.volume-slider")).every(function(el){return el.getBoundingClientRect().height >= 44;})'), '声音开关与音量滑块至少 44px');
+    await click('#audio-music');
+    await click('#audio-sfx');
+    await evaluate(cdp, '(() => { const m=document.querySelector("#audio-music-volume"); m.value=37; m.dispatchEvent(new Event("input",{bubbles:true})); const s=document.querySelector("#audio-sfx-volume"); s.value=42; s.dispatchEvent(new Event("input",{bubbles:true})); })()');
+    await sleep(250);
+    const audioSettings = await evaluate(cdp, '({live:LZS_AUDIO.getSettings(),stored:JSON.parse(localStorage.getItem("lzs_audio_v1")),theme:LZS_AUDIO.getTheme()})');
+    assert(audioSettings.live.music && audioSettings.live.sfx && audioSettings.live.musicVolume === 0.37 && audioSettings.live.sfxVolume === 0.42, '音乐、音效与独立音量设置生效');
+    assert(audioSettings.stored.music && audioSettings.stored.sfx && audioSettings.stored.musicVolume === 0.37 && audioSettings.stored.sfxVolume === 0.42, '音频设置写入独立 lzs_audio_v1');
+    assert(audioSettings.theme === 'day' && audioRequests.some(function(url){return /day\.ogg(?:$|\?)/.test(url);}), '用户开启后才懒加载日间音乐');
+    await screenshot('09-audio-settings.png');
+    await click('#modal-root .modal-actions .btn-primary');
 
     console.log('\n[3] 签发、AP 扣除与防重复');
     const beforeIssue = await savedState();
@@ -267,6 +335,8 @@ async function main() {
     assert((await evaluate(cdp, 'document.querySelectorAll(".log-entry").length')) > 0, '行动日志出现记录');
     const duplicate = await evaluate(cdp, '(() => { const s = JSON.parse(localStorage.getItem("lzs_save_v1")).state; return window.LZS.applyChoice(s, ' + JSON.stringify(firstChoice) + '); })()');
     assert(duplicate && duplicate.ok === false && duplicate.code === 'DUPLICATE', '重复签发被拒绝（DUPLICATE）');
+    await click('#btn-save'); await click('#btn-save'); await click('#btn-save');
+    assert(await evaluate(cdp, 'document.querySelectorAll("#toast-root .toast").length === 1'), '连续通知只保留一条 Toast，不叠加遮挡');
     await screenshot('03-game-issued.png');
 
     console.log('\n[4] 第一夜结算与延迟后果');
@@ -279,6 +349,8 @@ async function main() {
     state = await savedState();
     assert(state.pressure === beforeEnd.pressure + event1.pressureRise, '战争压力按事件上升');
     assert(state.phase === 'interlude', '结算后进入夜间态势');
+    await sleep(1000);
+    assert(await evaluate(cdp, 'LZS_AUDIO.getTheme() === "night"') && audioRequests.some(function(url){return /night\.ogg(?:$|\?)/.test(url);}), '夜间平滑切换并加载夜间主题');
     assert(state.pending.length >= 1, '已产生延迟后果');
     assert(await evaluate(cdp, 'document.querySelector("#modal-root .modal-title").textContent.includes("夜")'), '夜间结算模态可见');
     await screenshot('04-interlude-desktop.png');
@@ -288,6 +360,7 @@ async function main() {
     }, 5000);
     state = await savedState();
     assert(state.phase === 'briefing' && state.round === 2 && state.ap === 3, '进入第 2 回合并重置 AP');
+    assert(await evaluate(cdp, 'LZS_AUDIO.getTheme() === "day"'), '夜间确认后恢复日间主题');
     assert(await evaluate(cdp, 'document.getElementById("game-date").textContent.includes("2月25日")'), '日期推进到 2 月 25 日');
 
     console.log('\n[5] 互斥命令与完整一局（固定策略）');
@@ -371,17 +444,24 @@ async function main() {
     state = await savedState();
     assert(state.phase === 'ending', '第 7 回合后进入结局');
     assert(!!state.ending && !!state.ending.title, '结局数据存在');
+    assert(await evaluate(cdp, 'LZS_AUDIO.getTheme() === "ending"'), '结局切换结局主题变奏');
     assert(await evaluate(cdp, 'document.querySelector(".ending-title") !== null'), '结局标题可见');
     assert(await evaluate(cdp, 'document.querySelectorAll(".decision-timeline li").length') > 0, '关键决策时间线可见');
     assert(await evaluate(cdp, 'document.querySelectorAll(".ending-stat").length') === 7, '结局展示 7 项最终状态');
     assert(await evaluate(cdp, 'document.querySelector(".ending-reasons li") !== null'), '判定依据可见');
-    assert(await evaluate(cdp, '!!document.querySelector(".history-review")'), '结局后出现独立历史复盘');
+    assert(await evaluate(cdp, '!document.querySelector("#screen-ending > .history-review") && !!document.getElementById("btn-history")'), '历史复盘不再直接接在结局正文后');
+    console.log('  结局：' + await evaluate(cdp, 'document.querySelector(".ending-title").textContent') + ' / ' + await evaluate(cdp, 'document.querySelector(".ending-kicker").textContent'));
+    await screenshot('06-ending-desktop.png');
+    await click('#btn-history');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .history-review")'); }, 5000);
+    assert(await evaluate(cdp, '!!document.querySelector("#modal-root .simulation-review")'), '独立复盘披露完整模拟参数');
     assert(await evaluate(cdp, 'document.querySelectorAll(".history-day").length === 7'), '复盘覆盖 2 月 24 日至 3 月 2 日');
     assert(await evaluate(cdp, 'document.querySelectorAll(".history-table tbody tr").length === 6'), '玩家路线与历史按 6 个维度对照');
     assert(await evaluate(cdp, 'document.querySelectorAll(".history-sources a").length >= 6 && Array.from(document.querySelectorAll(".history-sources a")).every(function(a){return a.href.startsWith("https://");})'), '至少 6 条可点击可靠来源');
     assert(await evaluate(cdp, 'document.querySelector(".history-reflection").textContent.includes("不等于")'), '复盘包含克制的历史反思');
-    console.log('  结局：' + await evaluate(cdp, 'document.querySelector(".ending-title").textContent') + ' / ' + await evaluate(cdp, 'document.querySelector(".ending-kicker").textContent'));
-    await screenshot('06-ending-desktop.png');
+    await screenshot('06b-history-desktop.png');
+    await click('#modal-root .modal-actions .btn-primary');
+    await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
 
     console.log('\n[6b] 四种手机视口的结局与复盘');
     const endingViewports = [[320, 700], [360, 800], [390, 844], [430, 932]];
@@ -389,9 +469,15 @@ async function main() {
       await setViewport(size[0], size[1], true);
       await evaluate(cdp, 'window.scrollTo(0,0)');
       await sleep(100);
-      const layout = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth,days:document.querySelectorAll(".history-day").length,links:document.querySelectorAll(".history-sources a").length}))()');
-      assert(layout.sw <= layout.cw + 2 && layout.days === 7 && layout.links >= 6, size[0] + 'px 结局与复盘无横向溢出', JSON.stringify(layout));
+      const layout = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+      assert(layout.sw <= layout.cw + 2, size[0] + 'px 结局无横向溢出', JSON.stringify(layout));
       if (size[0] === 320) await screenshot('09-ending-320.png');
+      await click('#btn-history');
+      await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .history-review")'); }, 5000);
+      const reviewLayout = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth,days:document.querySelectorAll(".history-day").length,links:document.querySelectorAll(".history-sources a").length}))()');
+      assert(reviewLayout.sw <= reviewLayout.cw + 2 && reviewLayout.days === 7 && reviewLayout.links >= 6, size[0] + 'px 独立复盘完整且无页面横向溢出', JSON.stringify(reviewLayout));
+      await click('#modal-root .modal-actions .btn-primary');
+      await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
     }
     await setViewport(1280, 900, false);
 
@@ -437,6 +523,32 @@ async function main() {
     assert(restored.round === mid.round && restored.ap === mid.ap && restored.executed.length === mid.executed.length, '刷新后进度恢复（回合/AP/决策）');
     assert((await evaluate(cdp, 'document.querySelectorAll(".choice-card.is-executed").length')) === mid.executed.length, '刷新后已签发卡恢复');
 
+    console.log('\n[8b] 七事件视觉与 29 项决策显示 / 选择');
+    let displayedChoices = 0;
+    for (let round = 1; round <= 7; round++) {
+      await evaluate(cdp, '(() => {const g=LZS.createGame();g.round=' + round + ';return LZS.saveGame(g);})()');
+      await cdp.send('Page.reload', { ignoreCache: true });
+      await sleep(220);
+      await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue")'); }, 15000);
+      await click('#btn-continue');
+      await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden'); }, 5000);
+      await waitFor(function () { return evaluate(cdp, 'document.querySelector(".scene-picture img").complete && document.querySelector(".scene-picture img").naturalWidth > 0 && document.querySelector(".scene-map").complete && document.querySelector(".scene-map").naturalWidth > 0'); }, 5000);
+      assert(await evaluate(cdp, 'document.querySelector(".scene-picture img").currentSrc.endsWith(".webp")'), 'R' + round + ' 独立 WebP 主视觉与抽象态势离线加载');
+      const ids = await evaluate(cdp, 'Array.from(document.querySelectorAll(".choice-card")).map(function(card){return card.dataset.choiceId;})');
+      for (const id of ids) {
+        const selected = await evaluate(cdp, `(() => {const card=document.querySelector('[data-choice-id="${id}"]');card.click();const next=document.querySelector('[data-choice-id="${id}"]');return {selected:next.classList.contains('is-selected'),detail:!next.querySelector('.choice-detail').hidden,issue:!document.getElementById('btn-issue').disabled,forecast:next.querySelectorAll('.forecast-effect').length>0};})()`);
+        assert(selected.selected && selected.detail && selected.issue && selected.forecast, 'R' + round + ' ' + id + ' 可选择并展开披露');
+        await evaluate(cdp, 'document.querySelector(\'[data-choice-id="' + id + '"]\').click()');
+        displayedChoices++;
+      }
+      if (round === 4) {
+        await evaluate(cdp, 'window.scrollTo(0,0)');
+        await screenshot('05b-event4-desktop.png');
+      }
+    }
+    assert(displayedChoices === 29, '全部 29 项决策均显示并可选择', String(displayedChoices));
+    await evaluate(cdp, 'LZS.saveGame(' + JSON.stringify(mid) + ')');
+
     console.log('\n[9] 320 / 360 / 390 / 430 手机端与真实触摸事件');
     const mobileViewports = [[320, 700], [360, 800], [390, 844], [430, 932]];
     for (const size of mobileViewports) {
@@ -449,6 +561,7 @@ async function main() {
       const introLayout = await evaluate(cdp, '({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
       assert(introLayout.sw <= introLayout.cw + 2, size[0] + 'px 开场无横向溢出', JSON.stringify(introLayout));
       if (size[0] === 390) {
+        assert(await evaluate(cdp, 'LZS_AUDIO.getSettings().music && performance.getEntriesByType("resource").every(function(r){return !/\\.ogg(?:$|\\?)/.test(r.name);})'), '持久化开启音乐也不会在刷新后强制自动播放');
         await evaluate(cdp, 'window.scrollTo(0,0)');
         await screenshot('07-intro-mobile.png');
       }
@@ -468,7 +581,11 @@ async function main() {
         };
       })()`);
       assert(mobile.sw <= mobile.cw + 2 && mobile.cardsFit && mobile.barVisible, size[0] + 'px 游戏、选项和底栏无横向溢出', JSON.stringify(mobile));
-      assert(mobile.vitals === 7 && mobile.display === 'grid', size[0] + 'px 七项状态以网格完整显示');
+      assert(mobile.vitals === 3 && mobile.display === 'grid', size[0] + 'px 紧凑状态与七项入口可见');
+      const smallTargets = await evaluate(cdp, `Array.from(document.querySelectorAll('button,a[href],summary,[role="button"]')).filter(function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=='none'&&s.visibility!=='hidden'&&(r.width<44||r.height<44);}).map(function(el){const r=el.getBoundingClientRect();return {label:el.id||el.className||el.textContent.trim().slice(0,20),width:r.width,height:r.height};})`);
+      assert(smallTargets.length === 0, size[0] + 'px 所有主要触控目标不小于 44px', JSON.stringify(smallTargets));
+      await evaluate(cdp, 'document.querySelector(".state-details").open = true');
+      assert(await evaluate(cdp, 'document.querySelector(".state-details").open && document.querySelectorAll(".stat-row").length === 7'), size[0] + 'px 可展开查看全部七项状态');
       await evaluate(cdp, 'window.scrollTo(0,document.documentElement.scrollHeight)');
       await sleep(100);
       const clearance = await evaluate(cdp, `(() => {
@@ -492,12 +609,25 @@ async function main() {
     await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
     assert(await evaluate(cdp, 'window.matchMedia("(prefers-reduced-motion: reduce)").matches && getComputedStyle(document.querySelector(".btn")).animationDuration === "1e-05s"'), '减少动态效果模式生效');
 
-    console.log('\n[10] 汇总');
+    console.log('\n[10] 离线试听页');
+    await setViewport(1280, 900, false);
+    const beforeListening = audioRequests.length;
+    await cdp.send('Page.navigate', { url: pathToFileURL(path.join(ROOT, 'production', 'listening-room.html')).href });
+    await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && document.querySelectorAll("audio").length === 4'); }, 10000);
+    assert(await evaluate(cdp, 'document.querySelectorAll("audio[preload=none]").length === 4 && document.querySelectorAll("[data-sound]").length === 10 && Array.from(document.querySelectorAll("audio")).every(function(a){return a.paused;})') && audioRequests.length === beforeListening, '试听页包含四段音乐与十类音效且不自动播放');
+    await click('[data-sound="select"]');
+    await waitFor(async function () { return audioRequests.length > beforeListening; }, 5000);
+    assert(audioRequests.some(function(url){return /select\.ogg(?:$|\?)/.test(url);}), '试听页按需加载并播放本地 SFX');
+    await screenshot('10-listening-room.png');
+
+    console.log('\n[11] 汇总');
     console.log('  控制台错误：' + consoleErrors.length);
     if (consoleErrors.length) console.log('  ' + consoleErrors.join('\n  '));
     console.log('  控制台警告：' + consoleWarnings.length);
     if (consoleWarnings.length) console.log('  ' + consoleWarnings.join('\n  '));
     assert(consoleErrors.length === 0, '无控制台错误');
+    assert(consoleWarnings.length === 0, '无控制台警告');
+    assert(externalRequests.length === 0, '无不必要的外部网络请求', externalRequests.join('\n'));
     assert(failures.length === 0, '全部断言通过');
   } finally {
     if (cdp) {

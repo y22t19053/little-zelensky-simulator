@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">2022年2月24日，总统办公室与多方向入侵局势</title>
+  <desc id="desc">原创政治漫画与档案拼贴。左侧是办公室内的人物、电话与文件，右侧以简化地图和多向箭头表示全面入侵，不表示实时前线或兵力。</desc>
+  <defs>
+    <pattern id="paper" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M0 27.5H28M27.5 0V28" stroke="#d0c398" stroke-opacity=".035"/><circle cx="6" cy="8" r=".8" fill="#d0c398" fill-opacity=".09"/></pattern>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><path d="M0 0V8" stroke="#b5a577" stroke-opacity=".16" stroke-width="2"/></pattern>
+    <clipPath id="mapclip"><rect x="535" y="42" width="615" height="443"/></clipPath>
+    <style>
+      .serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}
+      .line{stroke:#8c927d;stroke-width:2;fill:none}.amber{fill:#c7a465}.paper{fill:#c8bc99}.muted{fill:#8d927f}.dark{fill:#151810}
+    </style>
+  </defs>
+  <rect width="1200" height="560" fill="#171b14"/>
+  <rect width="1200" height="560" fill="url(#paper)"/>
+  <path d="M0 0H1200V14H0Z" fill="#bba267"/>
+  <path d="M0 14H1200V18H0Z" fill="#5a543b"/>
+  <text x="42" y="60" class="mono paper" font-size="17" letter-spacing="3">24 / II / 2022</text>
+  <text x="42" y="84" class="mono muted" font-size="12" letter-spacing="2">PRESIDENTIAL OFFICE · MORNING FILE 01</text>
+  <path d="M42 102H490" stroke="#746f53"/>
+
+  <!-- Editorial interior: window, desk, telephone, solitary figure. -->
+  <rect x="45" y="126" width="245" height="232" fill="#20271e" stroke="#5d6652"/>
+  <path d="M167 126V358M45 241H290" stroke="#66705b" stroke-width="4"/>
+  <path d="M52 135L158 228M177 135L282 228M52 251L158 347M177 251L282 347" stroke="#a9af94" stroke-opacity=".1" stroke-width="12"/>
+  <path d="M45 366H495" stroke="#73775f" stroke-width="3"/>
+  <path d="M38 405H493L465 509H60Z" fill="#27291e" stroke="#746b4c"/>
+  <path d="M65 417H458" stroke="#a18d5e" stroke-opacity=".55"/>
+  <!-- Figure in olive fleece, deliberately graphic rather than photorealistic. -->
+  <path d="M285 341Q292 308 328 300L374 301Q415 310 430 351L446 410H266Z" fill="#536047" stroke="#879273" stroke-width="2"/>
+  <path d="M326 281L326 313Q350 330 376 310L374 279" fill="#9f9478"/>
+  <path d="M316 211Q348 184 381 210L389 251Q382 287 352 294Q320 283 313 251Z" fill="#a99b7d"/>
+  <path d="M315 232Q310 200 345 196Q379 193 386 226Q352 211 315 232Z" fill="#33382d"/>
+  <path d="M320 251Q351 273 383 248Q379 287 352 294Q325 285 320 251Z" fill="#4c4b3c"/>
+  <path d="M326 240L340 238M363 238L377 240" stroke="#2a2d25" stroke-width="4"/>
+  <path d="M340 260Q352 264 365 259" stroke="#332f27" fill="none"/>
+  <path d="M350 313V397M324 323L294 399M377 323L411 399" stroke="#758066" stroke-width="2"/>
+  <path d="M312 399L375 373L408 402" fill="#8d8064"/>
+  <!-- Desk telephone and decision papers. -->
+  <path d="M88 391H184L197 408H77Z" fill="#11150f" stroke="#7e8069"/>
+  <path d="M97 389Q98 364 134 364Q170 364 175 389" stroke="#96977d" stroke-width="10" fill="none"/>
+  <circle cx="112" cy="398" r="4" fill="#b5a577"/><circle cx="133" cy="398" r="4" fill="#b5a577"/><circle cx="154" cy="398" r="4" fill="#b5a577"/>
+  <path d="M197 388Q233 376 235 415" stroke="#7e8069" fill="none"/>
+  <path d="M215 421L306 409L317 465L226 477Z" fill="#b7ac89"/>
+  <path d="M229 434L287 425M232 446L295 436M234 458L276 451" stroke="#625e49"/>
+  <text x="69" y="535" class="serif paper" font-size="21">第一通电话之后，所有问题同时抵达。</text>
+
+  <!-- Archive/map collage: relationships only, no fabricated front lines or forces. -->
+  <g clip-path="url(#mapclip)">
+    <path d="M570 90L654 62L718 81L773 59L827 88L899 74L944 110L1016 104L1060 147L1128 170L1110 227L1144 270L1108 306L1116 368L1052 384L1018 438L950 425L901 460L838 438L790 459L739 421L680 434L642 391L580 378L590 316L551 278L576 223L548 169Z" fill="#262d22" stroke="#879074" stroke-width="3"/>
+    <path d="M570 90L654 62L718 81L773 59L827 88L899 74L944 110L1016 104L1060 147L1128 170L1110 227L1144 270L1108 306L1116 368L1052 384L1018 438L950 425L901 460L838 438L790 459L739 421L680 434L642 391L580 378L590 316L551 278L576 223L548 169Z" fill="url(#hatch)"/>
+    <path d="M703 138Q749 198 730 259T776 371M986 147Q922 201 945 273T895 395M624 312Q733 298 813 320T1057 292" class="line" stroke-opacity=".26" stroke-dasharray="5 9"/>
+    <!-- Direction arrows are schematic, not geographic claims about exact axes. -->
+    <g fill="#b99a60">
+      <path d="M747 30H777V119L800 119L762 158L724 119H747Z"/>
+      <path d="M1137 93L1158 119L1047 199L1058 220L1001 212L1026 162L1037 183Z"/>
+      <path d="M1181 283V313H1066L1066 337L1017 298L1066 259V283Z"/>
+      <path d="M874 531L845 511L918 413L897 402L950 384L957 439L939 425Z"/>
+    </g>
+    <g class="sans dark" font-size="18" font-weight="bold">
+      <circle cx="766" cy="222" r="7" fill="#d1b477"/><text x="782" y="229" fill="#ded5b9">基辅</text>
+      <circle cx="1002" cy="236" r="7" fill="#d1b477"/><text x="1018" y="243" fill="#ded5b9">哈尔科夫</text>
+      <circle cx="851" cy="403" r="7" fill="#d1b477"/><text x="868" y="410" fill="#ded5b9">敖德萨</text>
+    </g>
+    <path d="M742 204L790 204L790 240" stroke="#d1b477" fill="none"/>
+    <rect x="553" y="455" width="351" height="48" fill="#c2b384"/>
+    <text x="570" y="476" class="mono dark" font-size="13" letter-spacing="1">SITUATION RELATIONSHIP / NOT LIVE MAP</text>
+    <text x="570" y="494" class="sans dark" font-size="13">局势关系示意 · 不表示实时前线或兵力</text>
+  </g>
+  <text x="548" y="61" class="mono muted" font-size="12" letter-spacing="2">MULTIPLE DIRECTIONS / INCOMPLETE REPORTS</text>
+  <path d="M519 42V518" stroke="#6a6d55" stroke-dasharray="2 7"/>
+  <rect x="1090" y="27" width="74" height="29" fill="none" stroke="#b99a60"/>
+  <text x="1103" y="47" class="mono amber" font-size="13">01 / 07</text>
+</svg>

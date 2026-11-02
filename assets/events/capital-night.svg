@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">首都之夜：宵禁下的基辅检查站与城市防御</title>
+  <desc id="desc">原创夜间城市编辑插画。深灰天空下是基辅城市剪影、稀少灯光、沙袋检查站与反坦克障碍，附条标注宵禁、渗透报告和地下指挥所，不表示具体街区、敌军位置或战线。</desc>
+  <defs>
+    <pattern id="grain" width="47" height="39" patternUnits="userSpaceOnUse"><circle cx="11" cy="9" r=".8" fill="#d0c398" fill-opacity=".07"/><path d="M30 30h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(30)"><path d="M0 0V8" stroke="#c5b483" stroke-opacity=".13" stroke-width="2"/></pattern>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}.dark{fill:#151810}.line{fill:none;stroke:#7e8770;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#11150f"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">26 / II / 2022 · KYIV AFTER DARK</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">CURFEW / CHECKPOINTS / CIVIL DEFENCE</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">04 / 07</text>
+  <path d="M42 104H1158" stroke="#505747"/>
+  <circle cx="977" cy="194" r="47" fill="#b7ad8a"/><circle cx="995" cy="181" r="47" fill="#11150f"/>
+  <path d="M42 357L93 357V289H155V330H205V251H280V311H327V218H393V300H452V266H521V340H574V236H652V315H714V279H771V340H836V228H913V305H964V266H1032V323H1091V285H1158V489H42Z" fill="#242b21" stroke="#59634f" stroke-width="2"/>
+  <path d="M350 218V177H370V218M596 236V191H628V236M856 228V169H891V228" fill="#242b21" stroke="#59634f" stroke-width="2"/>
+  <path d="M860 169L874 139L888 169M603 191L612 160L621 191" fill="#242b21" stroke="#59634f" stroke-width="2"/>
+  <g fill="#c9a563" opacity=".72">
+    <rect x="111" y="313" width="10" height="15"/><rect x="229" y="278" width="11" height="17"/><rect x="251" y="278" width="11" height="17"/>
+    <rect x="348" y="250" width="10" height="16"/><rect x="371" y="278" width="10" height="16"/><rect x="477" y="292" width="11" height="16"/>
+    <rect x="597" y="265" width="11" height="17"/><rect x="621" y="294" width="11" height="17"/><rect x="860" y="254" width="11" height="17"/>
+    <rect x="884" y="280" width="11" height="17"/><rect x="989" y="290" width="11" height="17"/><rect x="1111" y="312" width="11" height="17"/>
+  </g>
+  <path d="M42 407H1158V569H42Z" fill="#1d231a"/>
+  <path d="M42 569L442 407H754L1158 569Z" fill="#2c3127"/>
+  <path d="M598 432L596 462M591 490L584 543" stroke="#9a9678" stroke-width="4" stroke-dasharray="18 18"/>
+  <path d="M42 569H1158" stroke="#76745c" stroke-width="3"/>
+  <g>
+    <path d="M125 501L146 463H371L395 501Z" fill="#3d4535" stroke="#858b70" stroke-width="2"/>
+    <path d="M141 482H381M155 464L174 500M202 464L220 500M249 464L267 500M296 464L314 500M343 464L361 500" stroke="#737b63"/>
+    <path d="M145 463Q160 444 177 463Q194 443 211 463Q228 443 245 463Q262 443 279 463Q296 443 313 463Q330 443 347 463Q360 447 374 463" fill="#4d5541" stroke="#858b70"/>
+    <rect x="194" y="367" width="132" height="78" fill="#bcb18d" stroke="#171b14" stroke-width="4"/>
+    <text x="260" y="399" text-anchor="middle" class="serif dark" font-size="24">宵 禁</text>
+    <text x="260" y="426" text-anchor="middle" class="mono dark" font-size="13">CHECKPOINT</text>
+    <path d="M211 445V466M309 445V466" stroke="#8b876c" stroke-width="5"/>
+    <path d="M81 530L142 467M81 467L142 530M74 499H149M111 454V542" stroke="#777e68" stroke-width="10"/>
+    <path d="M396 548L457 485M396 485L457 548M389 516H464M426 472V560" stroke="#777e68" stroke-width="10"/>
+  </g>
+  <g>
+    <rect x="801" y="378" width="270" height="146" fill="#171c15" stroke="#6d765f" stroke-width="2"/>
+    <path d="M826 406H1045M826 432H984M826 458H1025M826 484H956" stroke="#6d765f"/>
+    <circle cx="1024" cy="474" r="18" fill="none" stroke="#c9a563" stroke-width="2"/><path d="M1024 449V427M1012 431H1036" stroke="#c9a563" stroke-width="2"/>
+    <rect x="782" y="352" width="164" height="30" fill="#c2b384" transform="rotate(-2 782 352)"/>
+    <text x="795" y="373" class="mono dark" font-size="12" transform="rotate(-2 795 373)">备用通信 / 地下节点</text>
+  </g>
+  <path d="M721 399V547M700 424H742M704 547L721 399L738 547" stroke="#606a55" stroke-width="2"/>
+  <path d="M721 401L677 356M721 401L762 350" stroke="#9a9b7d" stroke-opacity=".32"/>
+  <rect x="42" y="126" width="240" height="79" fill="#1b2118" stroke="#575f4d"/>
+  <text x="59" y="153" class="mono amber" font-size="12">NIGHT BRIEF / 26—II</text>
+  <text x="59" y="179" class="sans paper" font-size="15">市区交火已确认</text>
+  <text x="59" y="197" class="sans muted" font-size="12">渗透小组数量与目标未明</text>
+  <rect x="42" y="594" width="1116" height="1" fill="#424738"/>
+  <text x="42" y="632" class="serif paper" font-size="24">城市安静下来，检查站与通信节点仍在运转。</text>
+  <text x="42" y="665" class="mono muted" font-size="12">夜间城市编辑重构 · 非具体街区 · 不标绘敌军位置或战线</text>
+  <text x="1158" y="665" text-anchor="end" class="mono amber" font-size="12">EVENT 04 · CAPITAL NIGHT</text>
+</svg>

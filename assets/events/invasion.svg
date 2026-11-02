@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">全线入侵：总统办公室与多方向接报</title>
+  <desc id="desc">原创政治编辑拼贴。左侧为总统办公室、电话与待签文件，右侧以简化地图和多向箭头表现2022年2月24日的多方向入侵报告。地图为模拟示意，不表示实时前线、精确路线或兵力。</desc>
+  <defs>
+    <pattern id="paper" width="37" height="31" patternUnits="userSpaceOnUse"><circle cx="7" cy="9" r=".8" fill="#d0c398" fill-opacity=".09"/><path d="M22 25h5" stroke="#d0c398" stroke-opacity=".045"/></pattern>
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><path d="M0 0V9" stroke="#b5a577" stroke-opacity=".14" stroke-width="2"/></pattern>
+    <clipPath id="mapclip"><rect x="548" y="94" width="610" height="500"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#929685}.dark{fill:#151810}.line{fill:none;stroke:#858d76;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#171b14"/>
+  <rect width="1200" height="700" fill="url(#paper)"/>
+  <path d="M0 0H1200V14H0Z" fill="#bba267"/><path d="M0 14H1200V18H0Z" fill="#5a543b"/>
+  <text x="42" y="62" class="mono paper" font-size="18" letter-spacing="3">24 / II / 2022</text>
+  <text x="42" y="87" class="mono muted" font-size="12" letter-spacing="2">PRESIDENTIAL OFFICE · MORNING FILE 01</text>
+  <text x="548" y="63" class="mono muted" font-size="12" letter-spacing="2">MULTIPLE DIRECTIONS / INCOMPLETE REPORTS</text>
+  <rect x="1070" y="38" width="88" height="31" fill="none" stroke="#b99a60"/>
+  <text x="1084" y="59" class="mono amber" font-size="13">01 / 07</text>
+  <path d="M42 105H490M520 42V626" stroke="#6a6d55" stroke-dasharray="2 7"/>
+  <g>
+    <rect x="45" y="137" width="245" height="245" fill="#20271e" stroke="#5d6652"/>
+    <path d="M167 137V382M45 259H290" stroke="#66705b" stroke-width="4"/>
+    <path d="M52 146L158 246M177 146L282 246M52 270L158 371M177 270L282 371" stroke="#a9af94" stroke-opacity=".09" stroke-width="12"/>
+    <path d="M45 393H495" stroke="#73775f" stroke-width="3"/>
+    <path d="M38 451H493L465 584H60Z" fill="#27291e" stroke="#746b4c" stroke-width="2"/>
+    <path d="M65 463H458" stroke="#a18d5e" stroke-opacity=".55"/>
+    <path d="M285 366Q292 328 328 320L374 321Q415 330 430 374L446 451H266Z" fill="#536047" stroke="#879273" stroke-width="2"/>
+    <path d="M326 296V333Q350 350 376 330L374 294" fill="#9f9478"/>
+    <path d="M316 221Q348 194 381 220L389 261Q382 297 352 304Q320 293 313 261Z" fill="#a99b7d"/>
+    <path d="M315 242Q310 210 345 206Q379 203 386 236Q352 221 315 242Z" fill="#33382d"/>
+    <path d="M320 261Q351 283 383 258Q379 297 352 304Q325 295 320 261Z" fill="#4c4b3c"/>
+    <path d="M326 250L340 248M363 248L377 250" stroke="#2a2d25" stroke-width="4"/>
+    <path d="M340 270Q352 274 365 269" stroke="#332f27" fill="none"/>
+    <path d="M350 333V438M324 343L294 440M377 343L411 440" stroke="#758066" stroke-width="2"/>
+    <path d="M312 440L375 414L408 443" fill="#8d8064"/>
+    <path d="M88 432H184L197 449H77Z" fill="#11150f" stroke="#7e8069"/>
+    <path d="M97 430Q98 405 134 405Q170 405 175 430" stroke="#96977d" stroke-width="10" fill="none"/>
+    <circle cx="112" cy="439" r="4" fill="#b5a577"/><circle cx="133" cy="439" r="4" fill="#b5a577"/><circle cx="154" cy="439" r="4" fill="#b5a577"/>
+    <path d="M197 429Q233 417 235 456" stroke="#7e8069" fill="none"/>
+    <path d="M215 462L306 450L317 522L226 534Z" fill="#b7ac89"/>
+    <path d="M229 477L287 468M232 490L295 480M234 503L276 496" stroke="#625e49"/>
+    <rect x="71" y="548" width="132" height="29" fill="#c2b384" transform="rotate(-2 71 548)"/>
+    <text x="82" y="568" class="mono dark" font-size="12" transform="rotate(-2 82 568)">战时状态 / 待签发</text>
+  </g>
+  <g clip-path="url(#mapclip)">
+    <path d="M575 139L659 111L723 130L778 108L832 137L904 123L949 159L1021 153L1065 196L1133 219L1115 276L1149 319L1113 355L1121 417L1057 433L1023 487L955 474L906 509L843 487L795 508L744 470L685 483L647 440L585 427L595 365L556 327L581 272L553 218Z" fill="#262d22" stroke="#879074" stroke-width="3"/>
+    <path d="M575 139L659 111L723 130L778 108L832 137L904 123L949 159L1021 153L1065 196L1133 219L1115 276L1149 319L1113 355L1121 417L1057 433L1023 487L955 474L906 509L843 487L795 508L744 470L685 483L647 440L585 427L595 365L556 327L581 272L553 218Z" fill="url(#hatch)"/>
+    <path d="M708 187Q754 247 735 308T781 420M991 196Q927 250 950 322T900 444M629 361Q738 347 818 369T1062 341" class="line" stroke-opacity=".24" stroke-dasharray="5 9"/>
+    <g fill="#b99a60">
+      <path d="M747 83H777V172L800 172L762 211L724 172H747Z"/>
+      <path d="M1137 142L1158 168L1047 248L1058 269L1001 261L1026 211L1037 232Z"/>
+      <path d="M1181 332V362H1066L1066 386L1017 347L1066 308V332Z"/>
+      <path d="M874 580L845 560L918 462L897 451L950 433L957 488L939 474Z"/>
+    </g>
+    <circle cx="766" cy="271" r="7" fill="#d1b477"/><text x="782" y="278" class="sans paper" font-size="19">基辅</text>
+    <circle cx="1002" cy="285" r="7" fill="#d1b477"/><text x="1018" y="292" class="sans paper" font-size="19">哈尔科夫</text>
+    <circle cx="851" cy="452" r="7" fill="#d1b477"/><text x="868" y="459" class="sans paper" font-size="19">敖德萨</text>
+    <path d="M742 253H790V289" stroke="#d1b477" fill="none"/>
+    <rect x="565" y="523" width="420" height="55" fill="#c2b384"/>
+    <text x="582" y="545" class="mono dark" font-size="13" letter-spacing="1">SCHEMATIC / NOT A LIVE MAP</text>
+    <text x="582" y="566" class="sans dark" font-size="14">模拟示意 · 非实时前线 · 不表示兵力或精确路线</text>
+  </g>
+  <rect x="42" y="624" width="1116" height="1" fill="#424738"/>
+  <text x="42" y="657" class="serif paper" font-size="22">多方向接报同时抵达，纵深与后续梯队仍不清楚。</text>
+  <text x="1158" y="656" text-anchor="end" class="mono muted" font-size="12">EVENT 01 · FULL-SCALE INVASION</text>
+</svg>

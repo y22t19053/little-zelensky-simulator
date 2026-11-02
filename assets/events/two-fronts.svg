@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">两条战线：三个方向争夺有限预备队与补给</title>
+  <desc id="desc">原创资源调度档案插画。南部赫尔松方向、东部哈尔科夫与基辅三份简报围绕同一套预备队、弹药和交通资源，两个琥珀色资源签与第三个空位表现只能勉强支撑两个方向，不表示真实数量、精确前线或推进路线。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="10" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M28 27h4" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)"><path d="M0 0V8" stroke="#171b14" stroke-opacity=".2" stroke-width="2"/></pattern>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}.dark{fill:#171a13}.line{fill:none;stroke:#7e8770;stroke-width:2}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#161a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">27 / II / 2022 · ALLOCATION BOARD</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">SOUTH / EAST / CAPITAL — ONE RESERVE LEDGER</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">05 / 07</text>
+  <path d="M42 105H1158" stroke="#555c4b"/>
+  <g>
+    <path d="M66 148H385V467H66Z" fill="#22291f" stroke="#66705a" stroke-width="2"/>
+    <path d="M66 148H385V188H66Z" fill="#c0b28b"/>
+    <text x="86" y="176" class="mono dark" font-size="14" letter-spacing="2">SOUTH / 南线</text>
+    <text x="88" y="229" class="serif paper" font-size="29">赫尔松方向</text>
+    <text x="88" y="259" class="sans muted" font-size="15">压力上升 · 地方通讯不完整</text>
+    <path d="M90 295H360M90 318H328M90 341H349" stroke="#66705a"/>
+    <path d="M105 405L155 368L207 392L257 349L330 377" class="line" stroke-dasharray="8 7"/>
+    <circle cx="105" cy="405" r="6" fill="#c9a563"/><circle cx="330" cy="377" r="6" fill="#c9a563"/>
+    <text x="88" y="443" class="mono amber" font-size="12">REPORT CONFIDENCE / LOW</text>
+  </g>
+  <g>
+    <path d="M815 148H1134V467H815Z" fill="#22291f" stroke="#66705a" stroke-width="2"/>
+    <path d="M815 148H1134V188H815Z" fill="#c0b28b"/>
+    <text x="835" y="176" class="mono dark" font-size="14" letter-spacing="2">EAST / 东线</text>
+    <text x="837" y="229" class="serif paper" font-size="29">哈尔科夫</text>
+    <text x="837" y="259" class="sans muted" font-size="15">持续炮击 · 铁路与电力受损</text>
+    <path d="M839 295H1109M839 318H1081M839 341H1098" stroke="#66705a"/>
+    <path d="M845 388H1098M866 366V410M906 366V410M946 366V410M986 366V410M1026 366V410M1066 366V410" stroke="#7e8770" stroke-width="3"/>
+    <path d="M965 354L981 383L963 401L978 424" stroke="#171b14" stroke-width="7" fill="none"/>
+    <text x="837" y="443" class="mono amber" font-size="12">INFRASTRUCTURE / DAMAGED</text>
+  </g>
+  <g>
+    <path d="M425 135H775V244H425Z" fill="#2b3125" stroke="#8a805b" stroke-width="2"/>
+    <text x="448" y="172" class="mono amber" font-size="12" letter-spacing="2">CAPITAL / 基辅</text>
+    <text x="448" y="207" class="serif paper" font-size="25">北面与东北面仍有压力</text>
+    <text x="748" y="224" text-anchor="end" class="sans muted" font-size="13">同一指挥链，也需要补给</text>
+  </g>
+  <g>
+    <path d="M458 290H742L779 559H421Z" fill="#bdb18e" stroke="#171b14" stroke-width="3"/>
+    <path d="M458 290H742L748 335H452Z" fill="#c9a563"/>
+    <text x="600" y="320" text-anchor="middle" class="mono dark" font-size="15" letter-spacing="2">LIMITED RESERVE / 有限余量</text>
+    <text x="474" y="372" class="serif dark" font-size="23">预备队 · 弹药 · 运输</text>
+    <path d="M475 394H722M475 493H735" stroke="#81785b"/>
+    <rect x="478" y="419" width="103" height="48" fill="#786740" stroke="#171b14"/>
+    <rect x="594" y="419" width="103" height="48" fill="#786740" stroke="#171b14"/>
+    <rect x="478" y="419" width="103" height="48" fill="url(#hatch)"/><rect x="594" y="419" width="103" height="48" fill="url(#hatch)"/>
+    <text x="529" y="449" text-anchor="middle" class="mono paper" font-size="13">资源签 A</text><text x="645" y="449" text-anchor="middle" class="mono paper" font-size="13">资源签 B</text>
+    <rect x="710" y="419" width="42" height="48" fill="none" stroke="#6c644c" stroke-dasharray="4 4"/>
+    <text x="484" y="523" class="sans dark" font-size="15">三个方向，不能同时获得充分支撑</text>
+  </g>
+  <path d="M385 370H423M777 370H815M600 244V285" stroke="#c9a563" stroke-width="2" stroke-dasharray="5 6"/>
+  <path d="M396 360L409 370L396 380M804 360L791 370L804 380" fill="none" stroke="#c9a563" stroke-width="2"/>
+  <rect x="66" y="500" width="319" height="63" fill="#1b2118" stroke="#535c4a"/>
+  <text x="83" y="526" class="sans paper" font-size="14">未知：南线是否转向敖德萨</text>
+  <text x="83" y="549" class="sans muted" font-size="12">未知：东部弹药还能支撑多久</text>
+  <rect x="815" y="500" width="319" height="63" fill="#1b2118" stroke="#535c4a"/>
+  <text x="832" y="526" class="sans paper" font-size="14">优先级是一份政治决定</text>
+  <text x="832" y="549" class="sans muted" font-size="12">图中资源签不代表真实数量</text>
+  <path d="M42 594H1158" stroke="#424738"/>
+  <text x="42" y="632" class="serif paper" font-size="24">增援写在一个方向，空缺就出现在另一个方向。</text>
+  <text x="42" y="665" class="mono muted" font-size="12">资源压力编辑示意 · 非精确前线 · 非推进路线 · 非兵力统计</text>
+  <text x="1158" y="665" text-anchor="end" class="mono amber" font-size="12">EVENT 05 · TWO FRONTS</text>
+</svg>

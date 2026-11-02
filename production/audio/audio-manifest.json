@@ -1,0 +1,114 @@
+[
+  {
+    "id": "music.menu",
+    "source": "production/audio/raw/menu.wav",
+    "output": "assets/audio/music/menu.ogg",
+    "seconds": 32,
+    "bytes": 488779,
+    "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
+  },
+  {
+    "id": "music.day",
+    "source": "production/audio/raw/day.wav",
+    "output": "assets/audio/music/day.ogg",
+    "seconds": 32,
+    "bytes": 489141,
+    "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
+  },
+  {
+    "id": "music.night",
+    "source": "production/audio/raw/night.wav",
+    "output": "assets/audio/music/night.ogg",
+    "seconds": 32,
+    "bytes": 489299,
+    "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
+  },
+  {
+    "id": "music.ending",
+    "source": "production/audio/raw/ending.wav",
+    "output": "assets/audio/music/ending.ogg",
+    "seconds": 32,
+    "bytes": 488147,
+    "method": "original NumPy procedural synthesis; D-minor motif; stereo; Ogg Vorbis q3; loudnorm -24 LUFS"
+  },
+  {
+    "id": "sfx.select",
+    "source": "production/audio/raw/select.wav",
+    "output": "assets/audio/sfx/select.ogg",
+    "seconds": 0.12,
+    "bytes": 4053,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.issue",
+    "source": "production/audio/raw/issue.wav",
+    "output": "assets/audio/sfx/issue.ogg",
+    "seconds": 0.34,
+    "bytes": 6901,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.invalid",
+    "source": "production/audio/raw/invalid.wav",
+    "output": "assets/audio/sfx/invalid.ogg",
+    "seconds": 0.25,
+    "bytes": 5283,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.round",
+    "source": "production/audio/raw/round.wav",
+    "output": "assets/audio/sfx/round.ogg",
+    "seconds": 0.65,
+    "bytes": 7395,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.delayed",
+    "source": "production/audio/raw/delayed.wav",
+    "output": "assets/audio/sfx/delayed.ogg",
+    "seconds": 0.8,
+    "bytes": 8599,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.alert",
+    "source": "production/audio/raw/alert.wav",
+    "output": "assets/audio/sfx/alert.ogg",
+    "seconds": 0.7,
+    "bytes": 10657,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.collapse",
+    "source": "production/audio/raw/collapse.wav",
+    "output": "assets/audio/sfx/collapse.ogg",
+    "seconds": 1.5,
+    "bytes": 19275,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.ending",
+    "source": "production/audio/raw/ending.wav",
+    "output": "assets/audio/sfx/ending.ogg",
+    "seconds": 1.8,
+    "bytes": 16420,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.menu",
+    "source": "production/audio/raw/menu.wav",
+    "output": "assets/audio/sfx/menu.ogg",
+    "seconds": 0.16,
+    "bytes": 5042,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  },
+  {
+    "id": "sfx.modal",
+    "source": "production/audio/raw/modal.wav",
+    "output": "assets/audio/sfx/modal.ogg",
+    "seconds": 0.28,
+    "bytes": 6204,
+    "method": "original NumPy procedural synthesis; mono; Ogg Vorbis q2; restrained -24 LUFS"
+  }
+]
