@@ -581,6 +581,29 @@ test('v1 存档迁移为 v2 台账，保留旧决策且不重复结算', functio
   assert.deepEqual(loaded.state.stats, old.stats, '迁移不得重算旧状态');
 });
 
+test('v0.4 同 schema 存档缺新字段时补齐，不重算旧状态或复制机构负载', function () {
+  const state = fresh();
+  const issued = L.issueCommand(state, 'mobilize');
+  assert.equal(L.authorizeCommand(state, issued.command.id).ok, true);
+  const old = JSON.parse(JSON.stringify(state));
+  old.commands.forEach(function (command) {
+    delete command.slotRequired;
+    delete command.deadlineRound;
+    delete command.windowRounds;
+    delete command.history;
+  });
+  localStorage.setItem('lzs_save_v1', JSON.stringify({ version: 2, savedAt: new Date().toISOString(), state: old }));
+  const loaded = L.loadSavedGame();
+  assert.ok(loaded && loaded.state);
+  const normalized = loaded.state;
+  assert.equal(normalized.commands[0].status, 'executing');
+  assert.equal(normalized.commands[0].slotRequired, true, '旧命令应按 AP/协调条件补优先席位');
+  assert.equal(normalized.commands[0].deadlineRound, 2, '旧命令应按签发回合补最后窗口');
+  assert.ok(Array.isArray(normalized.commands[0].history), '旧命令应补空命令历史');
+  assert.equal(normalized.agencies.general_staff.workload, 1, '载入后按既有已接收命令重算负载');
+  assert.deepEqual(normalized.stats, old.stats, '补字段不得重算国家状态');
+});
+
 console.log('\n[v0.4.1 决策重量与执行约束]');
 test('1 AP 单项工作自行排队，不占机构优先席位；2 AP 命令占用席位', function () {
   const state = fresh();
