@@ -40,7 +40,7 @@ function issue(state, id) {
 const BASELINE_AP = 3;
 function spend(state, mode) {
   let guard = 0;
-  const floor = Math.max(0, (state.apMax || BASELINE_AP) - BASELINE_AP);
+  const base = state.round === 8 ? 2 : BASELINE_AP; /* c8 在 v0.6 只有 2 AP */ const floor = Math.max(0, (state.apMax || base) - base);
   while (!state.ending && state.ap > floor && guard++ < 6) {
     const open = state.commands.filter((c) => ['blocked', 'executing', 'issued'].includes(c.status) && !c.effectsApplied);
     let acted = false;
@@ -85,7 +85,7 @@ const ROUTES = {
   near_history: {
     c1: ['c_command_line', 'c_first_appeal'], c2: ['c_counter_airfield'], c3: ['c_stay_capital', 'c_address_nation'],
     c4: ['c_counterintel', 'c_rumor_rules'], c5: ['c_blow_bridges', 'c_form_reserve'], c6: ['c_harass_convoy'],
-    c7: ['c_evacuate', 'c_wishlist'], c8: ['c_rotation'], c9: ['c_reserve_moshchun', 'c_brovary_ambush'],
+    c7: ['c_evacuate', 'c_wishlist'], c8: ['c_rotation'], c9: ['c_reserve_moshchun'], /* v0.6 里伏击因 AP 不足实际未签发；v0.7 的 c9 有 5 AP，基线路线保持原实际操作 */
     c10: ['c_air_defense_aid', 'c_staff_rest'], c11: ['c_counter_west', 'c_prepare_return'], c12: ['c_stay_alert', 'c_verify_signal'],
     c13: ['c_staged_return', 'c_document']
   },

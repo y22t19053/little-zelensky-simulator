@@ -54,18 +54,20 @@ test('战役与经典模式隔离：经典 createGame 不受影响', function ()
 
 test('AP 按决策窗口刷新，不跨窗口储存', function () {
   const s = newCampaign();
-  assert.equal(s.ap, 3);
+  assert.equal(s.ap, C.events[0].ap);
+  assert.equal(C.events[0].ap, 4, 'v0.7：c1 为 4 AP');
   S.play({ c1: ['c_command_line'] }, {}); // 烟雾
   const t = newCampaign();
   L.issueCommand(t, 'c_command_line'); L.authorizeCommand(t, t.commands[0].id);
-  assert.equal(t.ap, 2);
+  assert.equal(t.ap, C.events[0].ap - 1);
   assert.equal(L.endRound(t).ok, true);
   L.continueFromInterlude(t);
   assert.equal(t.round, 2);
   assert.equal(t.ap, C.events[1].ap, '新窗口 AP 等于窗口上限，不叠加上一窗口剩余');
-  // 第三幕的 c8 只有 2 AP
+  // v0.7：普通窗口 4 AP，密集关键窗口至多 5 AP，c8（弹药轮换）收紧为 3 AP
   const c8 = C.events.find((e) => e.id === 'c8');
-  assert.equal(c8.ap, 2);
+  assert.equal(c8.ap, 3);
+  assert.ok(C.events.every((e) => e.ap >= 3 && e.ap <= 5), '每窗口 3–5 AP，不无限累积');
 });
 
 test('38 天连续模拟：近历史路线逐窗口推进到 4 月 2 日', function () {
@@ -160,9 +162,10 @@ test('莫什春 / 布罗瓦雷：集中一个方向，另一方向依赖此前�
   const delayedFor = (st, id) => st.resolved.filter((r) => r.sourceCommandId && r.sourceCommandId.indexOf(id) >= 0);
   assert.ok(delayedFor(west, 'c_reserve_moshchun').some((r) => (r.deltas.kyiv || 0) < 0), '无伏击时东侧承压');
   assert.ok(!delayedFor(westNorth, 'c_reserve_moshchun').some((r) => (r.deltas.kyiv || 0) < 0), '第 6 窗口加强北面后，东侧风险不兑现（跨窗口因果）');
-  // 低可信情报下同一窗口无法既追问、投预备队又布置伏击：注意力迫使取舍。
-  const m = both.commands.find((c) => c.choiceId === 'c_reserve_moshchun');
-  assert.ok(m.status === 'expired' || !both.flags.c_brovary_ambush, '同窗口两头兼顾应受注意力限制');
+  // v0.7：c9 为 5 AP，可以同时做预备队与伏击；但注意力仍是硬上限，整个窗口所付 AP 不超过上限。
+  const c9paid = both.commands.filter((c) => c.eventId === 'c9').reduce((s, c) => s + (c.paidAp != null ? c.paidAp : c.ap), 0);
+  assert.ok(c9paid <= C.events.find((e) => e.id === 'c9').ap, 'c9 所付 AP ' + c9paid + ' 不得超过窗口上限');
+  assert.ok(both.flags.c_brovary_ambush, '5 AP 下两头兼顾可行');
   assert.ok(east.stats.kyiv !== west.stats.kyiv || east.pressure !== west.pressure, '不同投向产生不同局面');
   assert.ok(hold.flags.c_reserve_held);
   assert.ok(new Set([west.ending.id, east.ending.id, hold.ending.id, westNorth.ending.id]).size >= 1);
@@ -201,7 +204,7 @@ test('紧急中断：首都越线时提前结束时间推进并结转剩余天�
 });
 
 test('不行动不是最优：最小行动策略从不达到 A 或 D 的比例高于积极策略', function () {
-  const dist = (min) => { const t = {}; for (let i = 0; i < 120; i++) { const st = S.play(S.randomPolicy(S.seeded(300 + i), false), { spend: !min }).state; t[st.ending.id] = (t[st.ending.id] || 0) + 1; } return t; };
+  const dist = (min) => { const t = {}; for (let i = 0; i < 600; i++) { const st = S.play(S.randomPolicy(S.seeded(300 + i), false), { spend: !min }).state; t[st.ending.id] = (t[st.ending.id] || 0) + 1; } return t; };
   const lazy = dist(true); const active = dist(false);
   const good = (t) => (t.c_A || 0) + (t.c_D || 0) + (t.c_H || 0);
   assert.ok(good(active) >= good(lazy), '积极 ' + JSON.stringify(active) + ' vs 最小 ' + JSON.stringify(lazy));
