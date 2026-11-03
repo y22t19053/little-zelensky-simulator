@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">布恰—伊尔平：撤离路线</title>
+  <desc id="desc">原创抽象矢量插画（程序生成），非照片。以道路、车队剪影和被打断的走廊表示撤离需要反复协商；不描绘任何个人或遇难者。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M26 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <clipPath id="field"><path d="M42 126H1158V583H42Z"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">BUCHA — IRPIN / HUMANITARIAN FILE</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">CORRIDOR · ROAD · REPEATED INTERRUPTION</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">05 / 12</text>
+  <g clip-path="url(#field)"><rect x="42" y="126" width="1116" height="457" fill="#20271e"/><rect x="42" y="400" width="1116" height="183" fill="#272d22"/><g><rect x="80" y="300" width="44" height="40" fill="#11150f"/><path d="M76 300L102 280L128 300Z" fill="#0e120c"/></g><g><rect x="150" y="308" width="44" height="40" fill="#11150f"/><path d="M146 308L172 288L198 308Z" fill="#0e120c"/></g><g><rect x="220" y="316" width="44" height="40" fill="#11150f"/><path d="M216 316L242 296L268 316Z" fill="#0e120c"/></g><g><rect x="290" y="300" width="44" height="40" fill="#11150f"/><path d="M286 300L312 280L338 300Z" fill="#0e120c"/></g><g><rect x="360" y="308" width="44" height="40" fill="#11150f"/><path d="M356 308L382 288L408 308Z" fill="#0e120c"/></g><g><rect x="430" y="316" width="44" height="40" fill="#11150f"/><path d="M426 316L452 296L478 316Z" fill="#0e120c"/></g><path d="M42 470C300 450 500 470 760 440S1020 410 1158 400V450C1020 460 800 490 760 500S300 520 42 520Z" fill="#3a4132"/><path d="M42 495C300 480 520 498 760 468S1020 440 1158 430" fill="none" stroke="#c8bc99" stroke-width="2" stroke-dasharray="18 14" stroke-opacity="0.5"/><rect x="120" y="466" width="22" height="9" fill="#4a78b0"/><rect x="182" y="464" width="22" height="9" fill="#0f120d"/><rect x="244" y="462" width="22" height="9" fill="#0f120d"/><rect x="306" y="460" width="22" height="9" fill="#4a78b0"/><rect x="368" y="458" width="22" height="9" fill="#0f120d"/><rect x="430" y="456" width="22" height="9" fill="#0f120d"/><rect x="492" y="454" width="22" height="9" fill="#4a78b0"/><rect x="554" y="452" width="22" height="9" fill="#0f120d"/><path d="M760 440L1080 400" fill="none" stroke="#d6b84a" stroke-width="4" stroke-dasharray="14 8"/><path d="M600 360L620 530" fill="none" stroke="#b9694f" stroke-width="3" stroke-dasharray="4 6" stroke-opacity="0.8"/><circle cx="610" cy="360" r="7" fill="#b9694f" fill-opacity="0.9"/><rect x="42" y="560" width="1116" height="4" fill="#4a78b0"/><rect x="42" y="564" width="1116" height="4" fill="#d6b84a"/></g>
+  <rect x="42" y="126" width="1116" height="457" fill="none" stroke="#7e8770" stroke-width="1.5"/>
+  <text x="42" y="626" class="serif paper" font-size="27">布恰—伊尔平：撤离路线</text>
+  <text x="42" y="654" class="sans muted" font-size="14">以道路、车队剪影和被打断的走廊表示撤离需要反复协商；不描绘任何个人或遇难者。</text>
+  <text x="42" y="682" class="mono muted" font-size="11" letter-spacing="2">ORIGINAL SIMULATED ILLUSTRATION · NOT A PHOTOGRAPH · NO REAL UNIT OR INSIGNIA</text>
+</svg>

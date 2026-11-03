@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">残局：修桥、通电与居民返回</title>
+  <desc id="desc">原创抽象矢量插画（程序生成），非照片。脚手架、吊臂与重新亮起的窗口表示战后修复需要时间；不表示实际清理进度或数量。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M26 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <clipPath id="field"><path d="M42 126H1158V583H42Z"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">RECOVERY / REPAIR FILE</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">BRIDGE · POWER · RETURN OF RESIDENTS</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">12 / 12</text>
+  <g clip-path="url(#field)"><rect x="42" y="126" width="1116" height="457" fill="#1a2018"/><rect x="42" y="430" width="1116" height="153" fill="#272d22"/><path d="M42 380C300 360 520 410 760 380S1000 350 1158 380V440C1000 430 800 460 600 450S250 430 42 440Z" fill="#2b3f4c"/><rect x="120" y="360" width="300" height="22" fill="#11150f"/><rect x="640" y="360" width="380" height="22" fill="#11150f"/><rect x="420" y="360" width="220" height="22" fill="#3a3024"/><path d="M440 360V300M520 360V300M600 360V300M440 300H600M440 330H600" fill="none" stroke="#c9a563" stroke-width="3"/><path d="M820 360V200L960 260" fill="none" stroke="#c8bc99" stroke-width="4"/><path d="M960 260V330" fill="none" stroke="#c8bc99" stroke-width="2" stroke-dasharray="4 6"/><rect x="950" y="330" width="20" height="14" fill="#c9a563"/><g><rect x="110" y="300" width="46" height="44" fill="#0d110b"/><path d="M106 300L133 278L160 300Z" fill="#0e120c"/></g><g><rect x="186" y="300" width="46" height="44" fill="#0d110b"/><path d="M182 300L209 278L236 300Z" fill="#0e120c"/></g><g><rect x="262" y="300" width="46" height="44" fill="#0d110b"/><path d="M258 300L285 278L312 300Z" fill="#0e120c"/></g><g><rect x="338" y="300" width="46" height="44" fill="#0d110b"/><path d="M334 300L361 278L388 300Z" fill="#0e120c"/></g><g><rect x="414" y="300" width="46" height="44" fill="#0d110b"/><path d="M410 300L437 278L464 300Z" fill="#0e120c"/></g><rect x="124" y="286" width="14" height="14" fill="#d6b84a" fill-opacity="0.9"/><rect x="276" y="286" width="14" height="14" fill="#4a78b0" fill-opacity="0.9"/><rect x="428" y="286" width="14" height="14" fill="#d6b84a" fill-opacity="0.9"/><rect x="240" y="500" width="40" height="22" fill="#2f3a28"/><rect x="318" y="506" width="40" height="22" fill="#3a4430"/><rect x="396" y="500" width="40" height="22" fill="#2f3a28"/><rect x="474" y="506" width="40" height="22" fill="#3a4430"/><rect x="552" y="500" width="40" height="22" fill="#2f3a28"/><rect x="630" y="506" width="40" height="22" fill="#3a4430"/><rect x="42" y="560" width="1116" height="4" fill="#4a78b0"/><rect x="42" y="564" width="1116" height="4" fill="#d6b84a"/></g>
+  <rect x="42" y="126" width="1116" height="457" fill="none" stroke="#7e8770" stroke-width="1.5"/>
+  <text x="42" y="626" class="serif paper" font-size="27">残局：修桥、通电与居民返回</text>
+  <text x="42" y="654" class="sans muted" font-size="14">脚手架、吊臂与重新亮起的窗口表示战后修复需要时间；不表示实际清理进度或数量。</text>
+  <text x="42" y="682" class="mono muted" font-size="11" letter-spacing="2">ORIGINAL SIMULATED ILLUSTRATION · NOT A PHOTOGRAPH · NO REAL UNIT OR INSIGNIA</text>
+</svg>

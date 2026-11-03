@@ -530,8 +530,11 @@
       '<div class="event-stage">' +
         '<figure class="scene scene-' + escapeHtml(event.id) + '">' +
           '<div class="scene-index"><span>事件视觉 / ' + String(g.round).padStart(2, '0') + '</span><span>模拟示意</span></div>' +
-          '<picture class="scene-picture"><source srcset="assets/visual/events/' + art.id + '.webp" type="image/webp"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
-          '<img class="scene-map" src="assets/visual/maps/' + art.id + '.svg" alt="抽象态势示意，不表示实时前线或兵力" width="640" height="360" loading="lazy">' +
+          (art.plain
+            ? '<picture class="scene-picture"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
+              (art.extra ? '<img class="scene-map" src="assets/events/' + art.extra + '.svg" alt="同一窗口的另一处示意" width="640" height="360" loading="lazy">' : '')
+            : '<picture class="scene-picture"><source srcset="assets/visual/events/' + art.id + '.webp" type="image/webp"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
+              '<img class="scene-map" src="assets/visual/maps/' + art.id + '.svg" alt="抽象态势示意，不表示实时前线或兵力" width="640" height="360" loading="lazy">') +
           '<figcaption><span>' + escapeHtml(art.caption) + '</span><span>原创模拟插画 · 非历史照片</span></figcaption>' +
         '</figure>' +
         '<article class="briefing-paper dossier">' +
@@ -564,9 +567,28 @@
   function dayTheme() { const cs = campaignStatus(); return cs && cs.act && cs.act.music ? cs.act.music : 'day'; }
   function spanText(days) { const d = Number(days || 0); return d < 1 ? '数小时' : (Math.round(d * 10) / 10) + ' 天'; }
   const CAMPAIGN_ART = { c1: 'e1', c2: 'e3', c3: 'e2', c4: 'e4', c5: 'e5', c6: 'e5', c7: 'e7', c8: 'e7', c9: 'e5', c10: 'e6', c11: 'e1', c12: 'e6', c13: 'e4' };
+  // v1.0：战役窗口使用专门绘制的抽象矢量场景；main 为主图，extra 为右下角小图。
+  const CAMPAIGN_SCENES = {
+    c2: { main: 'antonov-assault', extra: 'runway-denial', alt: '安东诺夫机场的空降突击与跑道封堵示意', caption: '安东诺夫机场 · 突击与跑道封堵' },
+    c3: { main: 'location', extra: 'vasylkiv', alt: '总统所在地与瓦西里科夫防空示意', caption: '首都连续性 · 空域与防空' },
+    c5: { main: 'irpin-bridge', alt: '伊尔平河与桥梁的抽象示意', caption: '伊尔平河 · 桥梁与阻滞' },
+    c6: { main: 'chernihiv', alt: '切尔尼戈夫北面压力与补给线的抽象示意', caption: '切尔尼戈夫 · 北面压力与补给线' },
+    c7: { main: 'bucha-irpin-evac', alt: '布恰与伊尔平之间撤离路线的抽象示意', caption: '布恰—伊尔平 · 撤离路线' },
+    c8: { main: 'office-waiting', alt: '总统办公室里等待汇报的桌面场景', caption: '总统办公室 · 等待汇报' },
+    c9: { main: 'moshchun', extra: 'brovary', alt: '莫什春防线与布罗瓦雷东面道路的抽象示意', caption: '莫什春与布罗瓦雷 · 预备队去向' },
+    c10: { main: 'aid-arrival', alt: '援助从请求到见效各环节的抽象示意', caption: '援助 · 从请求到真正用上' },
+    c13: { main: 'reentry', alt: '撤退之后重新进入与安全确认的抽象示意', caption: '重新进入 · 先排查再通行' },
+    c14: { main: 'wrap-repair', alt: '战后修桥、通电与居民返回的抽象示意', caption: '残局 · 修复与返回' },
+    c15: { main: 'wrap-repair', alt: '战后修桥、通电与居民返回的抽象示意', caption: '残局 · 修复与返回' },
+    c16: { main: 'wrap-repair', alt: '战后修桥、通电与居民返回的抽象示意', caption: '残局 · 修复与返回' }
+  };
   function artFor(event) {
+    if (isCampaignGame()) {
+      const scene = CAMPAIGN_SCENES[event.id];
+      if (scene) return { id: scene.main, extra: scene.extra || '', plain: true, alt: scene.alt, caption: scene.caption };
+    }
     const base = EVENT_ART[CAMPAIGN_ART[event.id] || event.id] || EVENT_ART.e1;
-    return isCampaignGame() ? Object.assign({}, base, { caption: event.title + ' · 借用本地视觉的抽象示意' }) : base;
+    return isCampaignGame() ? Object.assign({}, base, { caption: event.title + ' · 原创抽象示意' }) : base;
   }
   const FRONT_TONE = { threat: 'danger', pressure: 'warning', contested: 'warning', cut: 'warning', held: 'ok', denied: 'ok', withdrawal: 'ok', reentered: 'ok' };
   function frontsMapHtml(fronts, title) {

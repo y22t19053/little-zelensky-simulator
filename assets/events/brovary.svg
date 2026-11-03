@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">布罗瓦雷：东面道路的拖延</title>
+  <desc id="desc">原创抽象矢量插画（程序生成），非照片。道路、伏击标记与被拉长的纵队线条表示延滞行动；不表示真实路线或战果。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M26 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <clipPath id="field"><path d="M42 126H1158V583H42Z"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">BROVARY / EAST ROAD FILE</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">ROAD · AMBUSH · DELAY</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">07 / 12</text>
+  <g clip-path="url(#field)"><rect x="42" y="126" width="1116" height="457" fill="#20271e"/><rect x="42" y="420" width="1116" height="163" fill="#272d22"/><path d="M42 470L1158 410V440L42 510Z" fill="#3a4132"/><path d="M42 490L1158 425" fill="none" stroke="#c8bc99" stroke-width="2" stroke-dasharray="20 16" stroke-opacity="0.5"/><rect x="120" y="466" width="22" height="9" fill="#0f120d"/><rect x="168" y="461" width="22" height="9" fill="#0f120d"/><rect x="216" y="456" width="22" height="9" fill="#0f120d"/><rect x="264" y="451" width="22" height="9" fill="#0f120d"/><rect x="312" y="446" width="22" height="9" fill="#0f120d"/><rect x="360" y="441" width="22" height="9" fill="#0f120d"/><rect x="408" y="436" width="22" height="9" fill="#0f120d"/><path d="M700 300l10 -18l10 18Z" fill="none" stroke="#b9694f" stroke-width="3"/><path d="M780 330l10 -18l10 18Z" fill="none" stroke="#b9694f" stroke-width="3"/><path d="M860 300l10 -18l10 18Z" fill="none" stroke="#b9694f" stroke-width="3"/><path d="M720 320L760 420M800 345L780 420M880 320L850 415" fill="none" stroke="#b9694f" stroke-width="2" stroke-dasharray="4 6" stroke-opacity="0.8"/><g><circle cx="260" cy="250" r="19.599999999999998" fill="#2f3a28"/><circle cx="274" cy="258.4" r="15.399999999999999" fill="#364430"/><circle cx="247.4" cy="261.2" r="14" fill="#2a3524"/></g><g><circle cx="420" cy="290" r="19.599999999999998" fill="#2f3a28"/><circle cx="434" cy="298.4" r="15.399999999999999" fill="#364430"/><circle cx="407.4" cy="301.2" r="14" fill="#2a3524"/></g><g><circle cx="580" cy="250" r="19.599999999999998" fill="#2f3a28"/><circle cx="594" cy="258.4" r="15.399999999999999" fill="#364430"/><circle cx="567.4" cy="261.2" r="14" fill="#2a3524"/></g><g><circle cx="740" cy="290" r="19.599999999999998" fill="#2f3a28"/><circle cx="754" cy="298.4" r="15.399999999999999" fill="#364430"/><circle cx="727.4" cy="301.2" r="14" fill="#2a3524"/></g><g><circle cx="900" cy="250" r="19.599999999999998" fill="#2f3a28"/><circle cx="914" cy="258.4" r="15.399999999999999" fill="#364430"/><circle cx="887.4" cy="261.2" r="14" fill="#2a3524"/></g><rect x="42" y="560" width="1116" height="4" fill="#4a78b0"/><rect x="42" y="564" width="1116" height="4" fill="#d6b84a"/></g>
+  <rect x="42" y="126" width="1116" height="457" fill="none" stroke="#7e8770" stroke-width="1.5"/>
+  <text x="42" y="626" class="serif paper" font-size="27">布罗瓦雷：东面道路的拖延</text>
+  <text x="42" y="654" class="sans muted" font-size="14">道路、伏击标记与被拉长的纵队线条表示延滞行动；不表示真实路线或战果。</text>
+  <text x="42" y="682" class="mono muted" font-size="11" letter-spacing="2">ORIGINAL SIMULATED ILLUSTRATION · NOT A PHOTOGRAPH · NO REAL UNIT OR INSIGNIA</text>
+</svg>
