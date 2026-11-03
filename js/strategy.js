@@ -66,7 +66,25 @@
 
   // 机构常设授权：每个机构每局最多一次，1AP；之后该机构的命令签发即自动授权，
   // 但总统亲自介入该机构命令的代价更高，机构每夜协调 -1（自主运行的磨损）。
-  const STANDING = { cost: 1, minCoordination: 45, nightlyDrift: -1, interventionExtra: 3 };
+  // v0.7.0（战役模式）：常设授权有范围、有期限、可撤销。范围内的例行事项（1 AP 以内、非关键决策、
+  // 不需要跨部门协调）由机构自行接收，总统不再支付注意力；每处理一项，机构协调磨损 wearPerItem。
+  // 机构在办已满或协调低于 suspendBelow 时授权自动中止，新事项回到总统桌面。
+  const STANDING = {
+    cost: 1, minCoordination: 45, nightlyDrift: -1, interventionExtra: 3,
+    durationWindows: 4, revokeCost: 1, revokeCoordination: 3, wearPerItem: 1, suspendBelow: 40,
+    scopes: {
+      office: { label: '办公厅例行事务', allow: '总统办公室内部的文件流转、轮休安排和例行协调', deny: '不能代替总统决定人事、指挥地点或对外表态' },
+      general_staff: { label: '已批准部署的调整', allow: '在已批准的防御方案内调整部队位置、轮换和补充', deny: '不能发起新的作战行动，也不能动用预备队主力' },
+      foreign: { label: '已批准范围内的援助磋商', allow: '继续推进已批准的援助谈判、材料交换和日常外交联络', deny: '不能做出新的政治承诺，也不能谈领土问题' },
+      interior: { label: '地方应急安排', allow: '协调地方政府处理疏散、治安和公共服务的日常问题', deny: '不能宣布新的限制措施，也不能下发武器' },
+      communications: { label: '日常信息发布', allow: '按既定口径发布日常通报并回应常见询问', deny: '不能改变口径，也不能公布未经核实的消息' },
+      logistics: { label: '常规运输与补给优先级', allow: '按既定优先级调整常规运输、仓储和维修排期', deny: '不能动用国家储备，也不能改变补给方向' }
+    }
+  };
+
+  // v0.7.0（战役模式）：把一项具体事务交给一个机构。总统不付注意力，但要先向机构交代任务，
+  // 机构按协调余量决定完成质量；选择「办完回报总统批准」则多等一个窗口，换来完整质量。
+  const DELEGATION = { minCoordination: 45, briefingCoordination: 2, perWindowCap: 3, fullQualityAt: 60, reducedQuality: 0.7 };
 
   const DISPATCH_TEXT = {
     late_report: {
@@ -80,6 +98,12 @@
       title: '{choice} 仍未完成',
       body: '这项可分批推进的工作已错过原定时间。它没有消失，而是以更紧的期限回到桌面；继续搁置会持续占用机构席位。',
       source: '{agency} · 模拟反馈'
+    },
+    strain: {
+      kicker: '机构请求支持',
+      title: '{agency}的日常办理跟不上了',
+      body: '部门之间的衔接已经松动，例行文件开始积压。总统可以出面协调一次，也可以让机构自行消化，代价是接下来几天办理更慢。',
+      source: '{agency} · 办公室日报'
     },
     resource_request: {
       kicker: '机构资源请求',
@@ -133,6 +157,7 @@
     links: LINKS,
     interventionBacklog: INTERVENTION_BACKLOG,
     standing: STANDING,
+    delegation: DELEGATION,
     dispatchText: DISPATCH_TEXT,
     styleMeta: STYLE_META,
     recordsKey: 'lzs_records_v1'

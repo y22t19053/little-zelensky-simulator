@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">伊尔平河：桥梁与阻滞</title>
+  <desc id="desc">原创抽象矢量插画（程序生成），非照片。河流、被破坏的桥面与沙袋线条构成抽象示意；不表示实际破坏程度或位置精度。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M26 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <clipPath id="field"><path d="M42 126H1158V583H42Z"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">IRPIN / BRIDGE FILE</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">RIVER · BRIDGE · DEMOLITION</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">04 / 12</text>
+  <g clip-path="url(#field)"><rect x="42" y="126" width="1116" height="457" fill="#20271e"/><path d="M42 330C300 300 520 380 760 340S1000 300 1158 330V450C1000 430 800 470 600 440S250 400 42 450Z" fill="#2b3f4c"/><path d="M60 360C300 340 500 420 760 380S1000 340 1140 370" fill="none" stroke="#5f86a0" stroke-width="2" stroke-dasharray="14 10" stroke-opacity="0.6"/><rect x="120" y="360" width="330" height="30" fill="#11150f"/><rect x="640" y="360" width="380" height="30" fill="#11150f"/><path d="M450 375L520 395M640 375L580 392" fill="none" stroke="#b9694f" stroke-width="4"/><rect x="180" y="392" width="8" height="36" fill="#11150f"/><rect x="240" y="392" width="8" height="36" fill="#11150f"/><rect x="300" y="392" width="8" height="36" fill="#11150f"/><rect x="360" y="392" width="8" height="36" fill="#11150f"/><rect x="420" y="392" width="8" height="36" fill="#11150f"/><rect x="760" y="392" width="8" height="36" fill="#11150f"/><rect x="830" y="392" width="8" height="36" fill="#11150f"/><rect x="900" y="392" width="8" height="36" fill="#11150f"/><rect x="970" y="392" width="8" height="36" fill="#11150f"/><rect x="80" y="250" width="28" height="12" fill="#3a4430"/><rect x="114" y="258" width="28" height="12" fill="#3a4430"/><rect x="148" y="250" width="28" height="12" fill="#3a4430"/><rect x="182" y="258" width="28" height="12" fill="#3a4430"/><rect x="216" y="250" width="28" height="12" fill="#3a4430"/><rect x="250" y="258" width="28" height="12" fill="#3a4430"/><rect x="1000" y="478" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="978" y="482" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="956" y="478" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="934" y="482" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="912" y="478" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="890" y="482" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="868" y="478" width="18" height="8" fill="#c9a563" fill-opacity="0.6"/><rect x="42" y="560" width="1116" height="4" fill="#4a78b0"/><rect x="42" y="564" width="1116" height="4" fill="#d6b84a"/></g>
+  <rect x="42" y="126" width="1116" height="457" fill="none" stroke="#7e8770" stroke-width="1.5"/>
+  <text x="42" y="626" class="serif paper" font-size="27">伊尔平河：桥梁与阻滞</text>
+  <text x="42" y="654" class="sans muted" font-size="14">河流、被破坏的桥面与沙袋线条构成抽象示意；不表示实际破坏程度或位置精度。</text>
+  <text x="42" y="682" class="mono muted" font-size="11" letter-spacing="2">ORIGINAL SIMULATED ILLUSTRATION · NOT A PHOTOGRAPH · NO REAL UNIT OR INSIGNIA</text>
+</svg>

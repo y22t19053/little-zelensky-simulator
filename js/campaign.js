@@ -1,4 +1,4 @@
-/* 小泽模拟器 v0.6.0 · 基辅战役（2022-02-24 至 2022-04-02）
+/* 小泽模拟器 v1.0.0 · 基辅战役（2022-02-24 至 2022-04-02）
    全部数值、命令、机构反馈都是模拟设计值，不是历史统计，也不是真实命令。
    游玩期文本只写当时可合理获得的信息；事后研究只在战役结束后的复盘中出现。 */
 (function (root) {
@@ -19,7 +19,7 @@
      ap = 本决策窗口的总统注意力上限（按窗口刷新，不跨窗口储存）。 */
   const EVENTS = [
     {
-      id: 'c1', act: 1, day: 1, days: 0.5, ap: 3, interruptible: false,
+      id: 'c1', act: 1, day: 1, days: 0.5, ap: 4, interruptible: false,
       date: '2022-02-24', dateLabel: '2 月 24 日 · 凌晨', time: '凌晨', span: '数小时',
       title: '全面入侵开始', kicker: '紧急简报 · 01',
       intel: { level: '低', tone: '多源、矛盾', note: '多地同时报告导弹打击和越境，具体方向和规模仍在核对。' },
@@ -41,14 +41,14 @@
         { id: 'c_first_appeal', title: '向主要伙伴发出首轮紧急请求', ap: 1, agency: 'foreign',
           summary: '把需求尽早送到伙伴桌面。', staff: '首轮请求不会立刻改变前线。',
           effects: { intl: 4 }, flags: ['c_first_appeal'],
-          delayed: [{ delay: 3, label: '首轮请求进入伙伴议程', note: '部分伙伴开始讨论具体援助。', effects: { intl: 3, reserve: 2 } }] },
+          aid: 'appeal' },
         { id: 'c_disperse', title: '授权分散防空与航空力量', ap: 1, agency: 'general_staff',
           summary: '减少首轮打击造成的集中损失。', staff: '分散会让后续协调更复杂。',
           effects: { army: 3, reserve: -2, pressure: -1 }, flags: ['c_disperse'] }
       ]
     },
     {
-      id: 'c2', act: 1, day: 1, days: 0.5, ap: 3, interruptible: false, key: true,
+      id: 'c2', act: 1, day: 1, days: 0.5, ap: 5, interruptible: false, key: true,
       date: '2022-02-24', dateLabel: '2 月 24 日 · 上午至夜间', time: '上午', span: '数小时',
       title: '安东诺夫机场', kicker: '重大决策 · 机场方向',
       intel: { level: '低', tone: '现场混乱', note: '直升机机群出现在首都西北方向，机场现场报告互相矛盾。' },
@@ -91,7 +91,7 @@
       ]
     },
     {
-      id: 'c3', act: 1, day: 2, days: 1, ap: 3, interruptible: true, key: true,
+      id: 'c3', act: 1, day: 2, days: 1, ap: 4, interruptible: true, key: true,
       date: '2022-02-25', dateLabel: '2 月 25 日', time: '全天', span: '1 天',
       title: '首都与政府连续性', kicker: '重大决策 · 政府在哪里',
       intel: { level: '中', tone: '部分可核实', note: '有报告称首都可能出现针对政府的行动，具体对象和时间不明。' },
@@ -129,7 +129,7 @@
       ]
     },
     {
-      id: 'c4', act: 1, day: 3, days: 1, ap: 3, interruptible: true,
+      id: 'c4', act: 1, day: 3, days: 1, ap: 4, interruptible: true,
       date: '2022-02-26', dateLabel: '2 月 26 日', time: '全天', span: '1 天',
       title: '首都内部安全', kicker: '简报 · 首都',
       intel: { level: '低', tone: '谣言多', note: '首都内部出现大量关于破坏小组的报告，其中很多无法核实。' },
@@ -157,7 +157,7 @@
       ]
     },
     {
-      id: 'c5', act: 2, day: 4, days: 3, ap: 3, interruptible: true, key: true,
+      id: 'c5', act: 2, day: 4, days: 3, ap: 5, interruptible: true, key: true,
       date: '2022-02-27', dateLabel: '2 月 27 日 — 3 月 1 日', time: '三天', span: '3 天',
       title: '伊尔平河与桥梁', kicker: '重大决策 · 西北通道',
       intel: { level: '中', tone: '前线报告', note: '对方地面部队向首都西北的伊尔平河方向推进，桥梁成为焦点。' },
@@ -188,7 +188,7 @@
       ]
     },
     {
-      id: 'c6', act: 2, day: 7, days: 2, ap: 3, interruptible: true,
+      id: 'c6', act: 2, day: 7, days: 2, ap: 4, interruptible: true,
       date: '2022-03-02', dateLabel: '3 月 2 日 — 3 月 3 日', time: '两天', span: '2 天',
       title: '北面车队与切尔尼戈夫', kicker: '简报 · 北方方向',
       intel: { level: '中', tone: '卫星与公开影像', note: '公开影像显示首都西北方向有很长的车队，北部的切尔尼戈夫方向同样承压。' },
@@ -218,7 +218,7 @@
           delayed: [{ delay: 4, label: '储备补充压力', note: '动用的储备需要补充，后期物资会更紧。', effects: { reserve: -5 } }] }
       ]
     },    {
-      id: 'c7', act: 2, day: 9, days: 2, ap: 3, interruptible: true,
+      id: 'c7', act: 2, day: 9, days: 2, ap: 4, interruptible: true,
       date: '2022-03-04', dateLabel: '3 月 4 日 — 3 月 5 日', time: '两天', span: '2 天',
       title: '布恰—伊尔平：撤离与城市防御', kicker: '简报 · 西北城镇',
       intel: { level: '中', tone: '地方报告', note: '西北城镇的地方政府报告平民被困、通讯中断，部分区域无法联系。' },
@@ -243,11 +243,11 @@
         { id: 'c_wishlist', title: '向伙伴提交具体装备清单', ap: 1, agency: 'foreign',
           summary: '把“请求支持”变成可以执行的清单。', staff: '清单进入伙伴议程需要时间。',
           effects: { intl: 2 }, flags: ['c_wishlist'],
-          delayed: [{ delay: 3, label: '清单中的部分装备到位', note: '部分装备开始到达（模拟设计值，不代表真实交付数量）。', effects: { army: 4, reserve: 2 } }] }
+          aid: 'equipment' }
       ]
     },
     {
-      id: 'c8', act: 3, day: 11, days: 4, ap: 2, interruptible: true,
+      id: 'c8', act: 3, day: 11, days: 4, ap: 3, interruptible: true,
       date: '2022-03-06', dateLabel: '3 月 6 日 — 3 月 9 日', time: '四天', span: '4 天',
       title: '消耗：轮换、弹药与政府疲劳', kicker: '周报 · 消耗',
       intel: { level: '中', tone: '机构报告', note: '各机构报告人员连续工作，弹药和燃料消耗明显上升。' },
@@ -276,7 +276,7 @@
       ]
     },
     {
-      id: 'c9', act: 3, day: 15, days: 4, ap: 3, interruptible: true, key: true,
+      id: 'c9', act: 3, day: 15, days: 4, ap: 5, interruptible: true, key: true,
       date: '2022-03-10', dateLabel: '3 月 10 日 — 3 月 13 日', time: '四天', span: '4 天',
       title: '莫什春与布罗瓦雷：预备队给谁', kicker: '重大决策 · 预备队',
       intel: { level: '低', tone: '两个方向同时告急', note: '西北莫什春方向和东侧布罗瓦雷方向都报告对方在集结，两份报告都要求预备队。' },
@@ -314,7 +314,7 @@
       ]
     },
     {
-      id: 'c10', act: 3, day: 19, days: 8, ap: 3, interruptible: true,
+      id: 'c10', act: 3, day: 19, days: 8, ap: 4, interruptible: true,
       date: '2022-03-14', dateLabel: '3 月 14 日 — 3 月 21 日', time: '八天', span: '8 天',
       title: '长期围困：城市、外交与机构', kicker: '周报 · 持续',
       intel: { level: '中', tone: '持续报告', note: '首都周边战线变化不大，城市基础设施和机构运转的压力逐渐累积。' },
@@ -335,7 +335,7 @@
         { id: 'c_air_defense_aid', title: '向伙伴争取防空与反装甲援助', ap: 1, agency: 'foreign',
           summary: '针对当前最紧的缺口。', staff: '交付需要时间。',
           effects: { intl: 2 }, flags: ['c_aid_requested'],
-          delayed: [{ delay: 1, label: '援助陆续到位', note: '部分援助到位（模拟设计值）。', effects: { army: 4, reserve: 3 } }] },
+          aid: 'air_defense' },
         { id: 'c_civil_admin', title: '恢复首都民事管理与公共服务', ap: 1, agency: 'interior',
           summary: '让城市秩序从紧急状态转为可持续状态。', staff: '安全力量会被部分抽走。',
           effects: { gov: 3, will: 2, safety: -2 } },
@@ -345,7 +345,7 @@
       ]
     },
     {
-      id: 'c11', act: 4, day: 27, days: 7, ap: 3, interruptible: true,
+      id: 'c11', act: 4, day: 27, days: 7, ap: 4, interruptible: true,
       date: '2022-03-22', dateLabel: '3 月 22 日 — 3 月 28 日', time: '一周', span: '7 天',
       title: '马卡里夫与伊尔平：反击窗口', kicker: '简报 · 局部反击',
       intel: { level: '中', tone: '前线报告', note: '首都西面和西北出现局部反击机会，对方部分阵地补给困难。' },
@@ -375,7 +375,7 @@
       ]
     },
     {
-      id: 'c12', act: 4, day: 34, days: 2, ap: 3, interruptible: false, key: true,
+      id: 'c12', act: 4, day: 34, days: 2, ap: 5, interruptible: false, key: true,
       date: '2022-03-29', dateLabel: '3 月 29 日 — 3 月 30 日', time: '两天', span: '2 天',
       title: '撤退信号', kicker: '重大决策 · 信号是否可信',
       intel: { level: '低', tone: '对方声明与前线报告不一致', note: '对方公开表示将大幅减少首都和切尔尼戈夫方向的军事活动。部分前线报告看到车队移动，另一些报告仍有炮击。' },
@@ -409,7 +409,7 @@
       ]
     },
     {
-      id: 'c13', act: 4, day: 36, days: 3, ap: 3, interruptible: false, key: true,
+      id: 'c13', act: 4, day: 36, days: 3, ap: 5, interruptible: false, key: true,
       date: '2022-03-31', dateLabel: '3 月 31 日 — 4 月 2 日', time: '三天', span: '3 天',
       title: '重新进入与安全确认', kicker: '重大决策 · 收复地区',
       intel: { level: '中', tone: '地方报告', note: '对方离开部分城镇。重新进入的部队报告地雷、毁坏的建筑，以及需要立即调查的情况。' },
@@ -436,6 +436,94 @@
         { id: 'c_restore_services', title: '优先恢复周边基本服务', ap: 1, agency: 'logistics',
           summary: '让返回的居民有水、电和医疗。', staff: '物资会更紧。',
           effects: { will: 3, reserve: -2 } }
+      ]
+    }
+  ];
+  /* 4 月 2 日之后的可选收束阶段（第五幕）：最多 14 天，最晚 4 月 16 日。
+     只模拟政府层面的优先级与资源协调，不声称两周内完成排雷或重建。
+     choice.wrap 写入收束进度（0—100，界面只显示定性描述）。 */
+  const WRAP_ACT = { id: 5, title: '第五幕 · 战役收束', range: '4 月 3 日 — 4 月 16 日', tone: 'aftermath', music: 'night', weight: 0, relief: 0,
+    note: '大规模战斗已经过去，留下的是雷区、毁坏的道路和仍在寻找的人。这里要排的是先后次序，不是打赢什么。' };
+  const WRAP_EVENTS = [
+    {
+      id: 'c14', act: 5, day: 39, days: 5, ap: 4, interruptible: false,
+      date: '2022-04-03', dateLabel: '4 月 3 日 — 4 月 7 日', time: '五天', span: '5 天',
+      title: '雷区、未爆物与重新进入', kicker: '战役收束 · 残局',
+      intel: { level: '中', tone: '工兵与地方报告', note: '工兵在道路两侧和居民区入口发现大量地雷与未爆弹药。清理按优先级逐段推进，没有哪一天能宣布完成。' },
+      pressureRise: 0,
+      situation: [
+        '首都西北的城镇已无对方部队，但道路、农田、房屋和车辆残骸里还有地雷和未爆物。',
+        '居民在询问何时可以回家，记者和志愿者也在要求进入。工兵人手有限，清理只能一段一段做。'
+      ],
+      known: ['主干道和居民区入口发现了地雷与未爆物。', '工兵、救援和医疗力量都不够同时覆盖所有地方。'],
+      unknown: ['各处雷场的完整分布。', '对方是否留下了新的布设记录。'],
+      choices: [
+        { id: 'w_mine_priority', title: '工兵优先清理主干道和居民区入口', ap: 2, agency: 'interior',
+          summary: '先让救援车和抢修队能够通行，再向外扩展。', staff: '农田和偏远村庄要等更久。',
+          effects: { safety: 2, reserve: -2 }, wrap: { mines: 18, roads: 8 }, flags: ['w_mine_priority'] },
+        { id: 'w_security_check', title: '分区设检查点，限制进入', ap: 1, agency: 'interior',
+          summary: '没有查清的地方不让人进，同时继续核对撤退情报。', staff: '居民会觉得回家的路被拦住了。',
+          effects: { safety: 2 }, wrap: { reentry: 6, mines: 6, intel: 8 }, flags: ['w_checkpoints'] },
+        { id: 'w_open_access', title: '允许居民和媒体有序进入已清理区域', ap: 1, agency: 'interior',
+          summary: '让外界看到真实情况，也让居民尽快看到自己的家。', staff: '清理没跟上的地方，伤亡风险会上升。',
+          effects: { will: 3, safety: -2 }, wrap: { reentry: 18, returnees: 6 }, flags: ['w_open_access'] },
+        { id: 'w_rescue', title: '组织搜救队和医疗转运', ap: 1, agency: 'logistics',
+          summary: '先找人、救治伤员，再谈其他。', staff: '车辆和医疗物资会被占用。',
+          effects: { will: 2, reserve: -2 }, wrap: { missing: 14 }, flags: ['w_rescue'] }
+      ]
+    },
+    {
+      id: 'c15', act: 5, day: 44, days: 5, ap: 4, interruptible: false,
+      date: '2022-04-08', dateLabel: '4 月 8 日 — 4 月 12 日', time: '五天', span: '5 天',
+      title: '道路、桥梁与基础设施', kicker: '战役收束 · 恢复',
+      intel: { level: '中', tone: '后勤与地方报告', note: '被炸毁或损坏的桥梁影响救援和物资运输。供水、供电和通信在部分城镇仍然中断。' },
+      pressureRise: 0,
+      situation: [
+        '此前为阻滞对方而炸毁的桥梁，现在成了运送物资和疏散伤员的障碍。',
+        '部分城镇没有稳定的水电和通信，医院靠备用电源运转。'
+      ],
+      known: ['部分桥梁与路段无法通行。', '水、电、通信恢复得不均衡。'],
+      unknown: ['地下管线的受损程度。', '哪些建筑已经不能居住。'],
+      choices: [
+        { id: 'w_roads', title: '优先抢修通往首都的道路与桥梁', ap: 2, agency: 'logistics',
+          summary: '让物资和救援车队有稳定的通道。', staff: '用掉工程力量和材料。',
+          effects: { reserve: -2 }, wrap: { roads: 18, infra: 4 }, flags: ['w_roads'] },
+        { id: 'w_utilities', title: '恢复水、电、供暖和通信', ap: 1, agency: 'logistics',
+          summary: '先保医院和居民集中的地方。', staff: '偏远村庄要排在后面。',
+          effects: { will: 2, reserve: -2 }, wrap: { infra: 16 }, flags: ['w_utilities'] },
+        { id: 'w_identify', title: '统一登记失踪与遇难人员信息', ap: 1, agency: 'interior',
+          summary: '家属需要一个能查询的地方。', staff: '登记比救援慢，家属会着急。',
+          effects: { gov: 2 }, wrap: { missing: 14 }, flags: ['w_identify'] },
+        { id: 'w_medical', title: '前移医疗点，转运伤员', ap: 1, agency: 'logistics',
+          summary: '把伤员送到有条件的医院。', staff: '医疗物资会更紧。',
+          effects: { will: 2, reserve: -1 }, wrap: { missing: 6, returnees: 4 } }
+      ]
+    },
+    {
+      id: 'c16', act: 5, day: 49, days: 4, ap: 3, interruptible: false,
+      date: '2022-04-13', dateLabel: '4 月 13 日 — 4 月 16 日', time: '四天', span: '4 天',
+      title: '平民返回与部队恢复', kicker: '战役收束 · 移交',
+      intel: { level: '中', tone: '参谋部与地方报告', note: '部队需要休整和补充，地方政府希望接手日常管理。撤退情报仍在继续核实。' },
+      pressureRise: 0,
+      situation: [
+        '参战部队已经连续作战数周，装备和人员都需要恢复。',
+        '地方政府能否接手日常管理，取决于这几周里水电、道路和安全检查做到了什么程度。'
+      ],
+      known: ['部队需要轮换休整。', '地方政府已经开始接手部分工作。'],
+      unknown: ['对方是否会在北面重新集结。', '返回的居民会不会遇到尚未发现的雷场。'],
+      choices: [
+        { id: 'w_returnee_conditions', title: '公布分区返回条件和时间表', ap: 1, agency: 'interior',
+          summary: '告诉居民哪些地方可以回、哪些要再等。', staff: '有人会因为还不能回去而不满。',
+          effects: { will: 3, gov: 1 }, wrap: { returnees: 14 }, flags: ['w_return_conditions'] },
+        { id: 'w_unit_recover', title: '让参战部队分批休整、补充装备', ap: 2, agency: 'general_staff',
+          summary: '先恢复战斗力，再谈后续部署。', staff: '休整期间有些方向会薄弱。',
+          effects: { army: 3, reserve: -2 }, wrap: { recovery: 18 }, flags: ['w_unit_recover'] },
+        { id: 'w_confirm_withdrawal', title: '继续核实撤退情报，保持警戒', ap: 1, agency: 'general_staff',
+          summary: '确认对方是真撤还是换位置。', staff: '警戒会占用本该休整的兵力。',
+          effects: { kyiv: 1 }, wrap: { intel: 16 }, flags: ['w_confirm_withdrawal'] },
+        { id: 'w_handover', title: '向地方政府移交日常管理', ap: 1, agency: 'interior',
+          summary: '中央从应急状态退回正常分工。', staff: '地方能力不足的地方可能出现空档。',
+          effects: { gov: 2 }, wrap: { returnees: 6, infra: 6 }, flags: ['w_handover'] }
       ]
     }
   ];
@@ -756,6 +844,29 @@
     saveKey: 'lzs_campaign_v1',
     schemaVersion: 4,
     totalDays: 38,
+    /* 援助生命周期：请求 → 考虑 → 承诺 → 运输 → 抵达 → 分配 → 生效。
+       delay 以决策窗口计；gate 不满足则顺延，顺延超过 maxSlips 后停滞并上报。
+       warm：已有前期外交铺垫时，第一阶段缩短一个窗口。数量为模拟设计值，不代表真实交付数。 */
+    wrapupEvents: WRAP_EVENTS,
+    wrapAct: WRAP_ACT,
+    aidLines: {
+      appeal: { label: '首轮紧急请求', warm: [], maxSlips: 2, stages: [
+        { key: 'considering', label: '伙伴内部讨论', delay: 1, note: '首轮请求已送达，伙伴正在内部讨论。' },
+        { key: 'commitment', label: '作出初步承诺', delay: 2, gate: { minStat: { intl: 25 } }, effects: { intl: 3 }, note: '部分伙伴表态愿意提供支持，具体物资还没有清单。' },
+        { key: 'arrival', label: '首批物资抵达', delay: 1, effects: { reserve: 2 }, note: '首批物资已到边境接收点，进入储备登记（模拟设计值）。' }
+      ] },
+      equipment: { label: '具体装备清单', warm: ['c_first_appeal'], maxSlips: 2, stages: [
+        { key: 'considering', label: '清单进入审议', delay: 1, gate: { minStat: { intl: 25 } }, note: '伙伴已收到装备清单，正在核对来源与运输方式。' },
+        { key: 'transport', label: '物资在途', delay: 1, gate: { none: ['c_transport_cut'] }, note: '物资已启运，沿陆路转运，需要边境接收和车队安排。' },
+        { key: 'arrival', label: '物资抵达', delay: 1, effects: { reserve: 2 }, note: '一批装备抵达接收点，尚未分发到部队。' },
+        { key: 'allocation', label: '分配到部队', delay: 1, effects: { army: 4 }, note: '参谋部已把装备分配到几个重点方向，部队开始接装（模拟设计值）。' }
+      ] },
+      air_defense: { label: '防空与反装甲援助', warm: ['c_first_appeal', 'c_wishlist'], maxSlips: 2, stages: [
+        { key: 'commitment', label: '伙伴作出承诺', delay: 2, gate: { minStat: { intl: 25 } }, note: '伙伴同意提供防空与反装甲装备，正在安排交付。' },
+        { key: 'arrival', label: '援助抵达', delay: 1, effects: { reserve: 3 }, note: '第一批援助抵达，正在清点和编组（模拟设计值）。' },
+        { key: 'allocation', label: '分配与投入使用', delay: 1, effects: { army: 4 }, note: '援助已分配到重点方向，需要几天训练后才能充分使用。' }
+      ] }
+    },
     acts: ACTS,
     events: EVENTS,
     onEnter: ON_ENTER,

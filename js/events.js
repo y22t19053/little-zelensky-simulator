@@ -681,7 +681,7 @@
     title: '小泽模拟器',
     subtitle: 'Little Zelensky Simulator',
     tagline: '你能顶住几天？',
-    version: '0.6.0',
+    version: '1.0.0',
     startPressure: 12,
     apPerRound: 3,
     initialStats: {

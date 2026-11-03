@@ -7,7 +7,7 @@
 
   const L = window.LZS;
   if (!L) {
-    document.body.innerHTML = '<main class="fatal"><h1>载入失败</h1><p>找不到游戏引擎。请确认 js/events.js 与 js/engine.js 位于正确位置。</p></main>';
+    document.body.innerHTML = '<main class="fatal"><h1>载入失败</h1><p>游戏没能载入。请刷新页面；若仍然失败，请确认网络没有拦截本站的脚本文件。</p></main>';
     return;
   }
 
@@ -46,6 +46,7 @@
     orderTitle: document.getElementById('order-title'),
     orderMeta: document.getElementById('order-meta'),
     issue: document.getElementById('btn-issue'),
+    issueDelegate: document.getElementById('btn-issue-delegate'),
     issueLabel: document.getElementById('issue-label'),
     issueCost: document.getElementById('issue-cost'),
     endRound: document.getElementById('btn-end-round'),
@@ -235,6 +236,7 @@
     showScreen('game');
     renderGame();
     if (ui.game.phase === 'interlude' && ui.game.interlude) openInterlude(ui.game.interlude);
+    else if (ui.game.phase === 'wrapup_offer') openWrapOffer();
   }
 
   function openHowToPlay() {
@@ -243,7 +245,7 @@
       body: '<div class="help-grid">' +
         '<section><span>01</span><h3>读局势</h3><p>每回合先看事件视觉、情报摘要与国家状态。情报可信度描述信息边界，不代表成功率。</p></section>' +
         '<section><span>02</span><h3>分配 3 AP</h3><p>选择文件查看收益、代价、定性量级与延迟回合。可以签发多项，也可以保留未用 AP，但它不会结转。</p></section>' +
-        '<section><span>03</span><h3>签发并归档</h3><p>固定底栏是签发前确认。签发后显示引擎结算的实际数值；互斥命令不能同时执行。</p></section>' +
+        '<section><span>03</span><h3>签发并归档</h3><p>固定底栏是签发前确认。签发后显示实际发生的变化；互斥命令不能同时执行。</p></section>' +
         '<section><span>04</span><h3>承担夜晚</h3><p>结束回合后，命令归档、延迟后果、状态侵蚀和战争压力依次结算。七日开局共七回合；基辅战役共 13 个决策窗口，结束窗口后系统按天模拟到下一窗口，危险线被新越过时会提前中断。</p></section>' +
         '<section><span>05</span><h3>重大决策</h3><p>战役中标为“重大决策”的文件由总统直接签署，不需召集协调，但低可信情报仍需先追问。它们多数不可逆，会在之后的窗口以“前序回响”回来。</p></section>' +
         '</div><p class="modal-note">键盘：Tab 移动焦点，Enter 或空格选择文件，Escape 关闭可关闭的窗口。手机可展开“国家状态”查看全部七项。</p>',
@@ -382,20 +384,43 @@
 
   function renderAgencyDesk(body, card) {
     const g = ui.game;
+    const campaign = g.scenario === 'campaign';
+    const board = campaign && L.getOfficeBoard ? L.getOfficeBoard(g) : [];
+    const spec = strat().standing || { cost: 1, minCoordination: 45 };
     const cards = L.intel.agencies.map(function (agency) {
       const load = L.getAgencyLoad(g, agency.id);
       const done = !!g.coordinationThisRound[agency.id];
-      const standing = g.standing && g.standing[agency.id] && g.standing[agency.id].active;
-      const spec = strat().standing || { cost: 1, minCoordination: 45 };
+      const rec = g.standing && g.standing[agency.id];
+      const standing = !!(rec && rec.active);
+      const row = board.filter(function (r) { return r.id === agency.id; })[0];
       const loadPct = Math.min(100, Math.round(load.workload / load.capacity * 100));
-      return '<article class="agency-card' + (load.overloaded ? ' is-overloaded' : '') + (load.strained ? ' is-strained' : '') + '"><div class="agency-card-head"><span class="agency-code">' + escapeHtml(agency.short) + '</span><div><h3>' + escapeHtml(agency.label) + '</h3><p>' + escapeHtml(agency.focus) + '</p></div></div>' +
+      const constraint = campaign && row ? row.text : (load.overloaded ? '容量已满：新命令只能排队，无法今晚执行。' : load.strained ? '协调余量低于 35：跨部门命令会先阻塞。' : '可自主处理常规命令；跨部门行动仍需总统召集。');
+      let standingHtml;
+      if (standing && campaign) {
+        const left = Math.max(0, (rec.expiresRound || g.round) - g.round);
+        standingHtml = '<div class="standing-box"><span class="standing-badge">常设授权 · 还剩 ' + left + ' 个窗口' + (rec.suspended ? ' · 暂停中' : '') + '</span>' +
+          '<p class="standing-scope">' + escapeHtml(rec.scope || '') + '</p>' +
+          '<p class="standing-result">已自行办理 ' + (rec.handled || 0) + ' 项' + ((rec.items && rec.items.length) ? '：' + rec.items.slice(-2).map(function (i) { return escapeHtml(i.title); }).join('、') : '') + '</p>' +
+          '<button type="button" class="mini-action" data-revoke="' + escapeHtml(agency.id) + '"' + (g.ap < (spec.revokeCost || 1) ? ' disabled' : '') + ' title="收回授权要花 ' + (spec.revokeCost || 1) + ' 点注意力，该机构协调余量 -' + (spec.revokeCoordination || 3) + '">收回授权 · ' + (spec.revokeCost || 1) + ' AP</button></div>';
+      } else if (standing) {
+        standingHtml = '<span class="standing-badge">常设授权 · 自第 ' + rec.grantedRound + ' 日</span>';
+      } else {
+        const scopeText = campaign && spec.scopes ? (spec.scopes[agency.id] || '') : '';
+        const title = campaign
+          ? '授权范围：' + scopeText + ' 只办一点注意力以内的常规事务，重大决定、新的政治表态与跨部门召集仍由总统决定；每办一项协调余量 -' + (spec.wearPerItem || 1) + '，' + (spec.durationWindows || 4) + ' 个窗口后自动失效。'
+          : '此后该机构命令自动授权；每夜协调 -1，总统介入该机构命令额外 -3';
+        standingHtml = '<button type="button" class="mini-action" data-standing="' + escapeHtml(agency.id) + '"' + (g.ap < spec.cost || load.coordination < spec.minCoordination ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">常设授权 · ' + spec.cost + ' AP</button>' + (campaign && scopeText ? '<p class="standing-scope">' + escapeHtml(scopeText) + '</p>' : '');
+      }
+      return '<article class="agency-card' + (load.overloaded ? ' is-overloaded' : '') + (load.strained ? ' is-strained' : '') + (row ? ' is-' + row.state : '') + '"><div class="agency-card-head"><span class="agency-code">' + escapeHtml(agency.short) + '</span><div><h3>' + escapeHtml(agency.label) + '</h3><p>' + escapeHtml(agency.focus) + '</p></div>' + (row ? '<span class="office-state is-' + row.state + '">' + escapeHtml(row.stateLabel) + '</span>' : '') + '</div>' +
         '<div class="agency-meters"><span><small>协调余量</small><strong>' + load.coordination + '</strong></span><span><small>在办 / 容量</small><strong>' + load.workload + ' / ' + load.capacity + '</strong></span></div>' +
         '<div class="agency-load-track" role="img" aria-label="执行能力占用 ' + load.workload + ' / ' + load.capacity + '"><span style="width:' + loadPct + '%"></span></div>' +
-        '<p class="agency-constraint">' + (load.overloaded ? '容量已满：新命令只能排队，无法今晚执行。' : load.strained ? '协调余量低于 35：跨部门命令会先阻塞。' : '可自主处理常规命令；跨部门行动仍需总统召集。') + '</p>' +
-        '<div class="agency-actions"><button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button>' +
-        (standing ? '<span class="standing-badge">常设授权 · 自第 ' + g.standing[agency.id].grantedRound + ' 日</span>' : '<button type="button" class="mini-action" data-standing="' + escapeHtml(agency.id) + '"' + (g.ap < spec.cost || load.coordination < spec.minCoordination ? ' disabled' : '') + ' title="此后该机构命令自动授权；每夜协调 -1，总统介入该机构命令额外 -3">常设授权 · ' + spec.cost + ' AP</button>') + '</div></article>';
+        '<p class="agency-constraint">' + escapeHtml(constraint) + '</p>' +
+        '<div class="agency-actions"><button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button>' + standingHtml + '</div></article>';
     }).join('');
-    body.innerHTML = '<p class="ops-lead">每个机构只有 3 个在办名额。跨日命令会持续占用名额，直到完成、撤回或失效；容量满时新命令不会执行。召集会恢复协调余量并放行本回合的跨部门阻塞，但会消耗 1 AP。委派不耗注意力的代价是交接延迟一夜与两个机构各 -3 协调余量。</p><div class="agency-grid">' + cards + '</div>';
+    const lead = campaign
+      ? '例行公文由各部门按授权自行办理，只有超出授权、资源不够、被卡住或要总统担责的事才会送到你面前。委派一项事务不花注意力，但接手的部门要有 45 以上的协调余量，每个窗口最多交出 3 项；余量低时办得不到位。常设授权在范围内自动办理例行事务，到期自动失效，也可以提前收回。'
+      : '每个机构只有 3 个在办名额。跨日命令会持续占用名额，直到完成、撤回或失效；容量满时新命令不会执行。召集会恢复协调余量并放行本回合的跨部门阻塞，但会消耗 1 AP。委派不耗注意力的代价是交接延迟一夜与两个机构各 -3 协调余量。';
+    body.innerHTML = '<p class="ops-lead">' + escapeHtml(lead) + '</p><div class="agency-grid">' + cards + '</div>';
     Array.prototype.forEach.call(body.querySelectorAll('[data-coordinate]'), function (button) {
       button.addEventListener('click', function () {
         const result = L.coordinateAgency(g, button.getAttribute('data-coordinate'));
@@ -415,7 +440,18 @@
         saveGame(false);
         renderGame();
         renderOpsBody(card);
-        toast('常设授权已生效：该机构此后签发的命令自动进入执行。');
+        toast(campaign ? '常设授权已生效：该机构会在范围内自行办理例行事务。' : '常设授权已生效：该机构此后签发的命令自动进入执行。');
+      });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-revoke]'), function (button) {
+      button.addEventListener('click', function () {
+        const result = L.revokeStanding(g, button.getAttribute('data-revoke'));
+        if (!result.ok) { toast(result.error || '无法收回授权。', true); return; }
+        if (A) A.playSfx('issue');
+        saveGame(false);
+        renderGame();
+        renderOpsBody(card);
+        toast('授权已收回；之后这个部门的事务重新由总统签发。');
       });
     });
   }
@@ -494,9 +530,12 @@
       '<div class="event-stage">' +
         '<figure class="scene scene-' + escapeHtml(event.id) + '">' +
           '<div class="scene-index"><span>事件视觉 / ' + String(g.round).padStart(2, '0') + '</span><span>模拟示意</span></div>' +
-          '<picture class="scene-picture"><source srcset="assets/visual/events/' + art.id + '.webp" type="image/webp"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
-          '<img class="scene-map" src="assets/visual/maps/' + art.id + '.svg" alt="抽象态势示意，不表示实时前线或兵力" width="640" height="360" loading="lazy">' +
-          '<figcaption><span>' + escapeHtml(art.caption) + '</span><span>本地生成视觉 · 非历史照片</span></figcaption>' +
+          (art.plain
+            ? '<picture class="scene-picture"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
+              (art.extra ? '<img class="scene-map" src="assets/events/' + art.extra + '.svg" alt="同一窗口的另一处示意" width="640" height="360" loading="lazy">' : '')
+            : '<picture class="scene-picture"><source srcset="assets/visual/events/' + art.id + '.webp" type="image/webp"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
+              '<img class="scene-map" src="assets/visual/maps/' + art.id + '.svg" alt="抽象态势示意，不表示实时前线或兵力" width="640" height="360" loading="lazy">') +
+          '<figcaption><span>' + escapeHtml(art.caption) + '</span><span>原创模拟插画 · 非历史照片</span></figcaption>' +
         '</figure>' +
         '<article class="briefing-paper dossier">' +
           '<div class="paper-classification"><span>总统办公室 / 收文</span><span>LZS-' + String(g.round).padStart(2, '0') + '</span></div>' +
@@ -528,9 +567,28 @@
   function dayTheme() { const cs = campaignStatus(); return cs && cs.act && cs.act.music ? cs.act.music : 'day'; }
   function spanText(days) { const d = Number(days || 0); return d < 1 ? '数小时' : (Math.round(d * 10) / 10) + ' 天'; }
   const CAMPAIGN_ART = { c1: 'e1', c2: 'e3', c3: 'e2', c4: 'e4', c5: 'e5', c6: 'e5', c7: 'e7', c8: 'e7', c9: 'e5', c10: 'e6', c11: 'e1', c12: 'e6', c13: 'e4' };
+  // v1.0：战役窗口使用专门绘制的抽象矢量场景；main 为主图，extra 为右下角小图。
+  const CAMPAIGN_SCENES = {
+    c2: { main: 'antonov-assault', extra: 'runway-denial', alt: '安东诺夫机场的空降突击与跑道封堵示意', caption: '安东诺夫机场 · 突击与跑道封堵' },
+    c3: { main: 'location', extra: 'vasylkiv', alt: '总统所在地与瓦西里科夫防空示意', caption: '首都连续性 · 空域与防空' },
+    c5: { main: 'irpin-bridge', alt: '伊尔平河与桥梁的抽象示意', caption: '伊尔平河 · 桥梁与阻滞' },
+    c6: { main: 'chernihiv', alt: '切尔尼戈夫北面压力与补给线的抽象示意', caption: '切尔尼戈夫 · 北面压力与补给线' },
+    c7: { main: 'bucha-irpin-evac', alt: '布恰与伊尔平之间撤离路线的抽象示意', caption: '布恰—伊尔平 · 撤离路线' },
+    c8: { main: 'office-waiting', alt: '总统办公室里等待汇报的桌面场景', caption: '总统办公室 · 等待汇报' },
+    c9: { main: 'moshchun', extra: 'brovary', alt: '莫什春防线与布罗瓦雷东面道路的抽象示意', caption: '莫什春与布罗瓦雷 · 预备队去向' },
+    c10: { main: 'aid-arrival', alt: '援助从请求到见效各环节的抽象示意', caption: '援助 · 从请求到真正用上' },
+    c13: { main: 'reentry', alt: '撤退之后重新进入与安全确认的抽象示意', caption: '重新进入 · 先排查再通行' },
+    c14: { main: 'wrap-repair', alt: '战后修桥、通电与居民返回的抽象示意', caption: '残局 · 修复与返回' },
+    c15: { main: 'wrap-repair', alt: '战后修桥、通电与居民返回的抽象示意', caption: '残局 · 修复与返回' },
+    c16: { main: 'wrap-repair', alt: '战后修桥、通电与居民返回的抽象示意', caption: '残局 · 修复与返回' }
+  };
   function artFor(event) {
+    if (isCampaignGame()) {
+      const scene = CAMPAIGN_SCENES[event.id];
+      if (scene) return { id: scene.main, extra: scene.extra || '', plain: true, alt: scene.alt, caption: scene.caption };
+    }
     const base = EVENT_ART[CAMPAIGN_ART[event.id] || event.id] || EVENT_ART.e1;
-    return isCampaignGame() ? Object.assign({}, base, { caption: event.title + ' · 借用本地视觉的抽象示意' }) : base;
+    return isCampaignGame() ? Object.assign({}, base, { caption: event.title + ' · 原创抽象示意' }) : base;
   }
   const FRONT_TONE = { threat: 'danger', pressure: 'warning', contested: 'warning', cut: 'warning', held: 'ok', denied: 'ok', withdrawal: 'ok', reentered: 'ok' };
   function frontsMapHtml(fronts, title) {
@@ -569,7 +627,7 @@
     const cs = campaignStatus();
     const carry = cs && cs.carryDays ? cs.carryDays : 0;
     const hasKey = (event.choices || []).some(function (c) { return c.keyDecision; });
-    return '<div class="window-span"><span>' + escapeHtml(event.span || event.dateLabel || '') + '</span><p>本窗口结束后，系统内部逐日模拟约 ' + escapeHtml(spanText(Number(event.days || 0) + carry)) + (carry ? '（含上一窗口中断后结转的 ' + escapeHtml(spanText(carry)) + '）' : '') + '。' + (event.interruptible === false ? '这段时间不会被中断。' : '越过危险线时可能提前中断，并发出紧急简报。') + '</p></div>' +
+    return '<div class="window-span"><span>' + escapeHtml(event.span || event.dateLabel || '') + '</span><p>本窗口结束后，时间会推进约 ' + escapeHtml(spanText(Number(event.days || 0) + carry)) + (carry ? '（含上一窗口中断后结转的 ' + escapeHtml(spanText(carry)) + '）' : '') + '。' + (event.interruptible === false ? '这段时间不会被中断。' : '越过危险线时可能提前中断，并发出紧急简报。') + '</p></div>' +
       (hasKey ? '<div class="key-banner" role="note"><strong>重大决策</strong><p>本窗口包含高代价、多数不可逆的总统决定。同组方案互斥，签署后锁定。总统授权方向和资源，具体战斗由军事指挥链执行。</p></div>' : '');
   }
   function keyDetailHtml(choice) {
@@ -578,11 +636,67 @@
     return '<section class="key-detail"><h4>总统授权文件 · 重大决策</h4><dl><div><dt>战略目的</dt><dd>' + escapeHtml(k.purpose || '') + '</dd></div><div><dt>已知代价</dt><dd>' + escapeHtml(k.cost || '') + '</dd></div><div><dt>无法确认</dt><dd>' + escapeHtml(k.unknown || '') + '</dd></div></dl><p>' + (k.irreversible ? '签发后不可撤回；执行、反馈与后续影响会记入战役档案。' : '后续影响会记入战役档案。') + '</p></section>';
   }
   function campaignInterludeHtml(data) {
+    return (data.wrapStart ? wrapStartHtml(data) : campaignClockHtml(data)) + wrapStatusHtml(data) + aidHtml(data) + officeHtml(data);
+  }
+  function wrapStartHtml(data) {
+    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>战役收束 · 从 4 月 3 日起</h3><p>前线不再有新的攻势。接下来要处理的是雷区和未爆弹药、道路桥梁、失踪和受伤人员、平民返回的条件，以及部队恢复。这些工作按天慢慢推进，不会因为多下几道命令就一下子完成。</p></section></li>';
+  }
+  function wrapStatusHtml(data) {
+    const g = ui.game;
+    if (!g || !g.wrapup || !g.wrapup.started || data.wrapOffer || !L.getWrapStatus) return '';
+    const st = L.getWrapStatus(g);
+    if (!st || !st.tracks.length) return '';
+    return '<li class="campaign-step"><span class="settlement-index">收</span><section><h3>残局处理进度</h3><ul class="wrap-tracks">' + st.tracks.map(function (tr) { return '<li><span>' + escapeHtml(tr.label) + '</span><strong>' + escapeHtml(tr.word) + '</strong></li>'; }).join('') + '</ul><p class="stat-hint">收束阶段最晚到 4 月 16 日。进入城区的速度不要超过排查的速度。</p><button type="button" class="btn btn-ghost" data-wrap-finish>现在结束收束，查看结局</button></section></li>';
+  }
+  function aidHtml(data) {
+    const events = data.aid || [];
+    const status = (ui.game && L.getAidStatus) ? L.getAidStatus(ui.game).filter(function (s) { return !s.done; }) : [];
+    if (!events.length && !status.length) return '';
+    const evHtml = events.map(function (ev) { return '<li><div><strong>' + escapeHtml((ev.title ? ev.title + '：' : '') + ev.label) + '</strong><span>' + (ev.slipped ? '推迟' : ev.stalled ? '停滞' : '进展') + '</span></div><p>' + escapeHtml(ev.note || '') + '</p><div class="effect-row">' + (effectChips(ev.deltas || {}, 0) || '') + '</div></li>'; }).join('');
+    const stHtml = status.map(function (s) { return '<li class="aid-state"><strong>' + escapeHtml(s.title) + '</strong><span>' + escapeHtml(s.status) + (s.stage > 0 ? ' · 第 ' + s.stage + '/' + s.total + ' 步' : '') + (s.next ? ' · 下一步：' + escapeHtml(s.next) + (s.etaRounds != null ? '，约 ' + Math.max(1, s.etaRounds) + ' 个窗口后' : '') : '') + '</span></li>'; }).join('');
+    return '<li class="campaign-step"><span class="settlement-index">援</span><section><h3>外部援助 · 进展</h3>' + (evHtml ? '<ul class="settlement-list">' + evHtml + '</ul>' : '') + (stHtml ? '<ul class="aid-states">' + stHtml + '</ul>' : '') + '</section></li>';
+  }
+  function officeHtml(data) {
+    const o = data.office;
+    if (!o) return '';
+    const groups = [['handled', '已办理'], ['delayed', '办理延后'], ['escalated', '上报总统']];
+    const rows = [];
+    groups.forEach(function (gr) { (o[gr[0]] || []).forEach(function (item) { rows.push('<li class="office-row is-' + gr[0] + '"><div><strong>' + escapeHtml(item.label || '') + '</strong><span>' + gr[1] + '</span></div><p>' + escapeHtml(item.note || '') + '</p></li>'); }); });
+    if (!rows.length) return '';
+    return '<li class="campaign-step"><span class="settlement-index">办</span><section><h3>办公室日报</h3><p>例行公文由各部门按授权办理，这里只列出需要你知道的。</p><ul class="settlement-list">' + rows.join('') + '</ul></section></li>';
+  }
+  function openWrapOffer() {
+    if (!ui.game || ui.game.phase !== 'wrapup_offer') return;
+    if (modalIsOpen() && el.modalRoot.querySelector('[data-wrap-offer]')) return;
+    clearToasts();
+    openModal({
+      kicker: '4 月 2 日 / 战役告一段落', title: '基辅战役可以在这里收束', dismissible: false, wide: true, className: 'interlude-modal',
+      body: '<div class="wrap-offer" data-wrap-offer><p>俄军已经撤离基辅方向。主战役到此为止，你可以选择怎么结束这一局。</p><div class="wrap-options"><section><h3>A · 现在结束</h3><p>直接进入结局和历史复盘。不扣分，也不会改变已经确定的结局。</p></section><section><h3>B · 继续处理残局</h3><p>最多再用 14 天，最晚到 4 月 16 日。要处理的是雷区和未爆弹药、道路桥梁、失踪和受伤人员、平民返回的条件、部队恢复，以及撤退情报的进一步确认。随时可以提前结束。</p><p class="stat-hint">这一阶段没有新的攻势。进城太快而排查没有跟上，会出现伤亡事故。</p></section></div></div>',
+      actions: [
+        { label: '现在结束，查看结局', className: 'btn btn-ghost', close: false, onClick: function () {
+          const r = L.declineWrapUp(ui.game);
+          if (!r.ok) { toast(r.error || '无法结束战役。', true); return; }
+          closeModal(); saveGame(false); showEnding();
+        } },
+        { label: '继续处理残局', className: 'btn btn-primary', close: false, onClick: function () {
+          const r = L.startWrapUp(ui.game);
+          if (!r.ok) { toast(r.error || '无法开始收束。', true); return; }
+          closeModal(); saveGame(false); renderGame(); openInterlude(ui.game.interlude);
+        } }
+      ]
+    });
+  }
+  function aftermathHtml(ending) {
+    const a = ending.aftermath;
+    if (!a) return '';
+    return '<section class="ending-section aftermath"><span class="section-kicker">AFTERMATH</span><h2>收束阶段 · 到 ' + escapeHtml(a.endLabel || '') + '</h2><p>' + escapeHtml(a.mood || '') + '</p><ul class="wrap-tracks">' + (a.tracks || []).map(function (tr) { return '<li><span>' + escapeHtml(tr.label) + '</span><strong>' + escapeHtml(tr.word) + '</strong></li>'; }).join('') + '</ul>' + (a.incident ? '<p class="stat-hint">进入速度超过了排查速度，这一阶段出现过伤亡事故。</p>' : '') + '<p class="stat-hint">' + escapeHtml(a.note || '') + '</p></section>';
+  }
+  function campaignClockHtml(data) {
     const c = data.campaign;
     if (!c) return '';
     const it = c.interruption;
     const echoes = data.echoes || [];
-    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>内部逐日模拟 · ' + escapeHtml(spanText(c.days)) + '</h3><p>' + escapeHtml((c.fromLabel || '') + ' 至 ' + (c.toLabel || '')) + '：命令执行、部队与资源消耗、前线压力和延迟后果按天结算。这里只汇报有意义的变化。</p>' +
+    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>这几天里 · ' + escapeHtml(spanText(c.days)) + '</h3><p>' + escapeHtml((c.fromLabel || '') + ' 至 ' + (c.toLabel || '')) + '：命令照常执行，部队和物资持续消耗，前线压力与此前留下的后果一并推进。下面只列出值得你知道的变化。</p>' +
       (it ? '<div class="interrupt-note" role="alert"><strong>紧急简报 · 时间推进提前中断</strong><p>' + escapeHtml(it.dateLabel + '，' + it.title + '。剩余 ' + it.carried + ' 天并入下一个决策窗口。') + '</p></div>' : '') +
       (echoes.length ? '<ul class="settlement-list">' + echoes.map(function (item) { return '<li><div><strong>' + escapeHtml(item.title) + '</strong><span>此前决定的后果</span></div><p>' + escapeHtml(item.text || '') + '</p><div class="effect-row">' + (effectChips(item.deltas || {}, item.pressureDelta || 0) || '') + '</div></li>'; }).join('') + '</ul>' : '') +
       '</section></li>';
@@ -866,15 +980,15 @@
         '</span></div><div class="stat-track" role="img" aria-label="' + escapeHtml(statFullLabel(key) + ' ' + value + ' / 100') + '"><span class="stat-fill" style="width:' + Math.max(0, Math.min(100, value)) + '%"></span></div></div>';
     }).join('');
     const vitals = L.statKeys.slice(0, 3).map(function (key) { return '<span class="vital"><span>' + escapeHtml(statLabel(key)) + '</span><strong>' + g.stats[key] + '</strong></span>'; }).join('');
-    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">当前没有触发 getAlarms() 告警。</p>';
+    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">目前没有需要特别留意的风险。</p>';
     const notes = L.statKeys.map(function (key) {
       const delta = ui.lastDeltas && ui.lastDeltas[key] ? '；最近实际变化 ' + formatSigned(ui.lastDeltas[key]) : '';
       return '<li><strong>' + escapeHtml(statFullLabel(key)) + '</strong>：' + escapeHtml(L.statMeta[key].hint + delta) + '</li>';
     }).join('');
     el.statsPanel.innerHTML = '<details class="state-details"' + (ui.statesOpen || window.innerWidth > 700 ? ' open' : '') + '><summary><span class="state-heading"><span class="panel-kicker">NATIONAL CONDITION</span><strong id="stats-title">国家状态</strong></span><span class="mobile-vitals">' + vitals + '<span class="state-more">七项</span></span><span class="state-toggle">展开 / 收起</span></summary><div class="state-body">' + rows +
-      '<section class="alarm-panel"><h3>当前告警</h3>' + alarmHtml + '</section>' +
+      '<section class="alarm-panel"><h3>需要留意的风险</h3>' + alarmHtml + '</section>' +
       '<details class="state-notes"><summary>状态含义与最近变化</summary><ul>' + notes + '</ul></details>' +
-      '<p class="stat-hint">风险样式只来自引擎 getAlarms()；崩溃判定仍由 checkCollapse() 独立执行。</p></div></details>';
+      '<p class="stat-hint">风险提示只反映当前数值；国家是否失守，由另外的底线条件判定。</p></div></details>';
     const details = el.statsPanel.querySelector('.state-details');
     details.addEventListener('toggle', function () { ui.statesOpen = details.open; });
   }
@@ -925,10 +1039,13 @@
     if (command.requiresIntel && !(intelRecord && intelRecord.inquired) && ['issued', 'blocked', 'executing'].indexOf(command.status) !== -1) {
       parts.push('<button type="button" class="mini-action is-primary" data-open-intel="military">去追问总参 · 情报桌</button>');
     }
+    if (command.status === 'blocked' && command.blockedCode === 'APPROVAL' && command.delegation) {
+      parts.push('<button type="button" class="mini-action is-primary" data-approve="' + escapeHtml(command.id) + '">批准办理方案 · 0 AP</button>');
+    }
     if (command.status === 'issued') {
       parts.push('<button type="button" class="mini-action is-primary" data-authorize="' + escapeHtml(command.id) + '">授权执行</button>');
     }
-    if (!command.effectsApplied && ['issued', 'blocked', 'executing'].indexOf(command.status) !== -1 && (!command.deadlineRound || g.round + 1 <= command.deadlineRound)) {
+    if (!command.delegation && !command.effectsApplied && ['issued', 'blocked', 'executing'].indexOf(command.status) !== -1 && (!command.deadlineRound || g.round + 1 <= command.deadlineRound)) {
       parts.push('<button type="button" class="mini-action" data-delegate="' + escapeHtml(command.id) + '">委派 · 不耗 AP</button>');
     }
     if (['executing', 'blocked', 'awaiting_feedback'].indexOf(command.status) !== -1) {
@@ -954,6 +1071,7 @@
     const windowText = commandWindowLabel(command);
     let note = '第 ' + command.round + ' 回合签发 · ' + (command.slotRequired === false ? '机构自行排队，不占优先席位' : '占用优先席位');
     if (command.delegated) note += ' · 已委派交接';
+    if (command.delegation) note += command.delegation.mode === 'approval' ? ' · 机构拟案，待总统批准' : ' · 授权范围内自行办理';
     if (command.expedited) note += ' · 总统已介入';
     if (command.executedLate) note += ' · 延迟执行';
     if (command.autoAuthorized) note += ' · 常设授权自动执行';
@@ -977,6 +1095,9 @@
   function bindCommandActions(scope) {
     Array.prototype.forEach.call(scope.querySelectorAll('[data-authorize]'), function (button) {
       button.addEventListener('click', function () { authorizeCommand(button.getAttribute('data-authorize')); });
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-approve]'), function (button) {
+      button.addEventListener('click', function () { approveCommand(button.getAttribute('data-approve')); });
     });
     Array.prototype.forEach.call(scope.querySelectorAll('[data-delegate]'), function (button) {
       button.addEventListener('click', function () { openDelegateModal(button.getAttribute('data-delegate')); });
@@ -1109,6 +1230,7 @@
     const unauthorized = (g.commands || []).filter(function (command) { return command.round === g.round && command.status === 'issued'; });
     const untouchedTurn = g.executed.length === 0 && g.ap >= (g.apMax || 3);
     el.issue.disabled = !canIssue;
+    renderDelegateButton(g, choice, canIssue);
     el.endRound.disabled = ui.busy || g.phase !== 'briefing' || untouchedTurn || unauthorized.length > 0;
     el.endRound.textContent = g.round >= finalRoundOf(g) ? (isCampaignGame() ? '结算战役' : '结算本阶段') : (isCampaignGame() ? '结束本窗口 · 推进时间' : '结束本回合');
     el.endRound.title = untouchedTurn ? '先签发命令，或把注意力用于处理既有事务。' : unauthorized.length ? '先授权或委派所有已签发命令。' : '';
@@ -1131,6 +1253,75 @@
     saveGame(false);
     renderGame();
     toast('已签发：' + choice.title + '。现在请授权执行，或把它委派出去。');
+  }
+
+  /* 战役：签发时直接委派给机构（0 AP）。两种方式：授权范围内自行办理 / 拟案后报总统批准。 */
+  function renderDelegateButton(g, choice, canIssue) {
+    const btn = el.issueDelegate;
+    if (!btn) return;
+    if (!isCampaignGame(g)) { btn.hidden = true; return; }
+    btn.hidden = false;
+    if (!choice) { btn.disabled = true; btn.title = '先选一项事务；只有日常办理事项可以委派。'; return; }
+    const check = L.checkDelegation(g, choice.id, {});
+    const ok = !!check.ok && canIssue;
+    btn.disabled = !ok;
+    btn.title = ok ? '交给' + agencyLabel(check.agency) + '办理，不耗总统注意力。' : (check.error || '这项事务现在不能委派。');
+  }
+
+  function issueDelegated(returnForApproval) {
+    if (ui.busy || !ui.game || ui.game.phase !== 'briefing') return;
+    const event = L.getEvent(ui.game);
+    const choice = ui.selectedChoiceId && event ? L.getChoice(event, ui.selectedChoiceId) : null;
+    if (!choice) return;
+    ui.busy = true;
+    const result = L.issueCommand(ui.game, choice.id, { delegate: true, returnForApproval: !!returnForApproval });
+    ui.busy = false;
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法委派这项事务。', true); renderGame(); return; }
+    if (A) A.playSfx('issue');
+    ui.selectedChoiceId = null;
+    saveGame(false);
+    closeModal();
+    renderGame();
+    toast(returnForApproval ? '已交办：机构拟好方案后会报请批准。' : '已交办：机构在授权范围内自行办理。');
+  }
+
+  function openIssueDelegateModal() {
+    if (!ui.game || ui.game.phase !== 'briefing') return;
+    const event = L.getEvent(ui.game);
+    const choice = ui.selectedChoiceId && event ? L.getChoice(event, ui.selectedChoiceId) : null;
+    if (!choice) return;
+    const g = ui.game;
+    const check = L.checkDelegation(g, choice.id, {});
+    if (!check.ok) { toast(check.error || '这项事务现在不能委派。', true); return; }
+    const withApproval = L.checkDelegation(g, choice.id, { returnForApproval: true });
+    const agencyName = agencyLabel(check.agency);
+    const load = L.getAgencyLoad ? L.getAgencyLoad(g, check.agency) : null;
+    const full = load && load.coordination >= ((window.LZS_STRATEGY && window.LZS_STRATEGY.delegation && window.LZS_STRATEGY.delegation.fullQualityAt) || 60);
+    const qualityNote = load ? (full ? agencyName + '协调余量 ' + load.coordination + '，能把事办足。' : agencyName + '协调余量 ' + load.coordination + '，自行办理的成效会打折。') : '';
+    openModal({
+      kicker: '委派 / 不耗注意力', title: '把“' + choice.title + '”交给' + agencyName,
+      body: '<p class="modal-lead">日常事务可以交给机构办理，总统不再为它占用注意力。代价是机构协调余量少一点（交代事情要占用他们的人手）。重大决策、跨部门事务和情报未确认的事务不能委派。' + (qualityNote ? ' ' + escapeHtml(qualityNote) : '') + '</p>' +
+        '<div class="agency-picker">' +
+          '<button type="button" class="agency-choice" data-issue-delegate="auto"><strong>授权范围内自行办理</strong><span>机构今夜按既有授权办完，结果在夜间日报里告知。</span></button>' +
+          '<button type="button" class="agency-choice" data-issue-delegate="approval"' + (withApproval.ok ? '' : ' disabled') + '><strong>拟好方案，报请批准</strong><span>' + escapeHtml(withApproval.ok ? '机构先拟方案，下一份简报由总统批准，成效不打折；批准不耗注意力。' : withApproval.error) + '</span></button>' +
+        '</div>',
+      actions: [{ label: '取消', className: 'btn btn-ghost', onClick: function () {} }],
+      onMount: function (card) {
+        Array.prototype.forEach.call(card.querySelectorAll('[data-issue-delegate]'), function (button) {
+          button.addEventListener('click', function () { issueDelegated(button.getAttribute('data-issue-delegate') === 'approval'); });
+        });
+      }
+    });
+  }
+
+  function approveCommand(commandId) {
+    if (!ui.game || ui.busy) return;
+    const result = L.approveDelegated(ui.game, commandId);
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '现在不能批准。', true); return; }
+    if (A) A.playSfx('issue');
+    saveGame(false);
+    renderGame();
+    toast(result.blocked ? '已批准，但机构今夜接不下，仍在排队。' : '已批准：今夜执行，不另耗注意力。');
   }
 
   function endRound() {
@@ -1220,6 +1411,7 @@
 
   function openInterlude(data) {
     if (!data || !ui.game) return;
+    if (data.wrapOffer) { openWrapOffer(); return; }
     if (modalIsOpen() && el.modalRoot.querySelector('[data-interlude-round="' + data.round + '"]')) return;
     clearToasts();
     if (A) A.setTheme('night');
@@ -1258,7 +1450,7 @@
     const delayedHtml = delayed.length ? delayed.map(function (item) {
       return '<li><div><strong>' + escapeHtml(item.label) + '</strong><span>第 ' + item.appliedRound + ' 回合实际触发</span></div><p>' + escapeHtml(item.note || '') + '</p><div class="effect-row">' + (effectChips(item.deltas, item.pressureDelta) || '<span class="empty-note">无数值变化</span>') + '</div></li>';
     }).join('') : '<li><p>没有延迟后果在本夜触发。</p></li>';
-    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">本夜没有触发新的 getAlarms() 告警。</p>';
+    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">本夜没有出现新的风险。</p>';
     openModal({
       kicker: data.campaign ? '战役推进 / CAMPAIGN CLOCK' : '夜间态势 / NIGHT SETTLEMENT', title: data.campaign ? '时间推进 · ' + (data.campaign.fromLabel || '') + ' → ' + (data.campaign.toLabel || '') : '第 ' + (data.round - 1) + ' 夜', dismissible: false, wide: true, className: 'interlude-modal',
       body: '<div class="interlude-sheet" data-interlude-round="' + data.round + '"><div class="interlude-date"><strong>' + escapeHtml(data.dateLabel || '') + '</strong><span>夜间结算不会重复执行</span></div>' +
@@ -1443,24 +1635,92 @@
       }).join('') + '</ol></li>';
     }).join('') + '</ol>' : '<p class="empty-note">本局没有可展开的命令执行链。</p>';
     const toneLabel = ending.tone === 'success' ? '阶段存续' : ending.tone === 'warning' ? '代价存续' : '阶段未守住';
-    el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / ' + (campaignEnd ? '战役档案' : '阶段档案') + '</span><span>' + (campaignEnd ? '2022.02.24 — 04.02' : '2022.02.24 — 03.02') + '</span></header>' +
-      '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(campaignEnd ? '结局 ' + (ending.code || '') : toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta">' + (campaignEnd ? '<span>第 ' + (ending.day || '?') + ' / 38 天 · ' + (ending.finalRound || ui.game.round) + ' 个决策窗口</span>' : '<span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span>') + '<span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
+    el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / ' + (campaignEnd ? '战役档案' : '阶段档案') + '</span><span>' + (campaignEnd ? '2022.02.24 — ' + (ending.aftermath ? ending.aftermath.endLabel : '04.02') : '2022.02.24 — 03.02') + '</span></header>' +
+      '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(campaignEnd ? '结局 ' + (ending.code || '') : toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta">' + (campaignEnd ? (ending.aftermath ? '<span>基辅战役 38 天，加收束 ' + ending.aftermath.days + ' 天 · ' : '<span>第 ' + (ending.day || '?') + ' / 38 天 · ') + (ending.finalRound || ui.game.round) + ' 个决策窗口</span>' : '<span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span>') + '<span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
       '<div class="ending-layout"><div class="ending-column"><section class="ending-section"><span class="section-kicker">AFTER ACTION</span><h2>阶段记录</h2><div class="ending-copy">' + (ending.epilogue || []).map(function (p) { return '<p>' + escapeHtml(p) + '</p>'; }).join('') + '</div></section>' +
-      (campaignEnd ? campaignEndingMainHtml(ending) : '') + governanceHtml(ending) + turningPointsHtml(ending) +
+      (campaignEnd ? campaignEndingMainHtml(ending) : '') + aftermathHtml(ending) + governanceHtml(ending) + turningPointsHtml(ending) +
       '<section class="ending-section"><h2>命令如何走向后果</h2><p class="stat-hint">这里优先展示失效、阻塞、撤回与等待核验的命令：总统注意力、机构容量和窗口如何改变结果。</p>' + commandChainHtml + '</section>' +
       '<section class="ending-section"><h2>完整决策链</h2>' + timeline + '</section><section class="ending-section"><h2>延迟后果链</h2>' + chainHtml + '</section></div>' +
       '<aside class="ending-column"><section class="ending-section"><h2>七项最终状态</h2><div class="ending-stats">' + endingStatsHtml(stats) + '</div><div class="ending-pressure"><span>战争压力</span><strong>' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + ' / 100</strong></div></section>' +
       (campaignEnd ? campaignEndingSideHtml(ending) : '') + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
       '<section class="ending-review-invite"><span class="section-kicker">SEALED UNTIL THE END</span><h2>现在，打开事后才能看见的资料。</h2><p>完整模拟参数、逐日事实、当时认知、后来确认、争议与资料来源已独立归档，不再接在结局正文之后。</p><button type="button" class="btn btn-primary" id="btn-history">进入历史复盘</button></section>' +
       '<div class="ending-disclaimer"><strong>模拟说明：</strong>' + escapeHtml(ending.disclaimer || L.meta.disclaimer || '') + '<br>本结局只描述本局模拟参数下的国家状态，不评价真实历史人物。<br>版本 ' + escapeHtml(L.meta.version || '') + ' · 所有数值均为模拟设计参数。</div>' +
-      '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
+      '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-poster">生成纪念海报</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
     document.getElementById('btn-history').addEventListener('click', openHistoryReview);
     document.getElementById('btn-replay').addEventListener('click', function () { startNewGame(true, scenarioOf()); });
     document.getElementById('btn-back-cover').addEventListener('click', renderIntro);
     document.getElementById('btn-print').addEventListener('click', function () { window.print(); });
+    document.getElementById('btn-poster').addEventListener('click', function () { openPosterModal(ending); });
+  }
+
+  /* 纪念海报：canvas 本地绘制，不上传 */
+  function openPosterModal(ending) {
+    const P = window.LZS_POSTER;
+    if (!P) { openModal({ kicker: '纪念海报', title: '海报暂时不可用', body: '<p>海报模块没有载入，请刷新页面后再试。</p>', actions: [{ label: '知道了', className: 'btn btn-primary' }] }); return; }
+    let canvas = null;
+    const note = function (text) { const n = document.getElementById('poster-note'); if (n) n.textContent = text; };
+    const download = function () {
+      if (!canvas) return;
+      P.toBlob(canvas, function (blob) {
+        if (!blob) { note('这个浏览器不能直接导出图片，请长按预览图保存。'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = '小泽模拟器-基辅战役纪念-' + (ending.code || 'X') + '.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        window.setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        note('已保存为图片。');
+      });
+    };
+    const share = function () {
+      if (!canvas) return;
+      P.toBlob(canvas, function (blob) {
+        if (!blob) { download(); return; }
+        const file = typeof File === 'function' ? new File([blob], 'zelensky-simulator-poster.png', { type: 'image/png' }) : null;
+        const data = { title: '小泽模拟器 · 基辅战役纪念', text: '我在《小泽模拟器》里走完了基辅战役：' + (ending.title || '') + '。', url: P.LIVE_URL };
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) data.files = [file];
+        if (navigator.share) {
+          navigator.share(data).then(function () { note('已打开系统分享。'); }).catch(function (err) { if (!err || err.name !== 'AbortError') note('分享没有成功，可以改用保存图片或复制链接。'); });
+        } else {
+          download();
+          note('这个浏览器没有系统分享，已改为保存图片；也可以复制链接。');
+        }
+      });
+    };
+    const copyLink = function () {
+      const done = function () { note('链接已复制：' + P.LIVE_URL); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(P.LIVE_URL).then(done).catch(function () { note('复制失败，请手动复制：' + P.LIVE_URL); });
+      } else {
+        const t = document.createElement('textarea');
+        t.value = P.LIVE_URL; document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); done(); } catch (e) { note('复制失败，请手动复制：' + P.LIVE_URL); }
+        document.body.removeChild(t);
+      }
+    };
+    openModal({
+      kicker: '纪念海报', title: '基辅战役 · 本局纪念', wide: true, className: 'poster-modal',
+      body: '<div class="poster-preview"><canvas id="poster-canvas" width="1080" height="1350" aria-label="本局纪念海报预览"></canvas></div><p class="stat-hint">海报只用本局结局里的内容在本机绘制，不会上传；右下角二维码指向游戏网址。图片是原创模拟推演，不是历史照片，也不含分数。</p><p class="stat-hint" id="poster-note" role="status"></p>',
+      actions: [
+        { label: '保存图片', className: 'btn btn-primary', close: false, onClick: download },
+        { label: '分享', className: 'btn btn-ghost', close: false, onClick: share },
+        { label: '复制链接', className: 'btn btn-ghost', close: false, onClick: copyLink },
+        { label: '关闭', className: 'btn btn-ghost' }
+      ],
+      onMount: function (card) {
+        canvas = card.querySelector('#poster-canvas');
+        try { P.make(canvas, ending, ui.game); } catch (err) { note('海报绘制失败：' + (err && err.message ? err.message : '未知原因')); }
+      }
+    });
   }
 
   function init() {
+    document.addEventListener('click', function (ev) {
+      const b = ev.target && ev.target.closest ? ev.target.closest('[data-wrap-finish]') : null;
+      if (!b || !ui.game) return;
+      const r = L.finishWrapUp(ui.game);
+      if (!r.ok) { toast(r.error || '现在不能结束收束。', true); return; }
+      closeModal(); saveGame(false); showEnding();
+    });
     el.start.addEventListener('click', function () { requestStart('classic'); });
     el.continue.addEventListener('click', function () { loadGame('classic'); });
     if (el.campaign) el.campaign.addEventListener('click', function () { requestStart('campaign'); });
@@ -1477,6 +1737,7 @@
     el.logBtn.addEventListener('click', openLog);
     el.menuBtn.addEventListener('click', openMenu);
     el.issue.addEventListener('click', issueSelected);
+    if (el.issueDelegate) el.issueDelegate.addEventListener('click', openIssueDelegateModal);
     el.endRound.addEventListener('click', endRound);
     if (el.opsBtn) el.opsBtn.addEventListener('click', function () { openOperations('intel'); });
     renderIntro();

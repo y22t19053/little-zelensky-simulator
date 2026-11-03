@@ -982,3 +982,38 @@ p.campaign-day { color: var(--text); font: 12px var(--mono); }
   .dim-list li { grid-template-columns: 1fr auto; }
   .dim-list li small { display: none; }
 }
+
+/* v1.0 办公室看板与常设授权 */
+.agency-card-head { position: relative; }
+.office-state { margin-left: auto; align-self: flex-start; padding: 2px 8px; border: 1px solid var(--line, #5a5a48); color: var(--muted); font: 11px var(--mono); white-space: nowrap; }
+.office-state.is-handled { border-color: var(--olive); color: var(--positive); }
+.office-state.is-executing { border-color: var(--olive); color: var(--text, #d8d2bc); }
+.office-state.is-blocked, .office-state.is-needs_president { border-color: var(--warning); color: var(--warning); }
+.office-state.is-resource_delayed { border-color: var(--warning); color: var(--muted); }
+.standing-box { display: grid; gap: 6px; flex: 1 1 100%; padding: 8px 10px; border: 1px solid var(--olive); background: rgba(90, 100, 60, 0.12); }
+.standing-box .standing-badge { min-height: 0; padding: 0; border: 0; }
+.standing-scope { margin: 0 !important; color: var(--faint) !important; font-size: 11px !important; line-height: 1.5 !important; }
+.standing-result { margin: 0 !important; color: var(--muted) !important; font-size: 12px !important; line-height: 1.5 !important; }
+
+/* v1.0 战役收束 / 援助进展 / 办公室日报 */
+.wrap-offer p { margin: 0 0 12px; line-height: 1.7; }
+.wrap-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+.wrap-options section { border: 1px solid rgba(214, 170, 82, .35); background: rgba(24, 28, 18, .55); padding: 14px 16px; }
+.wrap-options h3 { margin: 0 0 8px; font-size: 1rem; color: #d6aa52; }
+.wrap-tracks { list-style: none; margin: 8px 0 12px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+.wrap-tracks li { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(214, 170, 82, .3); padding: 4px 0; }
+.wrap-tracks span { opacity: .8; }
+.wrap-tracks strong { color: #d6aa52; font-weight: 600; }
+.aid-states { list-style: none; margin: 8px 0 0; padding: 0; }
+.aid-states li { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-top: 1px dashed rgba(214, 170, 82, .3); }
+.aid-states li span { opacity: .8; font-size: .9rem; }
+.office-row.is-escalated strong { color: #d6aa52; }
+.office-row.is-delayed strong { opacity: .85; }
+.aftermath .wrap-tracks { margin-top: 12px; }
+@media (max-width: 720px) { .wrap-options, .wrap-tracks { grid-template-columns: 1fr; } }
+
+/* v1.0 纪念海报 */
+.poster-preview { display: flex; justify-content: center; margin: 4px 0 10px; }
+.poster-preview canvas { width: 100%; max-width: 420px; height: auto; border: 1px solid var(--line, #3a4332); background: #151a13; }
+.poster-modal .modal-actions { flex-wrap: wrap; }
+@media (max-width: 720px) { .poster-preview canvas { max-width: 100%; } }

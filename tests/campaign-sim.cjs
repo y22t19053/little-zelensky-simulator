@@ -35,9 +35,13 @@ function issue(state, id) {
   return r.command;
 }
 
+// v0.7: window AP rose to 4-5. Baseline routes only spend the v0.6-equivalent budget (3) on follow-ups;
+// extra AP is exercised by delegation / standing-authority / extra-decision routes.
+const BASELINE_AP = 3;
 function spend(state, mode) {
   let guard = 0;
-  while (!state.ending && state.ap > 0 && guard++ < 6) {
+  const base = state.round === 8 ? 2 : BASELINE_AP; /* c8 在 v0.6 只有 2 AP */ const floor = Math.max(0, (state.apMax || base) - base);
+  while (!state.ending && state.ap > floor && guard++ < 6) {
     const open = state.commands.filter((c) => ['blocked', 'executing', 'issued'].includes(c.status) && !c.effectsApplied);
     let acted = false;
     for (const c of open) {
@@ -71,6 +75,10 @@ function play(plan, opts) {
     const ended = L.endRound(state);
     assert.equal(ended.ok, true, event.id + ' endRound: ' + (ended.error || ''));
     trace.push({ id: event.id, picks: state.choices.filter((c) => c.eventId === event.id).map((c) => c.choiceId), day: Math.floor(state.campaign.day), pressure: state.pressure, stats: Object.assign({}, state.stats), interrupted: !!(ended.campaign && ended.campaign.interruption) });
+    /* 4 月 2 日后的收束选择：默认选 A（直接结束，沿用已判定的结局）；o.wrap === 'continue' 时进入收束阶段。 */
+    if (state.phase === 'wrapup_offer') {
+      if (o.wrap === 'continue') { const sw = L.startWrapUp(state); assert.equal(sw.ok, true, 'startWrapUp'); } else { const dw = L.declineWrapUp(state); assert.equal(dw.ok, true, 'declineWrapUp'); }
+    }
     if (state.phase === 'interlude') L.continueFromInterlude(state);
   }
   assert.ok(state.ending, '战役没有结束（可能死锁）');
@@ -81,7 +89,7 @@ const ROUTES = {
   near_history: {
     c1: ['c_command_line', 'c_first_appeal'], c2: ['c_counter_airfield'], c3: ['c_stay_capital', 'c_address_nation'],
     c4: ['c_counterintel', 'c_rumor_rules'], c5: ['c_blow_bridges', 'c_form_reserve'], c6: ['c_harass_convoy'],
-    c7: ['c_evacuate', 'c_wishlist'], c8: ['c_rotation'], c9: ['c_reserve_moshchun', 'c_brovary_ambush'],
+    c7: ['c_evacuate', 'c_wishlist'], c8: ['c_rotation'], c9: ['c_reserve_moshchun'], /* v0.6 里伏击因 AP 不足实际未签发；v0.7 的 c9 有 5 AP，基线路线保持原实际操作 */
     c10: ['c_air_defense_aid', 'c_staff_rest'], c11: ['c_counter_west', 'c_prepare_return'], c12: ['c_stay_alert', 'c_verify_signal'],
     c13: ['c_staged_return', 'c_document']
   },

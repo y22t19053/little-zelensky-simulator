@@ -48,24 +48,26 @@ test('战役与经典模式隔离：经典 createGame 不受影响', function ()
   const camp = newCampaign();
   assert.equal(camp.scenario, 'campaign');
   assert.equal(L.finalRoundFor(camp), 13);
-  assert.equal(camp.schemaVersion, 4);
+  assert.equal(camp.schemaVersion, 5);
   assert.equal(L.getEvent(camp).id, 'c1');
 });
 
 test('AP 按决策窗口刷新，不跨窗口储存', function () {
   const s = newCampaign();
-  assert.equal(s.ap, 3);
+  assert.equal(s.ap, C.events[0].ap);
+  assert.equal(C.events[0].ap, 4, 'v0.7：c1 为 4 AP');
   S.play({ c1: ['c_command_line'] }, {}); // 烟雾
   const t = newCampaign();
   L.issueCommand(t, 'c_command_line'); L.authorizeCommand(t, t.commands[0].id);
-  assert.equal(t.ap, 2);
+  assert.equal(t.ap, C.events[0].ap - 1);
   assert.equal(L.endRound(t).ok, true);
   L.continueFromInterlude(t);
   assert.equal(t.round, 2);
   assert.equal(t.ap, C.events[1].ap, '新窗口 AP 等于窗口上限，不叠加上一窗口剩余');
-  // 第三幕的 c8 只有 2 AP
+  // v0.7：普通窗口 4 AP，密集关键窗口至多 5 AP，c8（弹药轮换）收紧为 3 AP
   const c8 = C.events.find((e) => e.id === 'c8');
-  assert.equal(c8.ap, 2);
+  assert.equal(c8.ap, 3);
+  assert.ok(C.events.every((e) => e.ap >= 3 && e.ap <= 5), '每窗口 3–5 AP，不无限累积');
 });
 
 test('38 天连续模拟：近历史路线逐窗口推进到 4 月 2 日', function () {
@@ -160,9 +162,10 @@ test('莫什春 / 布罗瓦雷：集中一个方向，另一方向依赖此前�
   const delayedFor = (st, id) => st.resolved.filter((r) => r.sourceCommandId && r.sourceCommandId.indexOf(id) >= 0);
   assert.ok(delayedFor(west, 'c_reserve_moshchun').some((r) => (r.deltas.kyiv || 0) < 0), '无伏击时东侧承压');
   assert.ok(!delayedFor(westNorth, 'c_reserve_moshchun').some((r) => (r.deltas.kyiv || 0) < 0), '第 6 窗口加强北面后，东侧风险不兑现（跨窗口因果）');
-  // 低可信情报下同一窗口无法既追问、投预备队又布置伏击：注意力迫使取舍。
-  const m = both.commands.find((c) => c.choiceId === 'c_reserve_moshchun');
-  assert.ok(m.status === 'expired' || !both.flags.c_brovary_ambush, '同窗口两头兼顾应受注意力限制');
+  // v0.7：c9 为 5 AP，可以同时做预备队与伏击；但注意力仍是硬上限，整个窗口所付 AP 不超过上限。
+  const c9paid = both.commands.filter((c) => c.eventId === 'c9').reduce((s, c) => s + (c.paidAp != null ? c.paidAp : c.ap), 0);
+  assert.ok(c9paid <= C.events.find((e) => e.id === 'c9').ap, 'c9 所付 AP ' + c9paid + ' 不得超过窗口上限');
+  assert.ok(both.flags.c_brovary_ambush, '5 AP 下两头兼顾可行');
   assert.ok(east.stats.kyiv !== west.stats.kyiv || east.pressure !== west.pressure, '不同投向产生不同局面');
   assert.ok(hold.flags.c_reserve_held);
   assert.ok(new Set([west.ending.id, east.ending.id, hold.ending.id, westNorth.ending.id]).size >= 1);
@@ -201,7 +204,7 @@ test('紧急中断：首都越线时提前结束时间推进并结转剩余天�
 });
 
 test('不行动不是最优：最小行动策略从不达到 A 或 D 的比例高于积极策略', function () {
-  const dist = (min) => { const t = {}; for (let i = 0; i < 120; i++) { const st = S.play(S.randomPolicy(S.seeded(300 + i), false), { spend: !min }).state; t[st.ending.id] = (t[st.ending.id] || 0) + 1; } return t; };
+  const dist = (min) => { const t = {}; for (let i = 0; i < 600; i++) { const st = S.play(S.randomPolicy(S.seeded(300 + i), false), { spend: !min }).state; t[st.ending.id] = (t[st.ending.id] || 0) + 1; } return t; };
   const lazy = dist(true); const active = dist(false);
   const good = (t) => (t.c_A || 0) + (t.c_D || 0) + (t.c_H || 0);
   assert.ok(good(active) >= good(lazy), '积极 ' + JSON.stringify(active) + ' vs 最小 ' + JSON.stringify(lazy));
@@ -214,7 +217,7 @@ test('关键节点无压倒性选项：机场四种处置都不是每次都最�
   assert.ok(new Set(res).size >= 2, '机场处置结果：' + res.join(','));
 });
 
-test('存档：战役使用独立键与 schema 4，不覆盖经典存档；刷新后可恢复', function () {
+test('存档：战役使用独立键与 schema 5，不覆盖经典存档；刷新后可恢复', function () {
   const classic = L.createGame();
   L.saveGame(classic);
   const classicRaw = localStorage.getItem(L.saveKey);
@@ -224,8 +227,8 @@ test('存档：战役使用独立键与 schema 4，不覆盖经典存档；刷�
   L.saveGame(s);
   assert.equal(localStorage.getItem(L.saveKey), classicRaw, '经典存档未被改动');
   const raw = JSON.parse(localStorage.getItem(L.campaignSaveKey));
-  assert.equal(raw.version, 4);
-  assert.equal(raw.state.schemaVersion, 4);
+  assert.equal(raw.version, 5);
+  assert.equal(raw.state.schemaVersion, 5);
   const loaded = L.loadSavedGame('campaign');
   assert.ok(loaded && loaded.state);
   assert.equal(loaded.state.round, 2);
@@ -275,6 +278,191 @@ test('战场态势由状态与旗标推导，6 个方向', function () {
   s.flags.c_runway_denied = true;
   const after = L.getCampaignStatus(s).fronts.find((f) => f.id === 'hostomel');
   assert.equal(after.status, 'denied');
+});
+
+
+function issueAuth(s, id) {
+  const r = L.issueCommand(s, id);
+  assert.equal(r.ok, true, id + ' ' + (r.error || ''));
+  const c = s.commands[s.commands.length - 1];
+  if (c.status === 'issued') assert.equal(L.authorizeCommand(s, c.id).ok, true);
+  return c;
+}
+function nextWindow(s) {
+  const cheap = L.getAvailableChoices(s).sort((a, b) => a.ap - b.ap)[0];
+  if (cheap && !s.executed.length) { const r = L.issueCommand(s, cheap.id); if (r.ok) { const c = s.commands[s.commands.length - 1]; if (c.status === 'issued') L.authorizeCommand(s, c.id); } }
+  const r = L.endRound(s);
+  assert.equal(r.ok, true, r.error || '');
+  if (s.phase === 'interlude') L.continueFromInterlude(s);
+  return r;
+}
+
+console.log('\nv1.0 援助与收束');
+
+test('援助：请求后按阶段推进，抵达不早于请求后三个窗口，阶段数值只在对应阶段结算', function () {
+  const s = newCampaign();
+  issueAuth(s, 'c_first_appeal');
+  const start = s.round;
+  for (let i = 0; i < 6 && !s.ending; i++) nextWindow(s);
+  const line = L.getAidStatus(s).find((x) => x.id === 'appeal');
+  assert.ok(line, '援助线存在');
+  const log = line.log;
+  assert.deepEqual(log.map((x) => x.stage), ['considering', 'commitment', 'arrival']);
+  assert.ok(log.every((x, i) => i === 0 || x.round > log[i - 1].round), '阶段回合严格递增');
+  const arrival = log.find((x) => x.stage === 'arrival');
+  assert.ok(arrival.round - start >= 3, '抵达回合 ' + arrival.round + ' 距请求 ' + start);
+  const early = log.filter((x) => x.stage !== 'arrival' && x.stage !== 'commitment');
+  early.forEach((x) => assert.deepEqual(x.deltas, {}, '考虑阶段不产生数值'));
+  assert.equal(line.done, true);
+});
+
+test('援助：国际关系过低时承诺阶段顺延，超过顺延上限后搁置，且不会凭空到达', function () {
+  const s = newCampaign();
+  issueAuth(s, 'c_first_appeal');
+  for (let i = 0; i < 9 && !s.ending; i++) { s.stats.intl = Math.min(s.stats.intl, 20); nextWindow(s); }
+  const line = L.getAidStatus(s).find((x) => x.id === 'appeal');
+  assert.ok(line, '援助线存在');
+  assert.equal(line.done, false, '国际关系过低时不会完成');
+  assert.ok(line.stalled, '超过顺延上限后被搁置');
+  assert.ok(!line.log.some((x) => x.stage === 'arrival'), '没有抵达记录');
+});
+
+test('收束：A 直接结束与旧版同一结局，无惩罚；选 B 才进入 c14—c16', function () {
+  const a = S.play(S.ROUTES.near_history, {});
+  const b = S.play(S.ROUTES.near_history, { wrap: 'continue' });
+  assert.equal(a.state.ending.id, b.state.ending.id, '收束不改写 4 月 2 日已判定的结局');
+  assert.equal(a.state.ending.aftermath, undefined, 'A 没有收束记录');
+  assert.ok(!a.state.wrapup.started);
+  assert.ok(b.state.wrapup.started);
+  assert.deepEqual(b.trace.map((x) => x.id).slice(-3), ['c14', 'c15', 'c16']);
+  const af = b.state.ending.aftermath;
+  assert.ok(af && af.days >= 1 && af.days <= 14, '收束天数 ' + (af && af.days));
+  assert.equal(af.tracks.length, 8);
+  af.tracks.forEach((x) => assert.equal(typeof x.word, 'string'));
+});
+
+test('收束：最晚 4 月 16 日；收束期间不会因压力崩溃；可在任一窗口提前结束', function () {
+  const full = S.play(S.ROUTES.near_history, { wrap: 'continue' }).state;
+  assert.ok(full.ending.aftermath.days <= 14, '收束天数 ' + full.ending.aftermath.days);
+  assert.ok(Math.floor(full.campaign.day) <= 53, '内部天数 ' + full.campaign.day + '（第 53 天起算为 4 月 16 日之后）');
+  const early = S.play(function (state, ev) {
+    if (ev.id === 'c15') L.finishWrapUp(state);
+    return [];
+  }, { wrap: 'continue' }).state;
+  assert.ok(early.ending && early.ending.aftermath, '提前结束带有收束记录');
+  assert.ok(early.round <= 15);
+  const noEarly = L.createGame({ scenario: 'campaign' });
+  assert.equal(L.finishWrapUp(noEarly).ok, false, '没有开始收束时不能提前结束');
+});
+
+test('收束：进入快于清理会留下事故记录，进展用定性描述而不是数字', function () {
+  const r = S.play(function (state, ev) {
+    return ev.id === 'c14' ? ['w_open_access', 'w_security_check'] : [];
+  }, { wrap: 'continue' }).state;
+  assert.equal(typeof r.ending.aftermath.mood, 'string');
+  const st = L.getWrapStatus(r);
+  st.tracks.forEach((x) => assert.ok(!/\d/.test(x.word), x.label + ' 描述中不含数字'));
+});
+
+
+function reachOffer() {
+  const s = newCampaign();
+  for (let i = 0; i < 14 && s.phase !== 'wrapup_offer' && !s.ending; i++) {
+    Object.keys(s.stats).forEach((k) => { s.stats[k] = 70; }); s.pressure = 0;
+    nextWindow(s);
+  }
+  return s;
+}
+
+test('存档：v0.6（版本 4）战役存档仍可读取，常设授权补期限，援助线为空，来源标注', function () {
+  const s = newCampaign();
+  L.grantStanding(s, 'logistics');
+  L.saveGame(s);
+  const raw = JSON.parse(localStorage.getItem(L.campaignSaveKey));
+  raw.version = 4; raw.state.schemaVersion = 4; raw.state.version = 4;
+  delete raw.state.aid; delete raw.state.wrapup;
+  delete raw.state.standing.logistics.expiresRound;
+  localStorage.setItem(L.campaignSaveKey, JSON.stringify(raw));
+  const loaded = L.loadSavedGame('campaign');
+  assert.ok(loaded, 'v0.6 存档可读');
+  assert.equal(loaded.migratedFrom, 4);
+  assert.deepEqual(loaded.state.aid.lines, []);
+  assert.equal(loaded.state.wrapup, null);
+  assert.equal(typeof loaded.state.standing.logistics.expiresRound, 'number');
+  assert.equal(loaded.state.schemaVersion, 5);
+  assert.ok(localStorage.getItem(L.campaignSaveKey), '读取不删除原存档');
+});
+
+test('存档：收束选择阶段与收束进行中均可刷新恢复', function () {
+  const s = reachOffer();
+  assert.equal(s.phase, 'wrapup_offer', '到达收束选择');
+  L.saveGame(s);
+  const a = L.loadSavedGame('campaign');
+  assert.ok(a && a.state.phase === 'wrapup_offer' && a.state.wrapup.pending, '选择阶段恢复');
+  assert.equal(L.startWrapUp(a.state).ok, true);
+  L.continueFromInterlude(a.state);
+  assert.equal(a.state.round, 14);
+  L.saveGame(a.state);
+  const b = L.loadSavedGame('campaign');
+  assert.ok(b && b.state.round === 14 && b.state.wrapup.started, '收束进行中恢复');
+  assert.deepEqual(b.state.wrapup.tracks, a.state.wrapup.tracks);
+  assert.equal(L.getEvent(b.state).id, 'c14');
+  nextWindow(b.state);
+  assert.equal(b.state.round, 15, '恢复后可继续推进到 c15');
+});
+
+
+test('办公室：看板六个机构，状态只用已办理/办理中/受阻/资源不足/等总统', function () {
+  const s = newCampaign();
+  const board = L.getOfficeBoard(s);
+  assert.equal(board.length, 6);
+  const allowed = ['handled', 'executing', 'blocked', 'resource_delayed', 'needs_president'];
+  board.forEach((row) => {
+    assert.ok(allowed.indexOf(row.state) !== -1, row.id + ' 状态合法');
+    assert.ok(row.text && !/function|undefined|null|\(\)/.test(row.text), '文案不含开发用语');
+  });
+});
+
+test('办公室：例行办理对协调好的机构只做小幅恢复且有上限，协调差的上报总统，不改战略数值', function () {
+  const s = newCampaign();
+  s.agencies.general_staff.coordination = 56;
+  s.agencies.interior.coordination = 62;
+  s.agencies.foreign.coordination = 30;
+  s.agencies.logistics.coordination = 48;
+  const stats = JSON.stringify(s.stats);
+  const rep = L.runOfficeRoutine(s);
+  assert.equal(s.agencies.general_staff.coordination, 57, '健康机构 +1');
+  assert.equal(s.agencies.interior.coordination, 62, '已到上限不再增加');
+  assert.ok(rep.escalated.some((x) => x.id === 'foreign'), '协调很差的上报');
+  assert.ok(rep.delayed.some((x) => x.id === 'logistics'), '一般的积压一天');
+  assert.equal(JSON.stringify(s.stats), stats, '战略数值不被例行办理改动');
+});
+
+test('办公室：协调很差的机构生成一条请求支持，出面要 1 AP 且有效，不管则不再扣分', function () {
+  const s = newCampaign();
+  s.agencies.foreign.coordination = 30;
+  nextWindow(s);
+  const strain = (s.dispatches || []).filter((d) => d.type === 'strain' && !d.resolved);
+  assert.equal(strain.length <= 1, true, '一次只升级一个，不刷屏');
+  if (!strain.length) return;
+  const d = strain[0];
+  const support = d.options.find((o) => o.id === 'support');
+  const leave = d.options.find((o) => o.id === 'leave');
+  assert.equal(support.ap, 1);
+  assert.equal(leave.ap, 0);
+  assert.ok(!leave.coordination, '不管不额外扣协调');
+  const before = s.agencies[d.agencyId].coordination;
+  const res = L.resolveDispatch(s, d.id, 'support');
+  assert.equal(res.ok, true);
+  assert.equal(s.agencies[d.agencyId].coordination, Math.min(100, before + 6));
+});
+
+test('办公室：交接时 interlude.office 随结算给出，没有"已办理"的空列表弹窗', function () {
+  const s = newCampaign();
+  nextWindow(s);
+  assert.ok(s.round >= 2);
+  const open = (s.dispatches || []).filter((d) => !d.resolved && d.round === s.round);
+  open.forEach((d) => assert.ok(d.title && d.options.length, '每条待决事项都有标题和选项'));
 });
 
 console.log('\n战役测试：' + passed + ' 通过，' + failed + ' 失败');

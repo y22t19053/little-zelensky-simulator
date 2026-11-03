@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">安东诺夫机场：空降突击与跑道争夺</title>
+  <desc id="desc">原创抽象矢量插画（程序生成），非照片。直升机仅以剪影表示；机场被突击、双方争夺，控制权无法独立核实。不绘制兵力或精确战线。</desc>
+  <defs>
+    <pattern id="grain" width="43" height="37" patternUnits="userSpaceOnUse"><circle cx="8" cy="11" r=".8" fill="#d0c398" fill-opacity=".08"/><path d="M26 28h5" stroke="#d0c398" stroke-opacity=".04"/></pattern>
+    <clipPath id="field"><path d="M42 126H1158V583H42Z"/></clipPath>
+    <style>.serif{font-family:Georgia,'SimSun',serif}.sans{font-family:Arial,'Microsoft YaHei',sans-serif}.mono{font-family:Consolas,monospace}.paper{fill:#c8bc99}.amber{fill:#c9a563}.muted{fill:#969a88}</style>
+  </defs>
+  <rect width="1200" height="700" fill="#151a13"/><rect width="1200" height="700" fill="url(#grain)"/>
+  <path d="M0 0H1200V13H0Z" fill="#bba267"/><path d="M0 13H1200V17H0Z" fill="#5a543b"/>
+  <text x="42" y="59" class="mono paper" font-size="17" letter-spacing="3">ANTONOV / AIRFIELD FILE</text>
+  <text x="42" y="85" class="mono muted" font-size="12" letter-spacing="2">APPROACH · HANGARS · CONTESTED</text>
+  <rect x="1068" y="38" width="90" height="31" fill="none" stroke="#b99a60"/><text x="1082" y="59" class="mono amber" font-size="13">01 / 12</text>
+  <g clip-path="url(#field)"><rect x="42" y="126" width="1116" height="457" fill="#20271e"/><rect x="42" y="330" width="1116" height="253" fill="#272d22"/><path d="M300 560L520 330H700L930 560Z" fill="#313828"/><path d="M610 330V560" fill="none" stroke="#c8bc99" stroke-width="3" stroke-dasharray="26 22" stroke-opacity="0.5"/><rect x="760" y="262" width="120" height="54" fill="#11150f"/><rect x="900" y="262" width="90" height="54" fill="#11150f"/><rect x="230" y="270" width="100" height="48" fill="#11150f"/><g transform="translate(180 190) scale(1.1)"><ellipse cx="0" cy="0" rx="16" ry="6" fill="#0f120d"/><path d="M12 0H34" stroke="#0f120d" stroke-width="3"/><path d="M-22 -9H22" stroke="#0f120d" stroke-width="2"/></g><g transform="translate(330 238) scale(1.1)"><ellipse cx="0" cy="0" rx="16" ry="6" fill="#0f120d"/><path d="M12 0H34" stroke="#0f120d" stroke-width="3"/><path d="M-22 -9H22" stroke="#0f120d" stroke-width="2"/></g><g transform="translate(480 206) scale(1.1)"><ellipse cx="0" cy="0" rx="16" ry="6" fill="#0f120d"/><path d="M12 0H34" stroke="#0f120d" stroke-width="3"/><path d="M-22 -9H22" stroke="#0f120d" stroke-width="2"/></g><g transform="translate(640 254) scale(1.1)"><ellipse cx="0" cy="0" rx="16" ry="6" fill="#0f120d"/><path d="M12 0H34" stroke="#0f120d" stroke-width="3"/><path d="M-22 -9H22" stroke="#0f120d" stroke-width="2"/></g><g transform="translate(800 222) scale(1.1)"><ellipse cx="0" cy="0" rx="16" ry="6" fill="#0f120d"/><path d="M12 0H34" stroke="#0f120d" stroke-width="3"/><path d="M-22 -9H22" stroke="#0f120d" stroke-width="2"/></g><path d="M130 160C320 200 480 240 610 330" fill="none" stroke="#c9a563" stroke-width="2" stroke-dasharray="8 8" stroke-opacity="0.7"/><path d="M1100 150C900 200 740 260 640 330" fill="none" stroke="#c9a563" stroke-width="2" stroke-dasharray="8 8" stroke-opacity="0.7"/><circle cx="610" cy="400" r="120" fill="none" stroke="#c9a563" stroke-width="2" stroke-dasharray="4 10"/><path d="M610 391L619 400L610 409L601 400Z" fill="none" stroke="#c9a563" stroke-width="2"/><rect x="42" y="560" width="1116" height="4" fill="#4a78b0"/><rect x="42" y="564" width="1116" height="4" fill="#d6b84a"/></g>
+  <rect x="42" y="126" width="1116" height="457" fill="none" stroke="#7e8770" stroke-width="1.5"/>
+  <text x="42" y="626" class="serif paper" font-size="27">安东诺夫机场：空降突击与跑道争夺</text>
+  <text x="42" y="654" class="sans muted" font-size="14">直升机仅以剪影表示；机场被突击、双方争夺，控制权无法独立核实。不绘制兵力或精确战线。</text>
+  <text x="42" y="682" class="mono muted" font-size="11" letter-spacing="2">ORIGINAL SIMULATED ILLUSTRATION · NOT A PHOTOGRAPH · NO REAL UNIT OR INSIGNIA</text>
+</svg>
