@@ -584,7 +584,7 @@
       state.campaign = { day: 1, carryDays: 0, interruptions: [], entered: [], echoes: [], attritionCarry: {}, windows: [] };
     }
     recordTimeline(state);
-    addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 3 点注意力，用来决定这个国家先处理什么。信息可以免费阅读，追问与协调会占用注意力。');
+    addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 ' + state.ap + ' 点注意力，用来决定这个国家先处理什么。' + (campaignMode ? '例行公文由各部门按授权自行办理，总统的注意力留给重大决定、批准方案和出面协调。' : '信息可以免费阅读，追问与协调会占用注意力。'));
     return state;
   }
 
@@ -3091,6 +3091,7 @@
     timeProfileFor: timeProfileFor,
     getLinkEffect: getLinkEffect,
     grantStanding: grantStanding,
+    checkDelegation: checkDelegation,
     revokeStanding: revokeStanding,
     getOfficeBoard: getOfficeBoard,
     runOfficeRoutine: runOfficeRoutine,
