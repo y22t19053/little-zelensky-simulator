@@ -235,6 +235,7 @@
     showScreen('game');
     renderGame();
     if (ui.game.phase === 'interlude' && ui.game.interlude) openInterlude(ui.game.interlude);
+    else if (ui.game.phase === 'wrapup_offer') openWrapOffer();
   }
 
   function openHowToPlay() {
@@ -612,6 +613,62 @@
     return '<section class="key-detail"><h4>总统授权文件 · 重大决策</h4><dl><div><dt>战略目的</dt><dd>' + escapeHtml(k.purpose || '') + '</dd></div><div><dt>已知代价</dt><dd>' + escapeHtml(k.cost || '') + '</dd></div><div><dt>无法确认</dt><dd>' + escapeHtml(k.unknown || '') + '</dd></div></dl><p>' + (k.irreversible ? '签发后不可撤回；执行、反馈与后续影响会记入战役档案。' : '后续影响会记入战役档案。') + '</p></section>';
   }
   function campaignInterludeHtml(data) {
+    return (data.wrapStart ? wrapStartHtml(data) : campaignClockHtml(data)) + wrapStatusHtml(data) + aidHtml(data) + officeHtml(data);
+  }
+  function wrapStartHtml(data) {
+    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>战役收束 · 从 4 月 3 日起</h3><p>前线不再有新的攻势。接下来要处理的是雷区和未爆弹药、道路桥梁、失踪和受伤人员、平民返回的条件，以及部队恢复。这些工作按天慢慢推进，不会因为多下几道命令就一下子完成。</p></section></li>';
+  }
+  function wrapStatusHtml(data) {
+    const g = ui.game;
+    if (!g || !g.wrapup || !g.wrapup.started || data.wrapOffer || !L.getWrapStatus) return '';
+    const st = L.getWrapStatus(g);
+    if (!st || !st.tracks.length) return '';
+    return '<li class="campaign-step"><span class="settlement-index">收</span><section><h3>残局处理进度</h3><ul class="wrap-tracks">' + st.tracks.map(function (tr) { return '<li><span>' + escapeHtml(tr.label) + '</span><strong>' + escapeHtml(tr.word) + '</strong></li>'; }).join('') + '</ul><p class="stat-hint">收束阶段最晚到 4 月 16 日。进入城区的速度不要超过排查的速度。</p><button type="button" class="btn btn-ghost" data-wrap-finish>现在结束收束，查看结局</button></section></li>';
+  }
+  function aidHtml(data) {
+    const events = data.aid || [];
+    const status = (ui.game && L.getAidStatus) ? L.getAidStatus(ui.game).filter(function (s) { return !s.done; }) : [];
+    if (!events.length && !status.length) return '';
+    const evHtml = events.map(function (ev) { return '<li><div><strong>' + escapeHtml((ev.title ? ev.title + '：' : '') + ev.label) + '</strong><span>' + (ev.slipped ? '推迟' : ev.stalled ? '停滞' : '进展') + '</span></div><p>' + escapeHtml(ev.note || '') + '</p><div class="effect-row">' + (effectChips(ev.deltas || {}, 0) || '') + '</div></li>'; }).join('');
+    const stHtml = status.map(function (s) { return '<li class="aid-state"><strong>' + escapeHtml(s.title) + '</strong><span>' + escapeHtml(s.status) + (s.stage > 0 ? ' · 第 ' + s.stage + '/' + s.total + ' 步' : '') + (s.next ? ' · 下一步：' + escapeHtml(s.next) + (s.etaRounds != null ? '，约 ' + Math.max(1, s.etaRounds) + ' 个窗口后' : '') : '') + '</span></li>'; }).join('');
+    return '<li class="campaign-step"><span class="settlement-index">援</span><section><h3>外部援助 · 进展</h3>' + (evHtml ? '<ul class="settlement-list">' + evHtml + '</ul>' : '') + (stHtml ? '<ul class="aid-states">' + stHtml + '</ul>' : '') + '</section></li>';
+  }
+  function officeHtml(data) {
+    const o = data.office;
+    if (!o) return '';
+    const groups = [['handled', '已办理'], ['delayed', '办理延后'], ['escalated', '上报总统']];
+    const rows = [];
+    groups.forEach(function (gr) { (o[gr[0]] || []).forEach(function (item) { rows.push('<li class="office-row is-' + gr[0] + '"><div><strong>' + escapeHtml(item.label || '') + '</strong><span>' + gr[1] + '</span></div><p>' + escapeHtml(item.note || '') + '</p></li>'); }); });
+    if (!rows.length) return '';
+    return '<li class="campaign-step"><span class="settlement-index">办</span><section><h3>办公室日报</h3><p>例行公文由各部门按授权办理，这里只列出需要你知道的。</p><ul class="settlement-list">' + rows.join('') + '</ul></section></li>';
+  }
+  function openWrapOffer() {
+    if (!ui.game || ui.game.phase !== 'wrapup_offer') return;
+    if (modalIsOpen() && el.modalRoot.querySelector('[data-wrap-offer]')) return;
+    clearToasts();
+    openModal({
+      kicker: '4 月 2 日 / 战役告一段落', title: '基辅战役可以在这里收束', dismissible: false, wide: true, className: 'interlude-modal',
+      body: '<div class="wrap-offer" data-wrap-offer><p>俄军已经撤离基辅方向。主战役到此为止，你可以选择怎么结束这一局。</p><div class="wrap-options"><section><h3>A · 现在结束</h3><p>直接进入结局和历史复盘。不扣分，也不会改变已经确定的结局。</p></section><section><h3>B · 继续处理残局</h3><p>最多再用 14 天，最晚到 4 月 16 日。要处理的是雷区和未爆弹药、道路桥梁、失踪和受伤人员、平民返回的条件、部队恢复，以及撤退情报的进一步确认。随时可以提前结束。</p><p class="stat-hint">这一阶段没有新的攻势。进城太快而排查没有跟上，会出现伤亡事故。</p></section></div></div>',
+      actions: [
+        { label: '现在结束，查看结局', className: 'btn btn-ghost', close: false, onClick: function () {
+          const r = L.declineWrapUp(ui.game);
+          if (!r.ok) { toast(r.error || '无法结束战役。', true); return; }
+          closeModal(); saveGame(false); showEnding();
+        } },
+        { label: '继续处理残局', className: 'btn btn-primary', close: false, onClick: function () {
+          const r = L.startWrapUp(ui.game);
+          if (!r.ok) { toast(r.error || '无法开始收束。', true); return; }
+          closeModal(); saveGame(false); renderGame(); openInterlude(ui.game.interlude);
+        } }
+      ]
+    });
+  }
+  function aftermathHtml(ending) {
+    const a = ending.aftermath;
+    if (!a) return '';
+    return '<section class="ending-section aftermath"><span class="section-kicker">AFTERMATH</span><h2>收束阶段 · 到 ' + escapeHtml(a.endLabel || '') + '</h2><p>' + escapeHtml(a.mood || '') + '</p><ul class="wrap-tracks">' + (a.tracks || []).map(function (tr) { return '<li><span>' + escapeHtml(tr.label) + '</span><strong>' + escapeHtml(tr.word) + '</strong></li>'; }).join('') + '</ul>' + (a.incident ? '<p class="stat-hint">进入速度超过了排查速度，这一阶段出现过伤亡事故。</p>' : '') + '<p class="stat-hint">' + escapeHtml(a.note || '') + '</p></section>';
+  }
+  function campaignClockHtml(data) {
     const c = data.campaign;
     if (!c) return '';
     const it = c.interruption;
@@ -900,7 +957,7 @@
         '</span></div><div class="stat-track" role="img" aria-label="' + escapeHtml(statFullLabel(key) + ' ' + value + ' / 100') + '"><span class="stat-fill" style="width:' + Math.max(0, Math.min(100, value)) + '%"></span></div></div>';
     }).join('');
     const vitals = L.statKeys.slice(0, 3).map(function (key) { return '<span class="vital"><span>' + escapeHtml(statLabel(key)) + '</span><strong>' + g.stats[key] + '</strong></span>'; }).join('');
-    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">当前没有触发 getAlarms() 告警。</p>';
+    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">目前没有需要特别留意的风险。</p>';
     const notes = L.statKeys.map(function (key) {
       const delta = ui.lastDeltas && ui.lastDeltas[key] ? '；最近实际变化 ' + formatSigned(ui.lastDeltas[key]) : '';
       return '<li><strong>' + escapeHtml(statFullLabel(key)) + '</strong>：' + escapeHtml(L.statMeta[key].hint + delta) + '</li>';
@@ -908,7 +965,7 @@
     el.statsPanel.innerHTML = '<details class="state-details"' + (ui.statesOpen || window.innerWidth > 700 ? ' open' : '') + '><summary><span class="state-heading"><span class="panel-kicker">NATIONAL CONDITION</span><strong id="stats-title">国家状态</strong></span><span class="mobile-vitals">' + vitals + '<span class="state-more">七项</span></span><span class="state-toggle">展开 / 收起</span></summary><div class="state-body">' + rows +
       '<section class="alarm-panel"><h3>当前告警</h3>' + alarmHtml + '</section>' +
       '<details class="state-notes"><summary>状态含义与最近变化</summary><ul>' + notes + '</ul></details>' +
-      '<p class="stat-hint">风险样式只来自引擎 getAlarms()；崩溃判定仍由 checkCollapse() 独立执行。</p></div></details>';
+      '<p class="stat-hint">风险提示只反映当前数值；国家是否失守，由另外的底线条件判定。</p></div></details>';
     const details = el.statsPanel.querySelector('.state-details');
     details.addEventListener('toggle', function () { ui.statesOpen = details.open; });
   }
@@ -1254,6 +1311,7 @@
 
   function openInterlude(data) {
     if (!data || !ui.game) return;
+    if (data.wrapOffer) { openWrapOffer(); return; }
     if (modalIsOpen() && el.modalRoot.querySelector('[data-interlude-round="' + data.round + '"]')) return;
     clearToasts();
     if (A) A.setTheme('night');
@@ -1292,7 +1350,7 @@
     const delayedHtml = delayed.length ? delayed.map(function (item) {
       return '<li><div><strong>' + escapeHtml(item.label) + '</strong><span>第 ' + item.appliedRound + ' 回合实际触发</span></div><p>' + escapeHtml(item.note || '') + '</p><div class="effect-row">' + (effectChips(item.deltas, item.pressureDelta) || '<span class="empty-note">无数值变化</span>') + '</div></li>';
     }).join('') : '<li><p>没有延迟后果在本夜触发。</p></li>';
-    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">本夜没有触发新的 getAlarms() 告警。</p>';
+    const alarmHtml = alarms.length ? '<ul class="alarm-list">' + alarms.map(function (alarm) { return '<li class="is-' + alarm.level + '"><span>' + escapeHtml(alarm.label) + '</span><strong>' + alarm.value + '</strong></li>'; }).join('') + '</ul>' : '<p class="all-clear">本夜没有出现新的风险。</p>';
     openModal({
       kicker: data.campaign ? '战役推进 / CAMPAIGN CLOCK' : '夜间态势 / NIGHT SETTLEMENT', title: data.campaign ? '时间推进 · ' + (data.campaign.fromLabel || '') + ' → ' + (data.campaign.toLabel || '') : '第 ' + (data.round - 1) + ' 夜', dismissible: false, wide: true, className: 'interlude-modal',
       body: '<div class="interlude-sheet" data-interlude-round="' + data.round + '"><div class="interlude-date"><strong>' + escapeHtml(data.dateLabel || '') + '</strong><span>夜间结算不会重复执行</span></div>' +
@@ -1477,10 +1535,10 @@
       }).join('') + '</ol></li>';
     }).join('') + '</ol>' : '<p class="empty-note">本局没有可展开的命令执行链。</p>';
     const toneLabel = ending.tone === 'success' ? '阶段存续' : ending.tone === 'warning' ? '代价存续' : '阶段未守住';
-    el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / ' + (campaignEnd ? '战役档案' : '阶段档案') + '</span><span>' + (campaignEnd ? '2022.02.24 — 04.02' : '2022.02.24 — 03.02') + '</span></header>' +
-      '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(campaignEnd ? '结局 ' + (ending.code || '') : toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta">' + (campaignEnd ? '<span>第 ' + (ending.day || '?') + ' / 38 天 · ' + (ending.finalRound || ui.game.round) + ' 个决策窗口</span>' : '<span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span>') + '<span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
+    el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / ' + (campaignEnd ? '战役档案' : '阶段档案') + '</span><span>' + (campaignEnd ? '2022.02.24 — ' + (ending.aftermath ? ending.aftermath.endLabel : '04.02') : '2022.02.24 — 03.02') + '</span></header>' +
+      '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(campaignEnd ? '结局 ' + (ending.code || '') : toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta">' + (campaignEnd ? (ending.aftermath ? '<span>基辅战役 38 天，加收束 ' + ending.aftermath.days + ' 天 · ' : '<span>第 ' + (ending.day || '?') + ' / 38 天 · ') + (ending.finalRound || ui.game.round) + ' 个决策窗口</span>' : '<span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span>') + '<span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
       '<div class="ending-layout"><div class="ending-column"><section class="ending-section"><span class="section-kicker">AFTER ACTION</span><h2>阶段记录</h2><div class="ending-copy">' + (ending.epilogue || []).map(function (p) { return '<p>' + escapeHtml(p) + '</p>'; }).join('') + '</div></section>' +
-      (campaignEnd ? campaignEndingMainHtml(ending) : '') + governanceHtml(ending) + turningPointsHtml(ending) +
+      (campaignEnd ? campaignEndingMainHtml(ending) : '') + aftermathHtml(ending) + governanceHtml(ending) + turningPointsHtml(ending) +
       '<section class="ending-section"><h2>命令如何走向后果</h2><p class="stat-hint">这里优先展示失效、阻塞、撤回与等待核验的命令：总统注意力、机构容量和窗口如何改变结果。</p>' + commandChainHtml + '</section>' +
       '<section class="ending-section"><h2>完整决策链</h2>' + timeline + '</section><section class="ending-section"><h2>延迟后果链</h2>' + chainHtml + '</section></div>' +
       '<aside class="ending-column"><section class="ending-section"><h2>七项最终状态</h2><div class="ending-stats">' + endingStatsHtml(stats) + '</div><div class="ending-pressure"><span>战争压力</span><strong>' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + ' / 100</strong></div></section>' +
@@ -1495,6 +1553,13 @@
   }
 
   function init() {
+    document.addEventListener('click', function (ev) {
+      const b = ev.target && ev.target.closest ? ev.target.closest('[data-wrap-finish]') : null;
+      if (!b || !ui.game) return;
+      const r = L.finishWrapUp(ui.game);
+      if (!r.ok) { toast(r.error || '现在不能结束收束。', true); return; }
+      closeModal(); saveGame(false); showEnding();
+    });
     el.start.addEventListener('click', function () { requestStart('classic'); });
     el.continue.addEventListener('click', function () { loadGame('classic'); });
     if (el.campaign) el.campaign.addEventListener('click', function () { requestStart('campaign'); });
