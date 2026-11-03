@@ -3092,6 +3092,7 @@
     getLinkEffect: getLinkEffect,
     grantStanding: grantStanding,
     checkDelegation: checkDelegation,
+    approveDelegated: approveDelegated,
     revokeStanding: revokeStanding,
     getOfficeBoard: getOfficeBoard,
     runOfficeRoutine: runOfficeRoutine,

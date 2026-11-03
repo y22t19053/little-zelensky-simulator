@@ -46,6 +46,7 @@
     orderTitle: document.getElementById('order-title'),
     orderMeta: document.getElementById('order-meta'),
     issue: document.getElementById('btn-issue'),
+    issueDelegate: document.getElementById('btn-issue-delegate'),
     issueLabel: document.getElementById('issue-label'),
     issueCost: document.getElementById('issue-cost'),
     endRound: document.getElementById('btn-end-round'),
@@ -1016,10 +1017,13 @@
     if (command.requiresIntel && !(intelRecord && intelRecord.inquired) && ['issued', 'blocked', 'executing'].indexOf(command.status) !== -1) {
       parts.push('<button type="button" class="mini-action is-primary" data-open-intel="military">去追问总参 · 情报桌</button>');
     }
+    if (command.status === 'blocked' && command.blockedCode === 'APPROVAL' && command.delegation) {
+      parts.push('<button type="button" class="mini-action is-primary" data-approve="' + escapeHtml(command.id) + '">批准办理方案 · 0 AP</button>');
+    }
     if (command.status === 'issued') {
       parts.push('<button type="button" class="mini-action is-primary" data-authorize="' + escapeHtml(command.id) + '">授权执行</button>');
     }
-    if (!command.effectsApplied && ['issued', 'blocked', 'executing'].indexOf(command.status) !== -1 && (!command.deadlineRound || g.round + 1 <= command.deadlineRound)) {
+    if (!command.delegation && !command.effectsApplied && ['issued', 'blocked', 'executing'].indexOf(command.status) !== -1 && (!command.deadlineRound || g.round + 1 <= command.deadlineRound)) {
       parts.push('<button type="button" class="mini-action" data-delegate="' + escapeHtml(command.id) + '">委派 · 不耗 AP</button>');
     }
     if (['executing', 'blocked', 'awaiting_feedback'].indexOf(command.status) !== -1) {
@@ -1045,6 +1049,7 @@
     const windowText = commandWindowLabel(command);
     let note = '第 ' + command.round + ' 回合签发 · ' + (command.slotRequired === false ? '机构自行排队，不占优先席位' : '占用优先席位');
     if (command.delegated) note += ' · 已委派交接';
+    if (command.delegation) note += command.delegation.mode === 'approval' ? ' · 机构拟案，待总统批准' : ' · 授权范围内自行办理';
     if (command.expedited) note += ' · 总统已介入';
     if (command.executedLate) note += ' · 延迟执行';
     if (command.autoAuthorized) note += ' · 常设授权自动执行';
@@ -1068,6 +1073,9 @@
   function bindCommandActions(scope) {
     Array.prototype.forEach.call(scope.querySelectorAll('[data-authorize]'), function (button) {
       button.addEventListener('click', function () { authorizeCommand(button.getAttribute('data-authorize')); });
+    });
+    Array.prototype.forEach.call(scope.querySelectorAll('[data-approve]'), function (button) {
+      button.addEventListener('click', function () { approveCommand(button.getAttribute('data-approve')); });
     });
     Array.prototype.forEach.call(scope.querySelectorAll('[data-delegate]'), function (button) {
       button.addEventListener('click', function () { openDelegateModal(button.getAttribute('data-delegate')); });
@@ -1200,6 +1208,7 @@
     const unauthorized = (g.commands || []).filter(function (command) { return command.round === g.round && command.status === 'issued'; });
     const untouchedTurn = g.executed.length === 0 && g.ap >= (g.apMax || 3);
     el.issue.disabled = !canIssue;
+    renderDelegateButton(g, choice, canIssue);
     el.endRound.disabled = ui.busy || g.phase !== 'briefing' || untouchedTurn || unauthorized.length > 0;
     el.endRound.textContent = g.round >= finalRoundOf(g) ? (isCampaignGame() ? '结算战役' : '结算本阶段') : (isCampaignGame() ? '结束本窗口 · 推进时间' : '结束本回合');
     el.endRound.title = untouchedTurn ? '先签发命令，或把注意力用于处理既有事务。' : unauthorized.length ? '先授权或委派所有已签发命令。' : '';
@@ -1222,6 +1231,75 @@
     saveGame(false);
     renderGame();
     toast('已签发：' + choice.title + '。现在请授权执行，或把它委派出去。');
+  }
+
+  /* 战役：签发时直接委派给机构（0 AP）。两种方式：授权范围内自行办理 / 拟案后报总统批准。 */
+  function renderDelegateButton(g, choice, canIssue) {
+    const btn = el.issueDelegate;
+    if (!btn) return;
+    if (!isCampaignGame(g)) { btn.hidden = true; return; }
+    btn.hidden = false;
+    if (!choice) { btn.disabled = true; btn.title = '先选一项事务；只有日常办理事项可以委派。'; return; }
+    const check = L.checkDelegation(g, choice.id, {});
+    const ok = !!check.ok && canIssue;
+    btn.disabled = !ok;
+    btn.title = ok ? '交给' + agencyLabel(check.agency) + '办理，不耗总统注意力。' : (check.error || '这项事务现在不能委派。');
+  }
+
+  function issueDelegated(returnForApproval) {
+    if (ui.busy || !ui.game || ui.game.phase !== 'briefing') return;
+    const event = L.getEvent(ui.game);
+    const choice = ui.selectedChoiceId && event ? L.getChoice(event, ui.selectedChoiceId) : null;
+    if (!choice) return;
+    ui.busy = true;
+    const result = L.issueCommand(ui.game, choice.id, { delegate: true, returnForApproval: !!returnForApproval });
+    ui.busy = false;
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法委派这项事务。', true); renderGame(); return; }
+    if (A) A.playSfx('issue');
+    ui.selectedChoiceId = null;
+    saveGame(false);
+    closeModal();
+    renderGame();
+    toast(returnForApproval ? '已交办：机构拟好方案后会报请批准。' : '已交办：机构在授权范围内自行办理。');
+  }
+
+  function openIssueDelegateModal() {
+    if (!ui.game || ui.game.phase !== 'briefing') return;
+    const event = L.getEvent(ui.game);
+    const choice = ui.selectedChoiceId && event ? L.getChoice(event, ui.selectedChoiceId) : null;
+    if (!choice) return;
+    const g = ui.game;
+    const check = L.checkDelegation(g, choice.id, {});
+    if (!check.ok) { toast(check.error || '这项事务现在不能委派。', true); return; }
+    const withApproval = L.checkDelegation(g, choice.id, { returnForApproval: true });
+    const agencyName = agencyLabel(check.agency);
+    const load = L.getAgencyLoad ? L.getAgencyLoad(g, check.agency) : null;
+    const full = load && load.coordination >= ((window.LZS_STRATEGY && window.LZS_STRATEGY.delegation && window.LZS_STRATEGY.delegation.fullQualityAt) || 60);
+    const qualityNote = load ? (full ? agencyName + '协调余量 ' + load.coordination + '，能把事办足。' : agencyName + '协调余量 ' + load.coordination + '，自行办理的成效会打折。') : '';
+    openModal({
+      kicker: '委派 / 不耗注意力', title: '把“' + choice.title + '”交给' + agencyName,
+      body: '<p class="modal-lead">日常事务可以交给机构办理，总统不再为它占用注意力。代价是机构协调余量少一点（交代事情要占用他们的人手）。重大决策、跨部门事务和情报未确认的事务不能委派。' + (qualityNote ? ' ' + escapeHtml(qualityNote) : '') + '</p>' +
+        '<div class="agency-picker">' +
+          '<button type="button" class="agency-choice" data-issue-delegate="auto"><strong>授权范围内自行办理</strong><span>机构今夜按既有授权办完，结果在夜间日报里告知。</span></button>' +
+          '<button type="button" class="agency-choice" data-issue-delegate="approval"' + (withApproval.ok ? '' : ' disabled') + '><strong>拟好方案，报请批准</strong><span>' + escapeHtml(withApproval.ok ? '机构先拟方案，下一份简报由总统批准，成效不打折；批准不耗注意力。' : withApproval.error) + '</span></button>' +
+        '</div>',
+      actions: [{ label: '取消', className: 'btn btn-ghost', onClick: function () {} }],
+      onMount: function (card) {
+        Array.prototype.forEach.call(card.querySelectorAll('[data-issue-delegate]'), function (button) {
+          button.addEventListener('click', function () { issueDelegated(button.getAttribute('data-issue-delegate') === 'approval'); });
+        });
+      }
+    });
+  }
+
+  function approveCommand(commandId) {
+    if (!ui.game || ui.busy) return;
+    const result = L.approveDelegated(ui.game, commandId);
+    if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '现在不能批准。', true); return; }
+    if (A) A.playSfx('issue');
+    saveGame(false);
+    renderGame();
+    toast(result.blocked ? '已批准，但机构今夜接不下，仍在排队。' : '已批准：今夜执行，不另耗注意力。');
   }
 
   function endRound() {
@@ -1576,6 +1654,7 @@
     el.logBtn.addEventListener('click', openLog);
     el.menuBtn.addEventListener('click', openMenu);
     el.issue.addEventListener('click', issueSelected);
+    if (el.issueDelegate) el.issueDelegate.addEventListener('click', openIssueDelegateModal);
     el.endRound.addEventListener('click', endRound);
     if (el.opsBtn) el.opsBtn.addEventListener('click', function () { openOperations('intel'); });
     renderIntro();
