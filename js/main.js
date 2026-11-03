@@ -382,20 +382,43 @@
 
   function renderAgencyDesk(body, card) {
     const g = ui.game;
+    const campaign = g.scenario === 'campaign';
+    const board = campaign && L.getOfficeBoard ? L.getOfficeBoard(g) : [];
+    const spec = strat().standing || { cost: 1, minCoordination: 45 };
     const cards = L.intel.agencies.map(function (agency) {
       const load = L.getAgencyLoad(g, agency.id);
       const done = !!g.coordinationThisRound[agency.id];
-      const standing = g.standing && g.standing[agency.id] && g.standing[agency.id].active;
-      const spec = strat().standing || { cost: 1, minCoordination: 45 };
+      const rec = g.standing && g.standing[agency.id];
+      const standing = !!(rec && rec.active);
+      const row = board.filter(function (r) { return r.id === agency.id; })[0];
       const loadPct = Math.min(100, Math.round(load.workload / load.capacity * 100));
-      return '<article class="agency-card' + (load.overloaded ? ' is-overloaded' : '') + (load.strained ? ' is-strained' : '') + '"><div class="agency-card-head"><span class="agency-code">' + escapeHtml(agency.short) + '</span><div><h3>' + escapeHtml(agency.label) + '</h3><p>' + escapeHtml(agency.focus) + '</p></div></div>' +
+      const constraint = campaign && row ? row.text : (load.overloaded ? '容量已满：新命令只能排队，无法今晚执行。' : load.strained ? '协调余量低于 35：跨部门命令会先阻塞。' : '可自主处理常规命令；跨部门行动仍需总统召集。');
+      let standingHtml;
+      if (standing && campaign) {
+        const left = Math.max(0, (rec.expiresRound || g.round) - g.round);
+        standingHtml = '<div class="standing-box"><span class="standing-badge">常设授权 · 还剩 ' + left + ' 个窗口' + (rec.suspended ? ' · 暂停中' : '') + '</span>' +
+          '<p class="standing-scope">' + escapeHtml(rec.scope || '') + '</p>' +
+          '<p class="standing-result">已自行办理 ' + (rec.handled || 0) + ' 项' + ((rec.items && rec.items.length) ? '：' + rec.items.slice(-2).map(function (i) { return escapeHtml(i.title); }).join('、') : '') + '</p>' +
+          '<button type="button" class="mini-action" data-revoke="' + escapeHtml(agency.id) + '"' + (g.ap < (spec.revokeCost || 1) ? ' disabled' : '') + ' title="收回授权要花 ' + (spec.revokeCost || 1) + ' 点注意力，该机构协调余量 -' + (spec.revokeCoordination || 3) + '">收回授权 · ' + (spec.revokeCost || 1) + ' AP</button></div>';
+      } else if (standing) {
+        standingHtml = '<span class="standing-badge">常设授权 · 自第 ' + rec.grantedRound + ' 日</span>';
+      } else {
+        const scopeText = campaign && spec.scopes ? (spec.scopes[agency.id] || '') : '';
+        const title = campaign
+          ? '授权范围：' + scopeText + ' 只办一点注意力以内的常规事务，重大决定、新的政治表态与跨部门召集仍由总统决定；每办一项协调余量 -' + (spec.wearPerItem || 1) + '，' + (spec.durationWindows || 4) + ' 个窗口后自动失效。'
+          : '此后该机构命令自动授权；每夜协调 -1，总统介入该机构命令额外 -3';
+        standingHtml = '<button type="button" class="mini-action" data-standing="' + escapeHtml(agency.id) + '"' + (g.ap < spec.cost || load.coordination < spec.minCoordination ? ' disabled' : '') + ' title="' + escapeHtml(title) + '">常设授权 · ' + spec.cost + ' AP</button>' + (campaign && scopeText ? '<p class="standing-scope">' + escapeHtml(scopeText) + '</p>' : '');
+      }
+      return '<article class="agency-card' + (load.overloaded ? ' is-overloaded' : '') + (load.strained ? ' is-strained' : '') + (row ? ' is-' + row.state : '') + '"><div class="agency-card-head"><span class="agency-code">' + escapeHtml(agency.short) + '</span><div><h3>' + escapeHtml(agency.label) + '</h3><p>' + escapeHtml(agency.focus) + '</p></div>' + (row ? '<span class="office-state is-' + row.state + '">' + escapeHtml(row.stateLabel) + '</span>' : '') + '</div>' +
         '<div class="agency-meters"><span><small>协调余量</small><strong>' + load.coordination + '</strong></span><span><small>在办 / 容量</small><strong>' + load.workload + ' / ' + load.capacity + '</strong></span></div>' +
         '<div class="agency-load-track" role="img" aria-label="执行能力占用 ' + load.workload + ' / ' + load.capacity + '"><span style="width:' + loadPct + '%"></span></div>' +
-        '<p class="agency-constraint">' + (load.overloaded ? '容量已满：新命令只能排队，无法今晚执行。' : load.strained ? '协调余量低于 35：跨部门命令会先阻塞。' : '可自主处理常规命令；跨部门行动仍需总统召集。') + '</p>' +
-        '<div class="agency-actions"><button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button>' +
-        (standing ? '<span class="standing-badge">常设授权 · 自第 ' + g.standing[agency.id].grantedRound + ' 日</span>' : '<button type="button" class="mini-action" data-standing="' + escapeHtml(agency.id) + '"' + (g.ap < spec.cost || load.coordination < spec.minCoordination ? ' disabled' : '') + ' title="此后该机构命令自动授权；每夜协调 -1，总统介入该机构命令额外 -3">常设授权 · ' + spec.cost + ' AP</button>') + '</div></article>';
+        '<p class="agency-constraint">' + escapeHtml(constraint) + '</p>' +
+        '<div class="agency-actions"><button type="button" class="mini-action' + (done ? '' : ' is-primary') + '" data-coordinate="' + escapeHtml(agency.id) + '"' + (done || g.ap < 1 ? ' disabled' : '') + '>' + (done ? '本回合已召集' : '召集协调 · 1 AP') + '</button>' + standingHtml + '</div></article>';
     }).join('');
-    body.innerHTML = '<p class="ops-lead">每个机构只有 3 个在办名额。跨日命令会持续占用名额，直到完成、撤回或失效；容量满时新命令不会执行。召集会恢复协调余量并放行本回合的跨部门阻塞，但会消耗 1 AP。委派不耗注意力的代价是交接延迟一夜与两个机构各 -3 协调余量。</p><div class="agency-grid">' + cards + '</div>';
+    const lead = campaign
+      ? '例行公文由各部门按授权自行办理，只有超出授权、资源不够、被卡住或要总统担责的事才会送到你面前。委派一项事务不花注意力，但接手的部门要有 45 以上的协调余量，每个窗口最多交出 3 项；余量低时办得不到位。常设授权在范围内自动办理例行事务，到期自动失效，也可以提前收回。'
+      : '每个机构只有 3 个在办名额。跨日命令会持续占用名额，直到完成、撤回或失效；容量满时新命令不会执行。召集会恢复协调余量并放行本回合的跨部门阻塞，但会消耗 1 AP。委派不耗注意力的代价是交接延迟一夜与两个机构各 -3 协调余量。';
+    body.innerHTML = '<p class="ops-lead">' + escapeHtml(lead) + '</p><div class="agency-grid">' + cards + '</div>';
     Array.prototype.forEach.call(body.querySelectorAll('[data-coordinate]'), function (button) {
       button.addEventListener('click', function () {
         const result = L.coordinateAgency(g, button.getAttribute('data-coordinate'));
@@ -415,7 +438,18 @@
         saveGame(false);
         renderGame();
         renderOpsBody(card);
-        toast('常设授权已生效：该机构此后签发的命令自动进入执行。');
+        toast(campaign ? '常设授权已生效：该机构会在范围内自行办理例行事务。' : '常设授权已生效：该机构此后签发的命令自动进入执行。');
+      });
+    });
+    Array.prototype.forEach.call(body.querySelectorAll('[data-revoke]'), function (button) {
+      button.addEventListener('click', function () {
+        const result = L.revokeStanding(g, button.getAttribute('data-revoke'));
+        if (!result.ok) { toast(result.error || '无法收回授权。', true); return; }
+        if (A) A.playSfx('issue');
+        saveGame(false);
+        renderGame();
+        renderOpsBody(card);
+        toast('授权已收回；之后这个部门的事务重新由总统签发。');
       });
     });
   }

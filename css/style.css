@@ -982,3 +982,15 @@ p.campaign-day { color: var(--text); font: 12px var(--mono); }
   .dim-list li { grid-template-columns: 1fr auto; }
   .dim-list li small { display: none; }
 }
+
+/* v1.0 办公室看板与常设授权 */
+.agency-card-head { position: relative; }
+.office-state { margin-left: auto; align-self: flex-start; padding: 2px 8px; border: 1px solid var(--line, #5a5a48); color: var(--muted); font: 11px var(--mono); white-space: nowrap; }
+.office-state.is-handled { border-color: var(--olive); color: var(--positive); }
+.office-state.is-executing { border-color: var(--olive); color: var(--text, #d8d2bc); }
+.office-state.is-blocked, .office-state.is-needs_president { border-color: var(--warning); color: var(--warning); }
+.office-state.is-resource_delayed { border-color: var(--warning); color: var(--muted); }
+.standing-box { display: grid; gap: 6px; flex: 1 1 100%; padding: 8px 10px; border: 1px solid var(--olive); background: rgba(90, 100, 60, 0.12); }
+.standing-box .standing-badge { min-height: 0; padding: 0; border: 0; }
+.standing-scope { margin: 0 !important; color: var(--faint) !important; font-size: 11px !important; line-height: 1.5 !important; }
+.standing-result { margin: 0 !important; color: var(--muted) !important; font-size: 12px !important; line-height: 1.5 !important; }
