@@ -19,7 +19,7 @@
      ap = 本决策窗口的总统注意力上限（按窗口刷新，不跨窗口储存）。 */
   const EVENTS = [
     {
-      id: 'c1', act: 1, day: 1, days: 0.5, ap: 3, interruptible: false,
+      id: 'c1', act: 1, day: 1, days: 0.5, ap: 4, interruptible: false,
       date: '2022-02-24', dateLabel: '2 月 24 日 · 凌晨', time: '凌晨', span: '数小时',
       title: '全面入侵开始', kicker: '紧急简报 · 01',
       intel: { level: '低', tone: '多源、矛盾', note: '多地同时报告导弹打击和越境，具体方向和规模仍在核对。' },
@@ -48,7 +48,7 @@
       ]
     },
     {
-      id: 'c2', act: 1, day: 1, days: 0.5, ap: 3, interruptible: false, key: true,
+      id: 'c2', act: 1, day: 1, days: 0.5, ap: 5, interruptible: false, key: true,
       date: '2022-02-24', dateLabel: '2 月 24 日 · 上午至夜间', time: '上午', span: '数小时',
       title: '安东诺夫机场', kicker: '重大决策 · 机场方向',
       intel: { level: '低', tone: '现场混乱', note: '直升机机群出现在首都西北方向，机场现场报告互相矛盾。' },
@@ -91,7 +91,7 @@
       ]
     },
     {
-      id: 'c3', act: 1, day: 2, days: 1, ap: 3, interruptible: true, key: true,
+      id: 'c3', act: 1, day: 2, days: 1, ap: 4, interruptible: true, key: true,
       date: '2022-02-25', dateLabel: '2 月 25 日', time: '全天', span: '1 天',
       title: '首都与政府连续性', kicker: '重大决策 · 政府在哪里',
       intel: { level: '中', tone: '部分可核实', note: '有报告称首都可能出现针对政府的行动，具体对象和时间不明。' },
@@ -129,7 +129,7 @@
       ]
     },
     {
-      id: 'c4', act: 1, day: 3, days: 1, ap: 3, interruptible: true,
+      id: 'c4', act: 1, day: 3, days: 1, ap: 4, interruptible: true,
       date: '2022-02-26', dateLabel: '2 月 26 日', time: '全天', span: '1 天',
       title: '首都内部安全', kicker: '简报 · 首都',
       intel: { level: '低', tone: '谣言多', note: '首都内部出现大量关于破坏小组的报告，其中很多无法核实。' },
@@ -157,7 +157,7 @@
       ]
     },
     {
-      id: 'c5', act: 2, day: 4, days: 3, ap: 3, interruptible: true, key: true,
+      id: 'c5', act: 2, day: 4, days: 3, ap: 5, interruptible: true, key: true,
       date: '2022-02-27', dateLabel: '2 月 27 日 — 3 月 1 日', time: '三天', span: '3 天',
       title: '伊尔平河与桥梁', kicker: '重大决策 · 西北通道',
       intel: { level: '中', tone: '前线报告', note: '对方地面部队向首都西北的伊尔平河方向推进，桥梁成为焦点。' },
@@ -188,7 +188,7 @@
       ]
     },
     {
-      id: 'c6', act: 2, day: 7, days: 2, ap: 3, interruptible: true,
+      id: 'c6', act: 2, day: 7, days: 2, ap: 4, interruptible: true,
       date: '2022-03-02', dateLabel: '3 月 2 日 — 3 月 3 日', time: '两天', span: '2 天',
       title: '北面车队与切尔尼戈夫', kicker: '简报 · 北方方向',
       intel: { level: '中', tone: '卫星与公开影像', note: '公开影像显示首都西北方向有很长的车队，北部的切尔尼戈夫方向同样承压。' },
@@ -218,7 +218,7 @@
           delayed: [{ delay: 4, label: '储备补充压力', note: '动用的储备需要补充，后期物资会更紧。', effects: { reserve: -5 } }] }
       ]
     },    {
-      id: 'c7', act: 2, day: 9, days: 2, ap: 3, interruptible: true,
+      id: 'c7', act: 2, day: 9, days: 2, ap: 4, interruptible: true,
       date: '2022-03-04', dateLabel: '3 月 4 日 — 3 月 5 日', time: '两天', span: '2 天',
       title: '布恰—伊尔平：撤离与城市防御', kicker: '简报 · 西北城镇',
       intel: { level: '中', tone: '地方报告', note: '西北城镇的地方政府报告平民被困、通讯中断，部分区域无法联系。' },
@@ -247,7 +247,7 @@
       ]
     },
     {
-      id: 'c8', act: 3, day: 11, days: 4, ap: 2, interruptible: true,
+      id: 'c8', act: 3, day: 11, days: 4, ap: 3, interruptible: true,
       date: '2022-03-06', dateLabel: '3 月 6 日 — 3 月 9 日', time: '四天', span: '4 天',
       title: '消耗：轮换、弹药与政府疲劳', kicker: '周报 · 消耗',
       intel: { level: '中', tone: '机构报告', note: '各机构报告人员连续工作，弹药和燃料消耗明显上升。' },
@@ -276,7 +276,7 @@
       ]
     },
     {
-      id: 'c9', act: 3, day: 15, days: 4, ap: 3, interruptible: true, key: true,
+      id: 'c9', act: 3, day: 15, days: 4, ap: 5, interruptible: true, key: true,
       date: '2022-03-10', dateLabel: '3 月 10 日 — 3 月 13 日', time: '四天', span: '4 天',
       title: '莫什春与布罗瓦雷：预备队给谁', kicker: '重大决策 · 预备队',
       intel: { level: '低', tone: '两个方向同时告急', note: '西北莫什春方向和东侧布罗瓦雷方向都报告对方在集结，两份报告都要求预备队。' },
@@ -314,7 +314,7 @@
       ]
     },
     {
-      id: 'c10', act: 3, day: 19, days: 8, ap: 3, interruptible: true,
+      id: 'c10', act: 3, day: 19, days: 8, ap: 4, interruptible: true,
       date: '2022-03-14', dateLabel: '3 月 14 日 — 3 月 21 日', time: '八天', span: '8 天',
       title: '长期围困：城市、外交与机构', kicker: '周报 · 持续',
       intel: { level: '中', tone: '持续报告', note: '首都周边战线变化不大，城市基础设施和机构运转的压力逐渐累积。' },
@@ -345,7 +345,7 @@
       ]
     },
     {
-      id: 'c11', act: 4, day: 27, days: 7, ap: 3, interruptible: true,
+      id: 'c11', act: 4, day: 27, days: 7, ap: 4, interruptible: true,
       date: '2022-03-22', dateLabel: '3 月 22 日 — 3 月 28 日', time: '一周', span: '7 天',
       title: '马卡里夫与伊尔平：反击窗口', kicker: '简报 · 局部反击',
       intel: { level: '中', tone: '前线报告', note: '首都西面和西北出现局部反击机会，对方部分阵地补给困难。' },
@@ -375,7 +375,7 @@
       ]
     },
     {
-      id: 'c12', act: 4, day: 34, days: 2, ap: 3, interruptible: false, key: true,
+      id: 'c12', act: 4, day: 34, days: 2, ap: 5, interruptible: false, key: true,
       date: '2022-03-29', dateLabel: '3 月 29 日 — 3 月 30 日', time: '两天', span: '2 天',
       title: '撤退信号', kicker: '重大决策 · 信号是否可信',
       intel: { level: '低', tone: '对方声明与前线报告不一致', note: '对方公开表示将大幅减少首都和切尔尼戈夫方向的军事活动。部分前线报告看到车队移动，另一些报告仍有炮击。' },
@@ -409,7 +409,7 @@
       ]
     },
     {
-      id: 'c13', act: 4, day: 36, days: 3, ap: 3, interruptible: false, key: true,
+      id: 'c13', act: 4, day: 36, days: 3, ap: 5, interruptible: false, key: true,
       date: '2022-03-31', dateLabel: '3 月 31 日 — 4 月 2 日', time: '三天', span: '3 天',
       title: '重新进入与安全确认', kicker: '重大决策 · 收复地区',
       intel: { level: '中', tone: '地方报告', note: '对方离开部分城镇。重新进入的部队报告地雷、毁坏的建筑，以及需要立即调查的情况。' },

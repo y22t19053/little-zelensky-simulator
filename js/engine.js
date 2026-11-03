@@ -157,7 +157,7 @@
     return null;
   }
 
-  function getChoiceStatus(state, choiceId) {
+  function getChoiceStatus(state, choiceId, opts) {
     const event = getEvent(state);
     const choice = getChoice(event, choiceId);
     if (!choice) {
@@ -178,15 +178,102 @@
         conflict: conflict
       };
     }
-    if (state.ap < choice.ap) {
+    const needAp = apCostFor(state, choice, opts && opts.delegate);
+    if (state.ap < needAp) {
       return {
         canIssue: false,
         state: 'ap',
-        message: '注意力不足：这项命令需要 ' + choice.ap + ' AP，当前只剩 ' + state.ap + ' AP。',
+        message: '注意力不足：这项命令需要 ' + needAp + ' AP，当前只剩 ' + state.ap + ' AP。',
         conflict: null
       };
     }
     return { canIssue: true, state: 'available', message: '', conflict: null };
+  }
+
+  /* ---------- v0.7.0 战役：常设授权范围与委派 ---------- */
+
+  function standingRecord(state, agencyId) {
+    const rec = state && state.standing ? state.standing[agencyId] : null;
+    return rec && rec.active ? rec : null;
+  }
+
+  /* 持有授权但机构在办已满或协调过低时，授权暂停：新事项回到总统桌面。 */
+  function standingSuspension(state, agencyId) {
+    if (!standingRecord(state, agencyId)) return null;
+    const load = getAgencyLoad(state, agencyId);
+    const floor = (STRAT.standing || {}).suspendBelow || 40;
+    if (load.overloaded) return '机构在办已满（' + load.workload + '/' + load.capacity + '）';
+    if (load.coordination < floor) return '协调余量只有 ' + load.coordination;
+    return null;
+  }
+
+  /* 例行事项：1 AP 以内、不是关键决策、不需要跨部门召集、不需要先确认情报。 */
+  function isRoutineChoice(state, choice, agencyId) {
+    if (!choice || choice.keyDecision || choice.ap > 1) return false;
+    if (choice.noStanding) return false;
+    if (needsCoordination(state, choice, agencyId)) return false;
+    return true;
+  }
+
+  function standingCovers(state, choice, agencyId) {
+    if (!isCampaign(state) || !standingRecord(state, agencyId)) return false;
+    if (standingSuspension(state, agencyId)) return false;
+    return isRoutineChoice(state, choice, agencyId);
+  }
+
+  function apCostFor(state, choice, delegate) {
+    if (!isCampaign(state)) return choice.ap;
+    if (delegate) return 0;
+    if (standingCovers(state, choice, agencyForChoice(choice))) return 0;
+    return choice.ap;
+  }
+
+  function delegatedThisRound(state) {
+    return (state.commands || []).filter(function (command) {
+      return command.delegation && command.round === state.round && command.status !== 'cancelled';
+    }).length;
+  }
+
+  /* 委派检查：不修改状态，供界面和签发共用。 */
+  function checkDelegation(state, choiceId, options) {
+    if (!isCampaign(state)) return { ok: false, error: '七日模式沿用交接式委派。', code: 'MODE' };
+    const event = getEvent(state);
+    const choice = getChoice(event, choiceId);
+    if (!choice) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
+    const D = STRAT.delegation || {};
+    const agency = agencyForChoice(choice);
+    if (choice.keyDecision || choice.ap > 1) return { ok: false, error: '重大决策需要总统本人签署，不能委派。', code: 'MAJOR' };
+    if (choice.noStanding) return { ok: false, error: '这项事务涉及新的政治表态，需要总统本人决定。', code: 'MAJOR' };
+    if (needsCoordination(state, choice, agency)) return { ok: false, error: '这项事务需要跨部门召集，由总统牵头，不能整体委派。', code: 'COORDINATION' };
+    if (requiresIntelClarification(state, event, choice)) return { ok: false, error: '这项事务缺少已确认的情报，不能交给机构自行处理。', code: 'INFO' };
+    const load = getAgencyLoad(state, agency);
+    if (load.overloaded) return { ok: false, error: load.label + '在办已满（' + load.workload + '/' + load.capacity + '），接不下新任务。', code: 'CAPACITY' };
+    if (load.coordination < (D.minCoordination || 45)) return { ok: false, error: load.label + '协调余量只有 ' + load.coordination + '，低于 ' + (D.minCoordination || 45) + '，不适合自行办理。', code: 'COORDINATION' };
+    if (delegatedThisRound(state) >= (D.perWindowCap || 3)) return { ok: false, error: '本窗口已经委派了 ' + (D.perWindowCap || 3) + ' 项事务，机构无法同时接下更多。', code: 'CAP' };
+    if (options && options.returnForApproval && state.round >= finalRoundFor(state)) {
+      return { ok: false, error: '这是最后一个窗口，没有下一份简报可供批准；请选择授权范围内自行办理。', code: 'FINAL' };
+    }
+    return { ok: true, agency: agency, choice: choice };
+  }
+
+  /* 委派所得的完成质量：协调余量决定。只折扣收益，代价照付。 */
+  function delegationQuality(state, command) {
+    const D = STRAT.delegation || {};
+    if (!command.delegation || command.delegation.mode === 'approval') return 1;
+    const coordination = getAgencyLoad(state, command.agency).coordination;
+    return coordination >= (D.fullQualityAt || 60) ? 1 : (D.reducedQuality || 0.7);
+  }
+
+  function scaleEffects(effects, scale) {
+    const out = {};
+    Object.keys(effects || {}).forEach(function (key) {
+      const value = effects[key];
+      const beneficial = key === 'pressure' ? value < 0 : value > 0;
+      if (!value || !beneficial || scale >= 1) { out[key] = value; return; }
+      const scaled = Math.max(1, Math.round(Math.abs(value) * scale));
+      out[key] = value < 0 ? -scaled : scaled;
+    });
+    return out;
   }
 
   function getAvailableChoices(state) {
@@ -563,7 +650,10 @@
     if (existing && existing.status === 'applied') {
       return { deltas: existing.deltas || {}, pressureDelta: existing.pressureDelta || 0 };
     }
-    const result = applyEffectValues(state, choice.effects);
+    const quality = isCampaign(state) ? delegationQuality(state, command) : 1;
+    if (command.delegation) command.delegation.quality = quality;
+    const appliedEffects = quality < 1 ? scaleEffects(choice.effects, quality) : choice.effects;
+    const result = applyEffectValues(state, appliedEffects);
     const modifierNotes = [];
     (choice.modifiers || []).forEach(function (modifier) {
       if (!flagsMatch(state.flags, modifier.when)) return;
@@ -585,7 +675,7 @@
       kind: 'immediate',
       status: 'applied',
       appliedRound: state.round,
-      effects: Object.assign({}, choice.effects),
+      effects: Object.assign({}, appliedEffects),
       deltas: result.deltas,
       pressureDelta: result.pressureDelta
     });
@@ -612,7 +702,12 @@
     const event = getEvent(state);
     const choice = getChoice(event, choiceId);
     if (!choice) return { ok: false, error: '未找到这项命令。', code: 'NOT_FOUND' };
-    const status = getChoiceStatus(state, choiceId);
+    const delegateMode = options && options.delegate ? (options.returnForApproval ? 'approval' : 'autonomous') : null;
+    if (delegateMode) {
+      const check = checkDelegation(state, choiceId, { returnForApproval: delegateMode === 'approval' });
+      if (!check.ok) return check;
+    }
+    const status = getChoiceStatus(state, choiceId, { delegate: !!delegateMode });
     if (!status.canIssue) {
       const code = status.state === 'issued' ? 'DUPLICATE' : status.state === 'conflict' ? 'CONFLICT' : status.state === 'ap' ? 'AP' : 'UNAVAILABLE';
       return { ok: false, error: status.message, code: code, conflict: status.conflict };
@@ -620,6 +715,8 @@
     const id = 'r' + state.round + ':' + event.id + ':' + choice.id;
     if (findCommand(state, id)) return { ok: false, error: '这项命令已经建档。', code: 'DUPLICATE' };
     const agency = agencyForChoice(choice);
+    const viaStanding = !delegateMode && standingCovers(state, choice, agency);
+    const paidAp = apCostFor(state, choice, !!delegateMode);
     const profile = timeProfileFor(choice.id);
     const link = getLinkEffect(state, choice.id);
     const command = {
@@ -665,7 +762,27 @@
       history: [],
       createdAt: new Date().toISOString()
     };
-    state.ap -= choice.ap;
+    state.ap -= paidAp;
+    command.paidAp = paidAp;
+    if (delegateMode) {
+      const D = STRAT.delegation || {};
+      const deadline = Math.min(finalRoundFor(state), state.round + (profile.windowRounds || 1) + (delegateMode === 'approval' ? 0 : 0));
+      command.delegated = true;
+      command.delegatedRound = state.round;
+      command.coordinated = true;
+      command.deadlineRound = Math.max(command.deadlineRound, deadline);
+      command.delegation = {
+        mode: delegateMode,
+        returnForApproval: delegateMode === 'approval',
+        agencyId: agency,
+        issuedRound: state.round,
+        deadlineRound: command.deadlineRound,
+        quality: null,
+        approvedRound: null
+      };
+      if (state.agencies[agency]) state.agencies[agency].coordination = clamp(state.agencies[agency].coordination - (D.briefingCoordination || 2), 0, 100);
+    }
+    if (viaStanding) command.viaStanding = true;
     state.executed.push(choice.id);
     state.commands.push(command);
     state.choices.push({
@@ -676,26 +793,72 @@
       choiceId: choice.id,
       commandId: command.id,
       label: choice.title,
-      ap: choice.ap,
+      ap: paidAp,
       agency: agency,
       status: 'issued',
       deltas: {},
       pressureDelta: 0,
       scheduled: []
     });
-    addCommandLog(state, command, '签发：' + choice.title, '命令已建档并交给' + (getAgency(agency) ? getAgency(agency).label : '总统办公室') + '。尚未授权执行。');
+    const agencyLabel = getAgency(agency) ? getAgency(agency).label : '总统办公室';
+    if (delegateMode) {
+      const deadlineDay = command.deadlineRound;
+      addCommandLog(state, command, '委派：' + choice.title,
+        '任务交给' + agencyLabel + '，授权范围限于本事项，期限为第 ' + deadlineDay + ' 个窗口；' +
+        (delegateMode === 'approval' ? '办理方案送回总统批准后才会执行，完成质量不打折。' : '机构在授权内自行办理，办完回报，不再占用总统注意力。'));
+      if (link) addCommandLog(state, command, (link.coordination === 'relax' ? '前期准备生效：' : '前期事务失效的后果：') + choice.title, link.note);
+      if (delegateMode === 'approval') {
+        command.status = 'blocked';
+        command.blockedCode = 'APPROVAL';
+        command.blockedReason = agencyLabel + '已拟好办理方案，等待总统批准（下一份简报起可批）。';
+        if (command.record) command.record.status = 'blocked';
+        const rec = state.choices[state.choices.length - 1];
+        if (rec) rec.status = 'blocked';
+        return { ok: true, command: command, choice: choice, delegated: true, awaitingApproval: true };
+      }
+      const delegatedAuth = authorizeCommand(state, command.id);
+      return { ok: true, command: command, choice: choice, delegated: true, blocked: !!delegatedAuth.blocked };
+    }
+    addCommandLog(state, command, '签发：' + choice.title, '命令已建档并交给' + agencyLabel + '。尚未授权执行。');
     if (link) {
       addCommandLog(state, command, (link.coordination === 'relax' ? '前期准备生效：' : '前期事务失效的后果：') + choice.title, link.note);
     }
-    if (state.standing && state.standing[agency] && state.standing[agency].active) {
+    if (viaStanding || (!isCampaign(state) && state.standing && state.standing[agency] && state.standing[agency].active)) {
       const auto = authorizeCommand(state, command.id);
       if (auto.ok) {
         command.autoAuthorized = true;
-        addCommandLog(state, command, '常设授权自动接收：' + choice.title, '该机构持有总统常设授权，签发即进入执行队列，无需逐项授权。');
+        if (viaStanding) {
+          const rec = standingRecord(state, agency);
+          if (rec) rec.handled = (rec.handled || 0) + 1;
+          if (state.agencies[agency]) state.agencies[agency].coordination = clamp(state.agencies[agency].coordination - ((STRAT.standing || {}).wearPerItem || 1), 0, 100);
+          addCommandLog(state, command, '常设授权内办理：' + choice.title, '属于' + agencyLabel + '的常设授权范围，机构直接接收，不占用总统注意力；机构为此多承担了一份例行工作。');
+        } else {
+          addCommandLog(state, command, '常设授权自动接收：' + choice.title, '该机构持有总统常设授权，签发即进入执行队列，无需逐项授权。');
+        }
       }
-      return { ok: true, command: command, choice: choice, autoAuthorized: !!auto.ok, blocked: !!auto.blocked };
+      return { ok: true, command: command, choice: choice, autoAuthorized: !!auto.ok, blocked: !!auto.blocked, viaStanding: viaStanding };
     }
     return { ok: true, command: command, choice: choice };
+  }
+
+  /* 批准委派机构拟好的办理方案：不耗 AP，下一份简报起可批，当晚执行，质量满额。 */
+  function approveDelegated(state, commandId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能批准。', code: 'PHASE' };
+    const command = findCommand(state, commandId);
+    if (!command || !command.delegation || command.blockedCode !== 'APPROVAL') return { ok: false, error: '这项事务没有待批准的办理方案。', code: 'STATUS' };
+    if (state.round <= command.delegation.issuedRound) return { ok: false, error: '机构还在拟定方案，下一份简报才能批准。', code: 'EARLY' };
+    if (command.deadlineRound && state.round > command.deadlineRound) return { ok: false, error: '已经超过办理期限。', code: 'EXPIRED' };
+    clearCommandBlock(command);
+    command.status = 'executing';
+    command.delegation.approvedRound = state.round;
+    command.slotRequired = false;
+    const slot = reserveAgencySlot(state, command);
+    if (!slot.ok) return { ok: true, command: command, blocked: true };
+    if (command.record) command.record.status = command.status;
+    const rec = state.choices.filter(function (item) { return item.commandId === command.id; })[0];
+    if (rec) rec.status = 'executing';
+    addCommandLog(state, command, '批准办理方案：' + command.title, '总统批准了机构拟定的方案，今夜执行，不另耗注意力。');
+    return { ok: true, command: command };
   }
 
   function authorizeCommand(state, commandId, executorId) {

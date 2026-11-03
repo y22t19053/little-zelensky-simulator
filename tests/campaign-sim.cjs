@@ -35,9 +35,13 @@ function issue(state, id) {
   return r.command;
 }
 
+// v0.7: window AP rose to 4-5. Baseline routes only spend the v0.6-equivalent budget (3) on follow-ups;
+// extra AP is exercised by delegation / standing-authority / extra-decision routes.
+const BASELINE_AP = 3;
 function spend(state, mode) {
   let guard = 0;
-  while (!state.ending && state.ap > 0 && guard++ < 6) {
+  const floor = Math.max(0, (state.apMax || BASELINE_AP) - BASELINE_AP);
+  while (!state.ending && state.ap > floor && guard++ < 6) {
     const open = state.commands.filter((c) => ['blocked', 'executing', 'issued'].includes(c.status) && !c.effectsApplied);
     let acted = false;
     for (const c of open) {
