@@ -894,7 +894,8 @@ async function main() {
     const PLAN = {
       c1: ['c_command_line', 'c_first_appeal'], c2: ['c_counter_airfield'], c3: ['c_stay_capital'], c4: ['c_counterintel', 'c_rumor_rules'],
       c5: ['c_blow_bridges'], c6: ['c_harass_convoy'], c7: ['c_evacuate'], c8: ['c_rotation'], c9: ['c_reserve_moshchun'],
-      c10: ['c_air_defense_aid', 'c_staff_rest'], c11: ['c_counter_west'], c12: ['c_stay_alert', 'c_verify_signal'], c13: ['c_staged_return', 'c_document']
+      c10: ['c_air_defense_aid', 'c_staff_rest'], c11: ['c_counter_west'], c12: ['c_stay_alert', 'c_verify_signal'], c13: ['c_staged_return', 'c_document'],
+      c14: ['w_mine_priority', 'w_security_check'], c15: ['w_roads', 'w_utilities'], c16: ['w_returnee_conditions', 'w_confirm_withdrawal']
     };
     let campInterludes = 0;
     let reloadChecked = false;
@@ -943,7 +944,26 @@ async function main() {
       const endable = await evaluate(cdp, '!document.getElementById("btn-end-round").disabled');
       if (!endable) { assert(false, '战役窗口可以结束', eventId); break; }
       await click('#btn-end-round');
-      const phase = await waitFor(async function () { const s = await campState(); return s && (s.phase === 'interlude' || s.phase === 'ending') ? s.phase : false; }, 5000);
+      const phase = await waitFor(async function () { const s = await campState(); return s && (s.phase === 'interlude' || s.phase === 'ending' || s.phase === 'wrapup_offer') ? s.phase : false; }, 5000);
+      if (phase === 'wrapup_offer') {
+        await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root [data-wrap-offer]")'); }, 5000);
+        assert(await evaluate(cdp, 'document.querySelectorAll("#modal-root .wrap-options section").length === 2 && document.querySelectorAll("#modal-root .modal-actions button").length === 2'), '4 月 2 日出现 A/B 收束选择');
+        await screenshot('41-wrap-offer-desktop.png');
+        await setViewport(390, 844, true);
+        await sleep(200);
+        const wm = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+        assert(wm.sw <= wm.cw + 2, '390px 收束选择无横向溢出', JSON.stringify(wm));
+        await screenshot('42-wrap-offer-mobile.png');
+        await setViewport(1280, 800, false);
+        await click('#modal-root .modal-actions .btn-primary');
+        await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .campaign-step")'); }, 5000);
+        const wrapSt = await campState();
+        assert(wrapSt && wrapSt.wrapup && wrapSt.wrapup.started, '选择 B 后进入收束阶段');
+        await screenshot('43-wrap-start.png');
+        await click('#modal-root .modal-actions .btn-primary');
+        await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+        continue;
+      }
       if (phase === 'interlude') {
         campInterludes += 1;
         await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
@@ -961,6 +981,7 @@ async function main() {
     console.log('  战役结局：' + campEnd.ending.code + ' ' + campEnd.ending.title + ' / 第 ' + campEnd.ending.day + ' 天 / 窗口推进 ' + campInterludes);
     assert(await evaluate(cdp, 'document.querySelectorAll(".dim-list li").length === 8 && !!document.querySelector(".key-chain li")'), '战役结局显示八维结果与关键决策链');
     assert(await evaluate(cdp, 'localStorage.getItem("lzs_save_v1")') === classicBefore, '战役不改动七日开局存档');
+    assert(await evaluate(cdp, '!!document.querySelector(".aftermath")'), '选择 B 的结局页显示收束阶段小节');
     await screenshot('38-campaign-ending.png');
     await setViewport(390, 844, true);
     await sleep(200);
