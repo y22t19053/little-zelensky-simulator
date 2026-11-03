@@ -829,7 +829,7 @@
         command.autoAuthorized = true;
         if (viaStanding) {
           const rec = standingRecord(state, agency);
-          if (rec) rec.handled = (rec.handled || 0) + 1;
+          if (rec) rec.handled = (rec.handled || 0) + 1; (rec.items = rec.items || []).push({ round: state.round, choiceId: choice.id, title: choice.title });
           if (state.agencies[agency]) state.agencies[agency].coordination = clamp(state.agencies[agency].coordination - ((STRAT.standing || {}).wearPerItem || 1), 0, 100);
           addCommandLog(state, command, '常设授权内办理：' + choice.title, '属于' + agencyLabel + '的常设授权范围，机构直接接收，不占用总统注意力；机构为此多承担了一份例行工作。');
         } else {
@@ -1041,17 +1041,79 @@
     const cost = spec.cost || 1;
     if (!getAgency(agencyId) || !state.agencies[agencyId]) return { ok: false, error: '未找到这个机构。', code: 'AGENCY' };
     if (!state.standing) state.standing = {};
-    if (state.standing[agencyId]) return { ok: false, error: '这个机构已经持有常设授权。', code: 'DUPLICATE' };
+    if (state.standing[agencyId] && state.standing[agencyId].active) return { ok: false, error: '这个机构已经持有常设授权。', code: 'DUPLICATE' };
     if (state.ap < cost) return { ok: false, error: '授予常设授权需要 ' + cost + ' AP。', code: 'AP' };
     const load = getAgencyLoad(state, agencyId);
     if (load.coordination < (spec.minCoordination || 45)) {
-      return { ok: false, error: '机构协调余量 ' + load.coordination + '，低于 ' + (spec.minCoordination || 45) + '：协调不足的机构不能自主运行。', code: 'COORDINATION' };
+      return { ok: false, error: '机构协调余量 ' + load.coordination + '，低于 ' + (spec.minCoordination || 45) + '：协调不足的机构不能自主运转。', code: 'COORDINATION' };
     }
     state.ap -= cost;
-    state.standing[agencyId] = { active: true, grantedRound: state.round };
-    addLog(state, 'coordination', '常设授权：' + getAgency(agencyId).label,
-      '此后该机构签发的命令自动进入执行，不再逐项授权。代价：机构每夜协调 ' + (spec.nightlyDrift || -1) + '；总统亲自介入该机构命令时额外消耗 ' + (spec.interventionExtra || 0) + ' 点协调。');
+    const campaignMode = isCampaign(state);
+    const scopes = spec.scopes || {};
+    state.standing[agencyId] = {
+      active: true,
+      grantedRound: state.round,
+      expiresRound: campaignMode ? state.round + (spec.durationWindows || 4) : null,
+      scope: campaignMode ? (scopes[agencyId] || '本机构职责内的例行事务') : null,
+      handled: 0,
+      items: [],
+      suspendedRounds: 0,
+      endedRound: null,
+      endReason: null
+    };
+    if (campaignMode) {
+      addLog(state, 'coordination', '常设授权：' + getAgency(agencyId).label,
+        '授权范围：' + state.standing[agencyId].scope + '。有效期到第 ' + state.standing[agencyId].expiresRound + ' 个窗口之前；范围内的例行事务由机构自行办理，不再占用总统注意力。' +
+        '重大军事行动、新的政治表态和需要跨部门召集的事项仍然上报总统。机构每办一件事协调余量下降 ' + (spec.wearPerItem || 1) + '，协调不足或在办已满时授权暂停。');
+    } else {
+      addLog(state, 'coordination', '常设授权：' + getAgency(agencyId).label,
+        '此后该机构签发的命令自动进入执行，不再逐项授权。代价：机构每夜协调 ' + (spec.nightlyDrift || -1) + '；总统亲自介入该机构命令时额外消耗 ' + (spec.interventionExtra || 0) + ' 点协调。');
+    }
     return { ok: true, agencyId: agencyId };
+  }
+
+  /* 撤销常设授权：战役模式付 revokeCost AP 并损失协调；七日模式免费。 */
+  function revokeStanding(state, agencyId) {
+    if (!state || state.phase !== 'briefing') return { ok: false, error: '当前阶段不能撤销授权。', code: 'PHASE' };
+    const rec = standingRecord(state, agencyId);
+    if (!rec) return { ok: false, error: '这个机构没有有效的常设授权。', code: 'NONE' };
+    const spec = STRAT.standing || {};
+    const campaignMode = isCampaign(state);
+    const cost = campaignMode ? (spec.revokeCost == null ? 1 : spec.revokeCost) : 0;
+    if (state.ap < cost) return { ok: false, error: '撤销授权需要 ' + cost + ' AP。', code: 'AP' };
+    state.ap -= cost;
+    rec.active = false;
+    rec.endedRound = state.round;
+    rec.endReason = 'revoked';
+    if (campaignMode && state.agencies[agencyId]) {
+      state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination - (spec.revokeCoordination == null ? 3 : spec.revokeCoordination), 0, 100);
+    }
+    addLog(state, 'coordination', '撤销常设授权：' + getAgency(agencyId).label,
+      '期间机构自行办理了 ' + (rec.handled || 0) + ' 件事。' + (campaignMode ? '收回授权要重新交接，机构协调余量下降 ' + (spec.revokeCoordination == null ? 3 : spec.revokeCoordination) + '。' : '此后命令恢复逐项授权。'));
+    return { ok: true, agencyId: agencyId, handled: rec.handled || 0 };
+  }
+
+  /* 窗口交替时：常设授权到期失效；暂停中的授权记一笔，供待办与复盘使用。 */
+  function expireStanding(state) {
+    if (!isCampaign(state)) return;
+    Object.keys(state.standing || {}).forEach(function (agencyId) {
+      const rec = state.standing[agencyId];
+      if (!rec || !rec.active) return;
+      if (rec.expiresRound != null && state.round >= rec.expiresRound) {
+        rec.active = false;
+        rec.endedRound = state.round;
+        rec.endReason = 'expired';
+        addLog(state, 'coordination', '常设授权到期：' + getAgency(agencyId).label,
+          '有效期已满，期间自行办理了 ' + (rec.handled || 0) + ' 件事。需要继续放手，请重新授予。');
+        return;
+      }
+      const reason = standingSuspension(state, agencyId);
+      rec.suspended = reason || null;
+      if (reason) {
+        rec.suspendedRounds = (rec.suspendedRounds || 0) + 1;
+        addLog(state, 'coordination', '常设授权暂停：' + getAgency(agencyId).label, reason + '，授权暂停，新的事项回到总统桌面，直到机构恢复。');
+      }
+    });
   }
 
   function getDispatches(state, includeResolved) {
@@ -1591,6 +1653,15 @@
       expireCommand(state, command);
       return commandResult(command, { status: 'expired', blocked: true, note: '错过执行窗口' });
     }
+    if (command.status === 'blocked' && command.blockedCode === 'APPROVAL') {
+      const waiting = commandResult(command, { blocked: true, note: '办理方案等待总统批准' });
+      if (atDeadline) {
+        expireCommand(state, command);
+        waiting.status = 'expired';
+        waiting.note = '方案没有等到批准，错过办理期限';
+      }
+      return waiting;
+    }
     if (command.handoffRound && state.round < command.handoffRound) {
       command.status = 'blocked';
       command.blockedCode = 'HANDOFF';
@@ -1931,6 +2002,7 @@
         state.agencies[agencyId].coordination = clamp(state.agencies[agencyId].coordination + ((STRAT.standing || {}).nightlyDrift || -1), 0, 100);
       }
     });
+    expireStanding(state);
     const echoes = applyCampaignOnEnter(state, next);
     recordTimeline(state);
     ending = checkCollapse(state);
@@ -2679,6 +2751,7 @@
     timeProfileFor: timeProfileFor,
     getLinkEffect: getLinkEffect,
     grantStanding: grantStanding,
+    revokeStanding: revokeStanding,
     getDispatches: getDispatches,
     resolveDispatch: resolveDispatch,
     getGovernanceProfile: getGovernanceProfile,
