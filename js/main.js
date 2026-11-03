@@ -1645,11 +1645,72 @@
       (campaignEnd ? campaignEndingSideHtml(ending) : '') + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
       '<section class="ending-review-invite"><span class="section-kicker">SEALED UNTIL THE END</span><h2>现在，打开事后才能看见的资料。</h2><p>完整模拟参数、逐日事实、当时认知、后来确认、争议与资料来源已独立归档，不再接在结局正文之后。</p><button type="button" class="btn btn-primary" id="btn-history">进入历史复盘</button></section>' +
       '<div class="ending-disclaimer"><strong>模拟说明：</strong>' + escapeHtml(ending.disclaimer || L.meta.disclaimer || '') + '<br>本结局只描述本局模拟参数下的国家状态，不评价真实历史人物。<br>版本 ' + escapeHtml(L.meta.version || '') + ' · 所有数值均为模拟设计参数。</div>' +
-      '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
+      '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-poster">生成纪念海报</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
     document.getElementById('btn-history').addEventListener('click', openHistoryReview);
     document.getElementById('btn-replay').addEventListener('click', function () { startNewGame(true, scenarioOf()); });
     document.getElementById('btn-back-cover').addEventListener('click', renderIntro);
     document.getElementById('btn-print').addEventListener('click', function () { window.print(); });
+    document.getElementById('btn-poster').addEventListener('click', function () { openPosterModal(ending); });
+  }
+
+  /* 纪念海报：canvas 本地绘制，不上传 */
+  function openPosterModal(ending) {
+    const P = window.LZS_POSTER;
+    if (!P) { openModal({ kicker: '纪念海报', title: '海报暂时不可用', body: '<p>海报模块没有载入，请刷新页面后再试。</p>', actions: [{ label: '知道了', className: 'btn btn-primary' }] }); return; }
+    let canvas = null;
+    const note = function (text) { const n = document.getElementById('poster-note'); if (n) n.textContent = text; };
+    const download = function () {
+      if (!canvas) return;
+      P.toBlob(canvas, function (blob) {
+        if (!blob) { note('这个浏览器不能直接导出图片，请长按预览图保存。'); return; }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = '小泽模拟器-基辅战役纪念-' + (ending.code || 'X') + '.png';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        window.setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        note('已保存为图片。');
+      });
+    };
+    const share = function () {
+      if (!canvas) return;
+      P.toBlob(canvas, function (blob) {
+        if (!blob) { download(); return; }
+        const file = typeof File === 'function' ? new File([blob], 'zelensky-simulator-poster.png', { type: 'image/png' }) : null;
+        const data = { title: '小泽模拟器 · 基辅战役纪念', text: '我在《小泽模拟器》里走完了基辅战役：' + (ending.title || '') + '。', url: P.LIVE_URL };
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) data.files = [file];
+        if (navigator.share) {
+          navigator.share(data).then(function () { note('已打开系统分享。'); }).catch(function (err) { if (!err || err.name !== 'AbortError') note('分享没有成功，可以改用保存图片或复制链接。'); });
+        } else {
+          download();
+          note('这个浏览器没有系统分享，已改为保存图片；也可以复制链接。');
+        }
+      });
+    };
+    const copyLink = function () {
+      const done = function () { note('链接已复制：' + P.LIVE_URL); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(P.LIVE_URL).then(done).catch(function () { note('复制失败，请手动复制：' + P.LIVE_URL); });
+      } else {
+        const t = document.createElement('textarea');
+        t.value = P.LIVE_URL; document.body.appendChild(t); t.select();
+        try { document.execCommand('copy'); done(); } catch (e) { note('复制失败，请手动复制：' + P.LIVE_URL); }
+        document.body.removeChild(t);
+      }
+    };
+    openModal({
+      kicker: '纪念海报', title: '基辅战役 · 本局纪念', wide: true, className: 'poster-modal',
+      body: '<div class="poster-preview"><canvas id="poster-canvas" width="1080" height="1350" aria-label="本局纪念海报预览"></canvas></div><p class="stat-hint">海报只用本局结局里的内容在本机绘制，不会上传；右下角二维码指向游戏网址。图片是原创模拟推演，不是历史照片，也不含分数。</p><p class="stat-hint" id="poster-note" role="status"></p>',
+      actions: [
+        { label: '保存图片', className: 'btn btn-primary', close: false, onClick: download },
+        { label: '分享', className: 'btn btn-ghost', close: false, onClick: share },
+        { label: '复制链接', className: 'btn btn-ghost', close: false, onClick: copyLink },
+        { label: '关闭', className: 'btn btn-ghost' }
+      ],
+      onMount: function (card) {
+        canvas = card.querySelector('#poster-canvas');
+        try { P.make(canvas, ending, ui.game); } catch (err) { note('海报绘制失败：' + (err && err.message ? err.message : '未知原因')); }
+      }
+    });
   }
 
   function init() {

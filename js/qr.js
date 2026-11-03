@@ -224,5 +224,5 @@
     return { size: size, version: version, mask: best, modules: modules };
   }
 
-  return { encode: encode, maxBytes: 62 };
+  return { encode: encode, maxBytes: 106 };
 });
