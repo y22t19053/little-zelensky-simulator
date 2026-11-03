@@ -4,14 +4,14 @@
   "private": true,
   "description": "A single-player, presidential-perspective crisis decision simulator of the 2022 Battle of Kyiv (Feb 24 - Apr 2), with a classic seven-day opening mode.",
   "scripts": {
-    "test": "node tests/engine.test.cjs && node tests/campaign.test.cjs && node tests/governance.test.cjs",
+    "test": "node tests/engine.test.cjs && node tests/campaign.test.cjs && node tests/governance.test.cjs && node tests/poster.test.cjs",
     "test:engine": "node tests/engine.test.cjs",
     "test:browser": "node tests/browser-smoke.cjs",
     "strategy:compare": "node tests/strategy-compare.cjs",
     "audit:balance": "node tests/balance-audit.cjs",
     "route:search": "node tests/route-search.cjs",
     "check": "node --check js/events.js && node --check js/intel.js && node --check js/strategy.js && node --check js/campaign.js && node --check js/engine.js && node --check js/history.js && node --check js/review.js && node --check js/audio.js && node --check js/main.js",
-    "test:campaign": "node tests/campaign.test.cjs && node tests/governance.test.cjs",
+    "test:campaign": "node tests/campaign.test.cjs && node tests/governance.test.cjs && node tests/poster.test.cjs",
     "campaign:audit": "node tests/campaign-sim.cjs",
     "campaign:strategy": "node tests/campaign-audit.cjs"
   },
