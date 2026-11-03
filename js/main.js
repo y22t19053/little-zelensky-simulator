@@ -7,7 +7,7 @@
 
   const L = window.LZS;
   if (!L) {
-    document.body.innerHTML = '<main class="fatal"><h1>载入失败</h1><p>找不到游戏引擎。请确认 js/events.js 与 js/engine.js 位于正确位置。</p></main>';
+    document.body.innerHTML = '<main class="fatal"><h1>载入失败</h1><p>游戏没能载入。请刷新页面；若仍然失败，请确认网络没有拦截本站的脚本文件。</p></main>';
     return;
   }
 
@@ -245,7 +245,7 @@
       body: '<div class="help-grid">' +
         '<section><span>01</span><h3>读局势</h3><p>每回合先看事件视觉、情报摘要与国家状态。情报可信度描述信息边界，不代表成功率。</p></section>' +
         '<section><span>02</span><h3>分配 3 AP</h3><p>选择文件查看收益、代价、定性量级与延迟回合。可以签发多项，也可以保留未用 AP，但它不会结转。</p></section>' +
-        '<section><span>03</span><h3>签发并归档</h3><p>固定底栏是签发前确认。签发后显示引擎结算的实际数值；互斥命令不能同时执行。</p></section>' +
+        '<section><span>03</span><h3>签发并归档</h3><p>固定底栏是签发前确认。签发后显示实际发生的变化；互斥命令不能同时执行。</p></section>' +
         '<section><span>04</span><h3>承担夜晚</h3><p>结束回合后，命令归档、延迟后果、状态侵蚀和战争压力依次结算。七日开局共七回合；基辅战役共 13 个决策窗口，结束窗口后系统按天模拟到下一窗口，危险线被新越过时会提前中断。</p></section>' +
         '<section><span>05</span><h3>重大决策</h3><p>战役中标为“重大决策”的文件由总统直接签署，不需召集协调，但低可信情报仍需先追问。它们多数不可逆，会在之后的窗口以“前序回响”回来。</p></section>' +
         '</div><p class="modal-note">键盘：Tab 移动焦点，Enter 或空格选择文件，Escape 关闭可关闭的窗口。手机可展开“国家状态”查看全部七项。</p>',
@@ -532,7 +532,7 @@
           '<div class="scene-index"><span>事件视觉 / ' + String(g.round).padStart(2, '0') + '</span><span>模拟示意</span></div>' +
           '<picture class="scene-picture"><source srcset="assets/visual/events/' + art.id + '.webp" type="image/webp"><img data-event-art="' + art.id + '" src="assets/events/' + art.id + '.svg" alt="' + escapeHtml(art.alt) + '" width="1152" height="640"></picture>' +
           '<img class="scene-map" src="assets/visual/maps/' + art.id + '.svg" alt="抽象态势示意，不表示实时前线或兵力" width="640" height="360" loading="lazy">' +
-          '<figcaption><span>' + escapeHtml(art.caption) + '</span><span>本地生成视觉 · 非历史照片</span></figcaption>' +
+          '<figcaption><span>' + escapeHtml(art.caption) + '</span><span>原创模拟插画 · 非历史照片</span></figcaption>' +
         '</figure>' +
         '<article class="briefing-paper dossier">' +
           '<div class="paper-classification"><span>总统办公室 / 收文</span><span>LZS-' + String(g.round).padStart(2, '0') + '</span></div>' +
