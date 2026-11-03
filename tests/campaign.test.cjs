@@ -48,7 +48,7 @@ test('战役与经典模式隔离：经典 createGame 不受影响', function ()
   const camp = newCampaign();
   assert.equal(camp.scenario, 'campaign');
   assert.equal(L.finalRoundFor(camp), 13);
-  assert.equal(camp.schemaVersion, 4);
+  assert.equal(camp.schemaVersion, 5);
   assert.equal(L.getEvent(camp).id, 'c1');
 });
 
@@ -217,7 +217,7 @@ test('关键节点无压倒性选项：机场四种处置都不是每次都最�
   assert.ok(new Set(res).size >= 2, '机场处置结果：' + res.join(','));
 });
 
-test('存档：战役使用独立键与 schema 4，不覆盖经典存档；刷新后可恢复', function () {
+test('存档：战役使用独立键与 schema 5，不覆盖经典存档；刷新后可恢复', function () {
   const classic = L.createGame();
   L.saveGame(classic);
   const classicRaw = localStorage.getItem(L.saveKey);
@@ -227,8 +227,8 @@ test('存档：战役使用独立键与 schema 4，不覆盖经典存档；刷�
   L.saveGame(s);
   assert.equal(localStorage.getItem(L.saveKey), classicRaw, '经典存档未被改动');
   const raw = JSON.parse(localStorage.getItem(L.campaignSaveKey));
-  assert.equal(raw.version, 4);
-  assert.equal(raw.state.schemaVersion, 4);
+  assert.equal(raw.version, 5);
+  assert.equal(raw.state.schemaVersion, 5);
   const loaded = L.loadSavedGame('campaign');
   assert.ok(loaded && loaded.state);
   assert.equal(loaded.state.round, 2);
@@ -362,6 +362,53 @@ test('收束：进入快于清理会留下事故记录，进展用定性描述�
   assert.equal(typeof r.ending.aftermath.mood, 'string');
   const st = L.getWrapStatus(r);
   st.tracks.forEach((x) => assert.ok(!/\d/.test(x.word), x.label + ' 描述中不含数字'));
+});
+
+
+function reachOffer() {
+  const s = newCampaign();
+  for (let i = 0; i < 14 && s.phase !== 'wrapup_offer' && !s.ending; i++) {
+    Object.keys(s.stats).forEach((k) => { s.stats[k] = 70; }); s.pressure = 0;
+    nextWindow(s);
+  }
+  return s;
+}
+
+test('存档：v0.6（版本 4）战役存档仍可读取，常设授权补期限，援助线为空，来源标注', function () {
+  const s = newCampaign();
+  L.grantStanding(s, 'logistics');
+  L.saveGame(s);
+  const raw = JSON.parse(localStorage.getItem(L.campaignSaveKey));
+  raw.version = 4; raw.state.schemaVersion = 4; raw.state.version = 4;
+  delete raw.state.aid; delete raw.state.wrapup;
+  delete raw.state.standing.logistics.expiresRound;
+  localStorage.setItem(L.campaignSaveKey, JSON.stringify(raw));
+  const loaded = L.loadSavedGame('campaign');
+  assert.ok(loaded, 'v0.6 存档可读');
+  assert.equal(loaded.migratedFrom, 4);
+  assert.deepEqual(loaded.state.aid.lines, []);
+  assert.equal(loaded.state.wrapup, null);
+  assert.equal(typeof loaded.state.standing.logistics.expiresRound, 'number');
+  assert.equal(loaded.state.schemaVersion, 5);
+  assert.ok(localStorage.getItem(L.campaignSaveKey), '读取不删除原存档');
+});
+
+test('存档：收束选择阶段与收束进行中均可刷新恢复', function () {
+  const s = reachOffer();
+  assert.equal(s.phase, 'wrapup_offer', '到达收束选择');
+  L.saveGame(s);
+  const a = L.loadSavedGame('campaign');
+  assert.ok(a && a.state.phase === 'wrapup_offer' && a.state.wrapup.pending, '选择阶段恢复');
+  assert.equal(L.startWrapUp(a.state).ok, true);
+  L.continueFromInterlude(a.state);
+  assert.equal(a.state.round, 14);
+  L.saveGame(a.state);
+  const b = L.loadSavedGame('campaign');
+  assert.ok(b && b.state.round === 14 && b.state.wrapup.started, '收束进行中恢复');
+  assert.deepEqual(b.state.wrapup.tracks, a.state.wrapup.tracks);
+  assert.equal(L.getEvent(b.state).id, 'c14');
+  nextWindow(b.state);
+  assert.equal(b.state.round, 15, '恢复后可继续推进到 c15');
 });
 
 console.log('\n战役测试：' + passed + ' 通过，' + failed + ' 失败');

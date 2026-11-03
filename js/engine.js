@@ -20,7 +20,7 @@
   const CAMPAIGN = root.LZS_CAMPAIGN || null;
   const CAMPAIGN_EVENTS = CAMPAIGN ? CAMPAIGN.events : [];
   const WRAP_EVENTS = CAMPAIGN && CAMPAIGN.wrapupEvents ? CAMPAIGN.wrapupEvents : [];
-  const CAMPAIGN_VERSION = 4;
+  const CAMPAIGN_VERSION = 5; /* v1.0：新增 aid / wrapup；仍可读取 v0.6 的 4 */
 
   function isCampaign(state) { return !!(state && state.scenario === 'campaign' && CAMPAIGN); }
   function eventsFor(state) { return isCampaign(state) ? (state.wrapup && state.wrapup.started ? CAMPAIGN_EVENTS.concat(WRAP_EVENTS) : CAMPAIGN_EVENTS) : EVENTS; }
@@ -2777,12 +2777,12 @@
       if (!raw) return null;
       const data = JSON.parse(raw);
       /* 七日存档与战役存档分键保存：旧七日存档不会被当作 38 天战役读入。 */
-      if (!data || !data.state || (campaignKey ? [CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
+      if (!data || !data.state || (campaignKey ? [4, CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
       if (campaignKey && data.state.scenario !== 'campaign') return null;
       if (!campaignKey && data.state.scenario === 'campaign') return null;
       const state = normalizeLoadedState(data.state, data.version);
       if (!state) return null;
-      return { version: data.version, migratedFrom: !campaignKey && data.version < VERSION ? data.version : null, savedAt: data.savedAt, state: state };
+      return { version: data.version, migratedFrom: (campaignKey ? data.version < CAMPAIGN_VERSION : data.version < VERSION) ? data.version : null, savedAt: data.savedAt, state: state };
     } catch (error) {
       return null;
     }
@@ -2792,7 +2792,7 @@
     if (!input || typeof input !== 'object') return null;
     const loadedCampaign = input.scenario === 'campaign' && !!CAMPAIGN;
     if (input.scenario === 'campaign' && !CAMPAIGN) return null;
-    const scenarioProbe = { scenario: loadedCampaign ? 'campaign' : 'classic', round: input.round };
+    const scenarioProbe = { scenario: loadedCampaign ? 'campaign' : 'classic', round: input.round, wrapup: input.wrapup && input.wrapup.started ? { started: true } : null };
     const FINAL_FOR_INPUT = finalRoundFor(scenarioProbe);
     if (!Number.isInteger(input.round) || input.round < 1 || input.round > FINAL_FOR_INPUT) return null;
     if (!input.stats || typeof input.stats !== 'object') return null;
@@ -2801,7 +2801,7 @@
     STAT_KEYS.forEach(function (key) {
       stats[key] = clamp(input.stats[key], 0, 100);
     });
-    const phase = ['briefing', 'interlude', 'ending'].indexOf(input.phase) !== -1 ? input.phase : 'briefing';
+    const phase = ['briefing', 'interlude', 'ending', 'wrapup_offer'].indexOf(input.phase) !== -1 ? input.phase : 'briefing';
     const choices = Array.isArray(input.choices) ? input.choices : [];
     const commands = Array.isArray(input.commands) ? input.commands.filter(function (command) {
       return command && typeof command.id === 'string';
@@ -2860,7 +2860,7 @@
       version: loadedCampaign ? CAMPAIGN_VERSION : VERSION,
       schemaVersion: loadedCampaign ? CAMPAIGN_VERSION : 3,
       scenario: loadedCampaign ? 'campaign' : 'classic',
-      migratedFrom: sourceVersion && sourceVersion < VERSION ? sourceVersion : (input.migratedFrom || null),
+      migratedFrom: sourceVersion && sourceVersion < (loadedCampaign ? CAMPAIGN_VERSION : VERSION) ? sourceVersion : (input.migratedFrom || null),
       round: input.round,
       ap: clamp(input.ap, 0, apMaxFor(scenarioProbe, input.round)),
       apMax: apMaxFor(scenarioProbe, input.round),
@@ -2902,6 +2902,20 @@
         windows: Array.isArray(c.windows) ? c.windows : []
       };
       if (typeof input.collapseId === 'string') state.collapseId = input.collapseId;
+      /* v0.6 存档没有援助线与收束字段；缺省为空，不伪造过去。 */
+      state.aid = input.aid && Array.isArray(input.aid.lines) ? { lines: input.aid.lines.filter(function (l) { return l && typeof l.id === 'string' && Array.isArray(l.log); }) } : { lines: [] };
+      state.wrapup = input.wrapup && typeof input.wrapup === 'object' ? input.wrapup : null;
+      /* v0.6 的常设授权没有期限；读入时补一个从授权回合起算的期限，不让旧授权永久有效。 */
+      Object.keys(state.standing).forEach(function (id) {
+        const rec = state.standing[id];
+        if (rec && rec.active && typeof rec.expiresRound !== 'number') {
+          rec.expiresRound = (Number.isInteger(rec.grantedRound) ? rec.grantedRound : state.round) + ((STRAT.standing && STRAT.standing.durationWindows) || 4);
+          rec.items = Array.isArray(rec.items) ? rec.items : [];
+          rec.handled = rec.handled || 0;
+          rec.suspendedRounds = rec.suspendedRounds || 0;
+        }
+      });
+      if (state.phase === 'wrapup_offer' && !(state.wrapup && state.wrapup.pending)) { state.phase = 'briefing'; state.wrapup = null; }
     }
     if (state.phase === 'interlude' && !state.interlude) {
       state.phase = 'briefing';
