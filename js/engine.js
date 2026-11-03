@@ -569,6 +569,7 @@
       interlude: null,
       ending: null,
       standing: {},
+      aid: { lines: [] },
       dispatches: [],
       interventionRounds: [],
       timeline: [],
@@ -610,6 +611,83 @@
     }
 
     return { deltas: deltas, pressureDelta: pressureDelta };
+  }
+
+  /*
+   * 援助生命周期：choice.aid 指向 CAMPAIGN.aidLines 中的一条线，签发后逐窗口推进。
+   * 效果只在对应阶段到达时生效；gate 不满足则顺延，顺延过多则停滞。
+   */
+  function aidSpec(id) { return ((CAMPAIGN && CAMPAIGN.aidLines) || {})[id] || null; }
+
+  function startAidLine(state, choice, command) {
+    if (!isCampaign(state) || !choice || !choice.aid) return null;
+    const spec = aidSpec(choice.aid);
+    if (!spec) return null;
+    state.aid = state.aid || { lines: [] };
+    if (state.aid.lines.some(function (line) { return line.id === choice.aid; })) return null;
+    const warm = (spec.warm || []).some(function (flag) { return state.flags[flag]; });
+    const first = spec.stages[0];
+    const delay = Math.max(1, (first.delay || 1) - (warm && (first.delay || 1) > 1 ? 1 : 0));
+    const line = { id: choice.aid, choiceId: choice.id, title: spec.label, startedRound: state.round, stage: -1, nextRound: state.round + delay, slips: 0, stalled: false, done: false, warm: warm, log: [] };
+    state.aid.lines.push(line);
+    return line;
+  }
+
+  function aidGateMet(state, gate) {
+    if (!gate) return true;
+    const stats = gate.minStat || {};
+    const low = Object.keys(stats).some(function (key) { return state.stats[key] < stats[key]; });
+    if (low) return false;
+    return !(gate.none || []).some(function (flag) { return state.flags[flag]; });
+  }
+
+  function advanceAidLines(state) {
+    const events = [];
+    if (!isCampaign(state) || !state.aid) return events;
+    state.aid.lines.forEach(function (line) {
+      if (line.done || line.stalled || state.round < line.nextRound) return;
+      const spec = aidSpec(line.id);
+      if (!spec) return;
+      const stage = spec.stages[line.stage + 1];
+      if (!stage) { line.done = true; return; }
+      if (!aidGateMet(state, stage.gate)) {
+        line.slips += 1;
+        if (line.slips > (spec.maxSlips || 2)) {
+          line.stalled = true;
+          const entry = { round: state.round, stage: stage.key, label: spec.label + '停滞', note: '条件一直没有满足，' + stage.label + '无法推进，需要重新协调。', stalled: true };
+          line.log.push(entry); events.push(Object.assign({ lineId: line.id }, entry));
+          addLog(state, 'aid', entry.label, entry.note);
+        } else {
+          line.nextRound = state.round + 1;
+          const entry = { round: state.round, stage: stage.key, label: spec.label + '推迟', note: stage.label + '的条件尚未具备，顺延一个窗口。', slipped: true };
+          line.log.push(entry); events.push(Object.assign({ lineId: line.id }, entry));
+          addLog(state, 'aid', entry.label, entry.note);
+        }
+        return;
+      }
+      const res = applyEffectValues(state, stage.effects);
+      line.stage += 1;
+      const following = spec.stages[line.stage + 1];
+      if (following) line.nextRound = state.round + Math.max(1, following.delay || 1); else line.done = true;
+      const entry = { round: state.round, stage: stage.key, label: stage.label, note: stage.note, deltas: res.deltas, final: !following };
+      line.log.push(entry); events.push(Object.assign({ lineId: line.id, title: spec.label }, entry));
+      addLog(state, 'aid', spec.label + '：' + stage.label, stage.note + (Object.keys(res.deltas).length ? '（' + formatDeltaText(res.deltas, 0) + '）' : ''));
+    });
+    return events;
+  }
+
+  /* 供界面显示：每条援助线当前走到哪里、下一步预计何时。 */
+  function getAidStatus(state) {
+    const lines = (state.aid && state.aid.lines) || [];
+    return lines.map(function (line) {
+      const spec = aidSpec(line.id);
+      const total = spec ? spec.stages.length : 0;
+      const current = spec && line.stage >= 0 ? spec.stages[line.stage] : null;
+      const next = spec ? spec.stages[line.stage + 1] : null;
+      let status = '请求已提交';
+      if (line.done) status = '已全部落实'; else if (line.stalled) status = '停滞，需要重新协调'; else if (current) status = current.label;
+      return { id: line.id, title: line.title, status: status, stage: line.stage + 1, total: total, next: next && !line.done && !line.stalled ? next.label : null, etaRounds: next && !line.done && !line.stalled ? Math.max(0, line.nextRound - state.round) : null, stalled: line.stalled, done: line.done, log: line.log.slice() };
+    });
   }
 
   function scheduleDelayed(state, event, choice, commandId) {
@@ -918,6 +996,7 @@
     if (!choice) return { ok: false, error: '命令来源数据缺失。', code: 'EVENT' };
     const result = applyImmediateRecord(state, command, choice);
     const scheduled = scheduleDelayed(state, event, choice, command.id);
+    startAidLine(state, choice, command);
     command.effectsApplied = true;
     command.status = 'awaiting_feedback';
     command.executedRound = state.round;
@@ -2003,6 +2082,7 @@
       }
     });
     expireStanding(state);
+    const aidEvents = advanceAidLines(state);
     const echoes = applyCampaignOnEnter(state, next);
     recordTimeline(state);
     ending = checkCollapse(state);
@@ -2017,6 +2097,7 @@
       dateLabel: interruption ? campaignDateLabel(c.day) + '（提前）' : next.dateLabel,
       campaign: summary,
       echoes: echoes,
+      aid: aidEvents,
       pressure: { before: pressureBefore, rise: pressureTotal, delayed: delayedPressure, after: state.pressure },
       attrition: totals,
       delayed: delayed,
@@ -2752,6 +2833,8 @@
     getLinkEffect: getLinkEffect,
     grantStanding: grantStanding,
     revokeStanding: revokeStanding,
+    getAidStatus: getAidStatus,
+    advanceAidLines: advanceAidLines,
     getDispatches: getDispatches,
     resolveDispatch: resolveDispatch,
     getGovernanceProfile: getGovernanceProfile,

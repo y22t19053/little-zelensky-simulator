@@ -41,7 +41,7 @@
         { id: 'c_first_appeal', title: '向主要伙伴发出首轮紧急请求', ap: 1, agency: 'foreign',
           summary: '把需求尽早送到伙伴桌面。', staff: '首轮请求不会立刻改变前线。',
           effects: { intl: 4 }, flags: ['c_first_appeal'],
-          delayed: [{ delay: 3, label: '首轮请求进入伙伴议程', note: '部分伙伴开始讨论具体援助。', effects: { intl: 3, reserve: 2 } }] },
+          aid: 'appeal' },
         { id: 'c_disperse', title: '授权分散防空与航空力量', ap: 1, agency: 'general_staff',
           summary: '减少首轮打击造成的集中损失。', staff: '分散会让后续协调更复杂。',
           effects: { army: 3, reserve: -2, pressure: -1 }, flags: ['c_disperse'] }
@@ -243,7 +243,7 @@
         { id: 'c_wishlist', title: '向伙伴提交具体装备清单', ap: 1, agency: 'foreign',
           summary: '把“请求支持”变成可以执行的清单。', staff: '清单进入伙伴议程需要时间。',
           effects: { intl: 2 }, flags: ['c_wishlist'],
-          delayed: [{ delay: 3, label: '清单中的部分装备到位', note: '部分装备开始到达（模拟设计值，不代表真实交付数量）。', effects: { army: 4, reserve: 2 } }] }
+          aid: 'equipment' }
       ]
     },
     {
@@ -335,7 +335,7 @@
         { id: 'c_air_defense_aid', title: '向伙伴争取防空与反装甲援助', ap: 1, agency: 'foreign',
           summary: '针对当前最紧的缺口。', staff: '交付需要时间。',
           effects: { intl: 2 }, flags: ['c_aid_requested'],
-          delayed: [{ delay: 1, label: '援助陆续到位', note: '部分援助到位（模拟设计值）。', effects: { army: 4, reserve: 3 } }] },
+          aid: 'air_defense' },
         { id: 'c_civil_admin', title: '恢复首都民事管理与公共服务', ap: 1, agency: 'interior',
           summary: '让城市秩序从紧急状态转为可持续状态。', staff: '安全力量会被部分抽走。',
           effects: { gov: 3, will: 2, safety: -2 } },
@@ -756,6 +756,27 @@
     saveKey: 'lzs_campaign_v1',
     schemaVersion: 4,
     totalDays: 38,
+    /* 援助生命周期：请求 → 考虑 → 承诺 → 运输 → 抵达 → 分配 → 生效。
+       delay 以决策窗口计；gate 不满足则顺延，顺延超过 maxSlips 后停滞并上报。
+       warm：已有前期外交铺垫时，第一阶段缩短一个窗口。数量为模拟设计值，不代表真实交付数。 */
+    aidLines: {
+      appeal: { label: '首轮紧急请求', warm: [], maxSlips: 2, stages: [
+        { key: 'considering', label: '伙伴内部讨论', delay: 1, note: '首轮请求已送达，伙伴正在内部讨论。' },
+        { key: 'commitment', label: '作出初步承诺', delay: 2, gate: { minStat: { intl: 25 } }, effects: { intl: 3 }, note: '部分伙伴表态愿意提供支持，具体物资还没有清单。' },
+        { key: 'arrival', label: '首批物资抵达', delay: 1, effects: { reserve: 2 }, note: '首批物资已到边境接收点，进入储备登记（模拟设计值）。' }
+      ] },
+      equipment: { label: '具体装备清单', warm: ['c_first_appeal'], maxSlips: 2, stages: [
+        { key: 'considering', label: '清单进入审议', delay: 1, gate: { minStat: { intl: 25 } }, note: '伙伴已收到装备清单，正在核对来源与运输方式。' },
+        { key: 'transport', label: '物资在途', delay: 1, gate: { none: ['c_transport_cut'] }, note: '物资已启运，沿陆路转运，需要边境接收和车队安排。' },
+        { key: 'arrival', label: '物资抵达', delay: 1, effects: { reserve: 2 }, note: '一批装备抵达接收点，尚未分发到部队。' },
+        { key: 'allocation', label: '分配到部队', delay: 1, effects: { army: 4 }, note: '参谋部已把装备分配到几个重点方向，部队开始接装（模拟设计值）。' }
+      ] },
+      air_defense: { label: '防空与反装甲援助', warm: ['c_first_appeal', 'c_wishlist'], maxSlips: 2, stages: [
+        { key: 'commitment', label: '伙伴作出承诺', delay: 2, gate: { minStat: { intl: 25 } }, note: '伙伴同意提供防空与反装甲装备，正在安排交付。' },
+        { key: 'arrival', label: '援助抵达', delay: 1, effects: { reserve: 3 }, note: '第一批援助抵达，正在清点和编组（模拟设计值）。' },
+        { key: 'allocation', label: '分配与投入使用', delay: 1, effects: { army: 4 }, note: '援助已分配到重点方向，需要几天训练后才能充分使用。' }
+      ] }
+    },
     acts: ACTS,
     events: EVENTS,
     onEnter: ON_ENTER,
