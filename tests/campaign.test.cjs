@@ -280,5 +280,89 @@ test('战场态势由状态与旗标推导，6 个方向', function () {
   assert.equal(after.status, 'denied');
 });
 
+
+function issueAuth(s, id) {
+  const r = L.issueCommand(s, id);
+  assert.equal(r.ok, true, id + ' ' + (r.error || ''));
+  const c = s.commands[s.commands.length - 1];
+  if (c.status === 'issued') assert.equal(L.authorizeCommand(s, c.id).ok, true);
+  return c;
+}
+function nextWindow(s) {
+  const cheap = L.getAvailableChoices(s).sort((a, b) => a.ap - b.ap)[0];
+  if (cheap && !s.executed.length) { const r = L.issueCommand(s, cheap.id); if (r.ok) { const c = s.commands[s.commands.length - 1]; if (c.status === 'issued') L.authorizeCommand(s, c.id); } }
+  const r = L.endRound(s);
+  assert.equal(r.ok, true, r.error || '');
+  if (s.phase === 'interlude') L.continueFromInterlude(s);
+  return r;
+}
+
+console.log('\nv1.0 援助与收束');
+
+test('援助：请求后按阶段推进，抵达不早于请求后三个窗口，阶段数值只在对应阶段结算', function () {
+  const s = newCampaign();
+  issueAuth(s, 'c_first_appeal');
+  const start = s.round;
+  for (let i = 0; i < 6 && !s.ending; i++) nextWindow(s);
+  const line = L.getAidStatus(s).find((x) => x.id === 'appeal');
+  assert.ok(line, '援助线存在');
+  const log = line.log;
+  assert.deepEqual(log.map((x) => x.stage), ['considering', 'commitment', 'arrival']);
+  assert.ok(log.every((x, i) => i === 0 || x.round > log[i - 1].round), '阶段回合严格递增');
+  const arrival = log.find((x) => x.stage === 'arrival');
+  assert.ok(arrival.round - start >= 3, '抵达回合 ' + arrival.round + ' 距请求 ' + start);
+  const early = log.filter((x) => x.stage !== 'arrival' && x.stage !== 'commitment');
+  early.forEach((x) => assert.deepEqual(x.deltas, {}, '考虑阶段不产生数值'));
+  assert.equal(line.done, true);
+});
+
+test('援助：国际关系过低时承诺阶段顺延，超过顺延上限后搁置，且不会凭空到达', function () {
+  const s = newCampaign();
+  issueAuth(s, 'c_first_appeal');
+  for (let i = 0; i < 9 && !s.ending; i++) { s.stats.intl = Math.min(s.stats.intl, 20); nextWindow(s); }
+  const line = L.getAidStatus(s).find((x) => x.id === 'appeal');
+  assert.ok(line, '援助线存在');
+  assert.equal(line.done, false, '国际关系过低时不会完成');
+  assert.ok(line.stalled, '超过顺延上限后被搁置');
+  assert.ok(!line.log.some((x) => x.stage === 'arrival'), '没有抵达记录');
+});
+
+test('收束：A 直接结束与旧版同一结局，无惩罚；选 B 才进入 c14—c16', function () {
+  const a = S.play(S.ROUTES.near_history, {});
+  const b = S.play(S.ROUTES.near_history, { wrap: 'continue' });
+  assert.equal(a.state.ending.id, b.state.ending.id, '收束不改写 4 月 2 日已判定的结局');
+  assert.equal(a.state.ending.aftermath, undefined, 'A 没有收束记录');
+  assert.ok(!a.state.wrapup.started);
+  assert.ok(b.state.wrapup.started);
+  assert.deepEqual(b.trace.map((x) => x.id).slice(-3), ['c14', 'c15', 'c16']);
+  const af = b.state.ending.aftermath;
+  assert.ok(af && af.days >= 1 && af.days <= 14, '收束天数 ' + (af && af.days));
+  assert.equal(af.tracks.length, 8);
+  af.tracks.forEach((x) => assert.equal(typeof x.word, 'string'));
+});
+
+test('收束：最晚 4 月 16 日；收束期间不会因压力崩溃；可在任一窗口提前结束', function () {
+  const full = S.play(S.ROUTES.near_history, { wrap: 'continue' }).state;
+  assert.ok(full.ending.aftermath.days <= 14, '收束天数 ' + full.ending.aftermath.days);
+  assert.ok(Math.floor(full.campaign.day) <= 53, '内部天数 ' + full.campaign.day + '（第 53 天起算为 4 月 16 日之后）');
+  const early = S.play(function (state, ev) {
+    if (ev.id === 'c15') L.finishWrapUp(state);
+    return [];
+  }, { wrap: 'continue' }).state;
+  assert.ok(early.ending && early.ending.aftermath, '提前结束带有收束记录');
+  assert.ok(early.round <= 15);
+  const noEarly = L.createGame({ scenario: 'campaign' });
+  assert.equal(L.finishWrapUp(noEarly).ok, false, '没有开始收束时不能提前结束');
+});
+
+test('收束：进入快于清理会留下事故记录，进展用定性描述而不是数字', function () {
+  const r = S.play(function (state, ev) {
+    return ev.id === 'c14' ? ['w_open_access', 'w_security_check'] : [];
+  }, { wrap: 'continue' }).state;
+  assert.equal(typeof r.ending.aftermath.mood, 'string');
+  const st = L.getWrapStatus(r);
+  st.tracks.forEach((x) => assert.ok(!/\d/.test(x.word), x.label + ' 描述中不含数字'));
+});
+
 console.log('\n战役测试：' + passed + ' 通过，' + failed + ' 失败');
 if (failed) process.exitCode = 1;
