@@ -627,7 +627,7 @@
     const cs = campaignStatus();
     const carry = cs && cs.carryDays ? cs.carryDays : 0;
     const hasKey = (event.choices || []).some(function (c) { return c.keyDecision; });
-    return '<div class="window-span"><span>' + escapeHtml(event.span || event.dateLabel || '') + '</span><p>本窗口结束后，系统内部逐日模拟约 ' + escapeHtml(spanText(Number(event.days || 0) + carry)) + (carry ? '（含上一窗口中断后结转的 ' + escapeHtml(spanText(carry)) + '）' : '') + '。' + (event.interruptible === false ? '这段时间不会被中断。' : '越过危险线时可能提前中断，并发出紧急简报。') + '</p></div>' +
+    return '<div class="window-span"><span>' + escapeHtml(event.span || event.dateLabel || '') + '</span><p>本窗口结束后，时间会推进约 ' + escapeHtml(spanText(Number(event.days || 0) + carry)) + (carry ? '（含上一窗口中断后结转的 ' + escapeHtml(spanText(carry)) + '）' : '') + '。' + (event.interruptible === false ? '这段时间不会被中断。' : '越过危险线时可能提前中断，并发出紧急简报。') + '</p></div>' +
       (hasKey ? '<div class="key-banner" role="note"><strong>重大决策</strong><p>本窗口包含高代价、多数不可逆的总统决定。同组方案互斥，签署后锁定。总统授权方向和资源，具体战斗由军事指挥链执行。</p></div>' : '');
   }
   function keyDetailHtml(choice) {
@@ -696,7 +696,7 @@
     if (!c) return '';
     const it = c.interruption;
     const echoes = data.echoes || [];
-    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>内部逐日模拟 · ' + escapeHtml(spanText(c.days)) + '</h3><p>' + escapeHtml((c.fromLabel || '') + ' 至 ' + (c.toLabel || '')) + '：命令执行、部队与资源消耗、前线压力和延迟后果按天结算。这里只汇报有意义的变化。</p>' +
+    return '<li class="campaign-step"><span class="settlement-index">00</span><section><h3>这几天里 · ' + escapeHtml(spanText(c.days)) + '</h3><p>' + escapeHtml((c.fromLabel || '') + ' 至 ' + (c.toLabel || '')) + '：命令照常执行，部队和物资持续消耗，前线压力与此前留下的后果一并推进。下面只列出值得你知道的变化。</p>' +
       (it ? '<div class="interrupt-note" role="alert"><strong>紧急简报 · 时间推进提前中断</strong><p>' + escapeHtml(it.dateLabel + '，' + it.title + '。剩余 ' + it.carried + ' 天并入下一个决策窗口。') + '</p></div>' : '') +
       (echoes.length ? '<ul class="settlement-list">' + echoes.map(function (item) { return '<li><div><strong>' + escapeHtml(item.title) + '</strong><span>此前决定的后果</span></div><p>' + escapeHtml(item.text || '') + '</p><div class="effect-row">' + (effectChips(item.deltas || {}, item.pressureDelta || 0) || '') + '</div></li>'; }).join('') + '</ul>' : '') +
       '</section></li>';
@@ -986,7 +986,7 @@
       return '<li><strong>' + escapeHtml(statFullLabel(key)) + '</strong>：' + escapeHtml(L.statMeta[key].hint + delta) + '</li>';
     }).join('');
     el.statsPanel.innerHTML = '<details class="state-details"' + (ui.statesOpen || window.innerWidth > 700 ? ' open' : '') + '><summary><span class="state-heading"><span class="panel-kicker">NATIONAL CONDITION</span><strong id="stats-title">国家状态</strong></span><span class="mobile-vitals">' + vitals + '<span class="state-more">七项</span></span><span class="state-toggle">展开 / 收起</span></summary><div class="state-body">' + rows +
-      '<section class="alarm-panel"><h3>当前告警</h3>' + alarmHtml + '</section>' +
+      '<section class="alarm-panel"><h3>需要留意的风险</h3>' + alarmHtml + '</section>' +
       '<details class="state-notes"><summary>状态含义与最近变化</summary><ul>' + notes + '</ul></details>' +
       '<p class="stat-hint">风险提示只反映当前数值；国家是否失守，由另外的底线条件判定。</p></div></details>';
     const details = el.statsPanel.querySelector('.state-details');

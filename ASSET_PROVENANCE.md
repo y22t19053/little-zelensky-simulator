@@ -43,3 +43,13 @@
 - 双击 `production/listening-room.html` 可试听全部音乐与音效；页面不自动播放。
 - `production/README.md` 记录复跑命令与目录约定。
 - 修改或重新生成资产后，运行 `production/build_asset_manifest.py` 更新公开清单和包体报告。
+
+## v1.0.0 新增：战役场景插画与海报
+
+- 12 张战役场景插画是 SVG，由 `production/visual/generate_campaign_scenes.cjs` 程序生成，不是 AI 出图，不含照片或外部图片。尺寸 1200×700，位于 `assets/events/`：
+  `antonov-assault`、`runway-denial`、`vasylkiv`、`irpin-bridge`、`bucha-irpin-evac`、`moshchun`、`brovary`、`chernihiv`、`aid-arrival`、`office-waiting`、`reentry`、`wrap-repair`。
+- 配色沿用 v0.6 界面（深橄榄、档案纸、琥珀），另加少量乌克兰蓝黄作点缀。每张图内嵌说明“ORIGINAL SIMULATED ILLUSTRATION · NOT A PHOTOGRAPH · NO REAL UNIT OR INSIGNIA”，界面图注为“原创模拟插画 · 非历史照片”。
+- 不含美国国旗、虚构文字或虚构的真实部队标识。
+- 第 1、4、11、12 窗口仍复用 v0.3 的 SDXL 七回合图（标注“原创抽象示意”）；本环境没有可用的出图后端，所以没有新增 AI 图片。
+- 纪念海报由 `js/poster.js` 在浏览器里用 canvas 绘制，二维码由 `js/qr.js` 在本地生成，没有外部图片、字体文件或网络请求。
+- 本环境无法目视图片，上述插画只通过 XML 解析和页面断言检查，未经人工审看。
