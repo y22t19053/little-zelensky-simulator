@@ -439,6 +439,94 @@
       ]
     }
   ];
+  /* 4 月 2 日之后的可选收束阶段（第五幕）：最多 14 天，最晚 4 月 16 日。
+     只模拟政府层面的优先级与资源协调，不声称两周内完成排雷或重建。
+     choice.wrap 写入收束进度（0—100，界面只显示定性描述）。 */
+  const WRAP_ACT = { id: 5, title: '第五幕 · 战役收束', range: '4 月 3 日 — 4 月 16 日', tone: 'aftermath', music: 'night', weight: 0, relief: 0,
+    note: '大规模战斗已经过去，留下的是雷区、毁坏的道路和仍在寻找的人。这里要排的是先后次序，不是打赢什么。' };
+  const WRAP_EVENTS = [
+    {
+      id: 'c14', act: 5, day: 39, days: 5, ap: 4, interruptible: false,
+      date: '2022-04-03', dateLabel: '4 月 3 日 — 4 月 7 日', time: '五天', span: '5 天',
+      title: '雷区、未爆物与重新进入', kicker: '战役收束 · 残局',
+      intel: { level: '中', tone: '工兵与地方报告', note: '工兵在道路两侧和居民区入口发现大量地雷与未爆弹药。清理按优先级逐段推进，没有哪一天能宣布完成。' },
+      pressureRise: 0,
+      situation: [
+        '首都西北的城镇已无对方部队，但道路、农田、房屋和车辆残骸里还有地雷和未爆物。',
+        '居民在询问何时可以回家，记者和志愿者也在要求进入。工兵人手有限，清理只能一段一段做。'
+      ],
+      known: ['主干道和居民区入口发现了地雷与未爆物。', '工兵、救援和医疗力量都不够同时覆盖所有地方。'],
+      unknown: ['各处雷场的完整分布。', '对方是否留下了新的布设记录。'],
+      choices: [
+        { id: 'w_mine_priority', title: '工兵优先清理主干道和居民区入口', ap: 2, agency: 'interior',
+          summary: '先让救援车和抢修队能够通行，再向外扩展。', staff: '农田和偏远村庄要等更久。',
+          effects: { safety: 2, reserve: -2 }, wrap: { mines: 18, roads: 8 }, flags: ['w_mine_priority'] },
+        { id: 'w_security_check', title: '分区设检查点，限制进入', ap: 1, agency: 'interior',
+          summary: '没有查清的地方不让人进，同时继续核对撤退情报。', staff: '居民会觉得回家的路被拦住了。',
+          effects: { safety: 2 }, wrap: { reentry: 6, mines: 6, intel: 8 }, flags: ['w_checkpoints'] },
+        { id: 'w_open_access', title: '允许居民和媒体有序进入已清理区域', ap: 1, agency: 'interior',
+          summary: '让外界看到真实情况，也让居民尽快看到自己的家。', staff: '清理没跟上的地方，伤亡风险会上升。',
+          effects: { will: 3, safety: -2 }, wrap: { reentry: 18, returnees: 6 }, flags: ['w_open_access'] },
+        { id: 'w_rescue', title: '组织搜救队和医疗转运', ap: 1, agency: 'logistics',
+          summary: '先找人、救治伤员，再谈其他。', staff: '车辆和医疗物资会被占用。',
+          effects: { will: 2, reserve: -2 }, wrap: { missing: 14 }, flags: ['w_rescue'] }
+      ]
+    },
+    {
+      id: 'c15', act: 5, day: 44, days: 5, ap: 4, interruptible: false,
+      date: '2022-04-08', dateLabel: '4 月 8 日 — 4 月 12 日', time: '五天', span: '5 天',
+      title: '道路、桥梁与基础设施', kicker: '战役收束 · 恢复',
+      intel: { level: '中', tone: '后勤与地方报告', note: '被炸毁或损坏的桥梁影响救援和物资运输。供水、供电和通信在部分城镇仍然中断。' },
+      pressureRise: 0,
+      situation: [
+        '此前为阻滞对方而炸毁的桥梁，现在成了运送物资和疏散伤员的障碍。',
+        '部分城镇没有稳定的水电和通信，医院靠备用电源运转。'
+      ],
+      known: ['部分桥梁与路段无法通行。', '水、电、通信恢复得不均衡。'],
+      unknown: ['地下管线的受损程度。', '哪些建筑已经不能居住。'],
+      choices: [
+        { id: 'w_roads', title: '优先抢修通往首都的道路与桥梁', ap: 2, agency: 'logistics',
+          summary: '让物资和救援车队有稳定的通道。', staff: '用掉工程力量和材料。',
+          effects: { reserve: -2 }, wrap: { roads: 18, infra: 4 }, flags: ['w_roads'] },
+        { id: 'w_utilities', title: '恢复水、电、供暖和通信', ap: 1, agency: 'logistics',
+          summary: '先保医院和居民集中的地方。', staff: '偏远村庄要排在后面。',
+          effects: { will: 2, reserve: -2 }, wrap: { infra: 16 }, flags: ['w_utilities'] },
+        { id: 'w_identify', title: '统一登记失踪与遇难人员信息', ap: 1, agency: 'interior',
+          summary: '家属需要一个能查询的地方。', staff: '登记比救援慢，家属会着急。',
+          effects: { gov: 2 }, wrap: { missing: 14 }, flags: ['w_identify'] },
+        { id: 'w_medical', title: '前移医疗点，转运伤员', ap: 1, agency: 'logistics',
+          summary: '把伤员送到有条件的医院。', staff: '医疗物资会更紧。',
+          effects: { will: 2, reserve: -1 }, wrap: { missing: 6, returnees: 4 } }
+      ]
+    },
+    {
+      id: 'c16', act: 5, day: 49, days: 4, ap: 3, interruptible: false,
+      date: '2022-04-13', dateLabel: '4 月 13 日 — 4 月 16 日', time: '四天', span: '4 天',
+      title: '平民返回与部队恢复', kicker: '战役收束 · 移交',
+      intel: { level: '中', tone: '参谋部与地方报告', note: '部队需要休整和补充，地方政府希望接手日常管理。撤退情报仍在继续核实。' },
+      pressureRise: 0,
+      situation: [
+        '参战部队已经连续作战数周，装备和人员都需要恢复。',
+        '地方政府能否接手日常管理，取决于这几周里水电、道路和安全检查做到了什么程度。'
+      ],
+      known: ['部队需要轮换休整。', '地方政府已经开始接手部分工作。'],
+      unknown: ['对方是否会在北面重新集结。', '返回的居民会不会遇到尚未发现的雷场。'],
+      choices: [
+        { id: 'w_returnee_conditions', title: '公布分区返回条件和时间表', ap: 1, agency: 'interior',
+          summary: '告诉居民哪些地方可以回、哪些要再等。', staff: '有人会因为还不能回去而不满。',
+          effects: { will: 3, gov: 1 }, wrap: { returnees: 14 }, flags: ['w_return_conditions'] },
+        { id: 'w_unit_recover', title: '让参战部队分批休整、补充装备', ap: 2, agency: 'general_staff',
+          summary: '先恢复战斗力，再谈后续部署。', staff: '休整期间有些方向会薄弱。',
+          effects: { army: 3, reserve: -2 }, wrap: { recovery: 18 }, flags: ['w_unit_recover'] },
+        { id: 'w_confirm_withdrawal', title: '继续核实撤退情报，保持警戒', ap: 1, agency: 'general_staff',
+          summary: '确认对方是真撤还是换位置。', staff: '警戒会占用本该休整的兵力。',
+          effects: { kyiv: 1 }, wrap: { intel: 16 }, flags: ['w_confirm_withdrawal'] },
+        { id: 'w_handover', title: '向地方政府移交日常管理', ap: 1, agency: 'interior',
+          summary: '中央从应急状态退回正常分工。', staff: '地方能力不足的地方可能出现空档。',
+          effects: { gov: 2 }, wrap: { returnees: 6, infra: 6 }, flags: ['w_handover'] }
+      ]
+    }
+  ];
   /* 进入窗口时的条件后果：只来自此前的命令与状态，用来让“之前的决定”在后来重新出现。 */
   const ON_ENTER = [
     { id: 'oe_runway_ground', window: 'c3', when: { any: ['c_runway_denied', 'c_transport_cut'] }, effects: { pressure: -2 },
@@ -759,6 +847,8 @@
     /* 援助生命周期：请求 → 考虑 → 承诺 → 运输 → 抵达 → 分配 → 生效。
        delay 以决策窗口计；gate 不满足则顺延，顺延超过 maxSlips 后停滞并上报。
        warm：已有前期外交铺垫时，第一阶段缩短一个窗口。数量为模拟设计值，不代表真实交付数。 */
+    wrapupEvents: WRAP_EVENTS,
+    wrapAct: WRAP_ACT,
     aidLines: {
       appeal: { label: '首轮紧急请求', warm: [], maxSlips: 2, stages: [
         { key: 'considering', label: '伙伴内部讨论', delay: 1, note: '首轮请求已送达，伙伴正在内部讨论。' },

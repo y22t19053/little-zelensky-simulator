@@ -19,18 +19,20 @@
   /* v0.6：基辅战役（2/24—4/2）。classic 七日模式保持原常量与存档键不变。 */
   const CAMPAIGN = root.LZS_CAMPAIGN || null;
   const CAMPAIGN_EVENTS = CAMPAIGN ? CAMPAIGN.events : [];
+  const WRAP_EVENTS = CAMPAIGN && CAMPAIGN.wrapupEvents ? CAMPAIGN.wrapupEvents : [];
   const CAMPAIGN_VERSION = 4;
 
   function isCampaign(state) { return !!(state && state.scenario === 'campaign' && CAMPAIGN); }
-  function eventsFor(state) { return isCampaign(state) ? CAMPAIGN_EVENTS : EVENTS; }
+  function eventsFor(state) { return isCampaign(state) ? (state.wrapup && state.wrapup.started ? CAMPAIGN_EVENTS.concat(WRAP_EVENTS) : CAMPAIGN_EVENTS) : EVENTS; }
+  function totalDaysFor(state) { return state && state.wrapup && state.wrapup.started ? 52 : (CAMPAIGN.totalDays || 38); }
   function finalRoundFor(state) { return eventsFor(state).length; }
   function apMaxFor(state, round) {
     if (!isCampaign(state)) return AP_MAX;
-    const event = CAMPAIGN_EVENTS[(round || state.round) - 1];
+    const event = eventsFor(state)[(round || state.round) - 1];
     return event && event.ap ? event.ap : AP_MAX;
   }
   function findEventById(id) {
-    return EVENTS.filter(function (item) { return item.id === id; })[0] || CAMPAIGN_EVENTS.filter(function (item) { return item.id === id; })[0] || null;
+    return EVENTS.filter(function (item) { return item.id === id; })[0] || CAMPAIGN_EVENTS.filter(function (item) { return item.id === id; })[0] || WRAP_EVENTS.filter(function (item) { return item.id === id; })[0] || null;
   }
   function flagsMatch(flags, when) {
     if (!when) return true;
@@ -570,6 +572,7 @@
       ending: null,
       standing: {},
       aid: { lines: [] },
+      wrapup: null,
       dispatches: [],
       interventionRounds: [],
       timeline: [],
@@ -746,6 +749,7 @@
     }
     if (choice.flags && choice.flags.length) {
       choice.flags.forEach(function (flag) { state.flags[flag] = true; });
+      if (choice.wrap) applyWrapTracks(state, choice.wrap);
     }
     state.effects.push({
       id: effectId,
@@ -1385,7 +1389,7 @@
   }
 
   function findChoiceAnywhere(choiceId) {
-    const all = EVENTS.concat(CAMPAIGN_EVENTS);
+    const all = EVENTS.concat(CAMPAIGN_EVENTS, WRAP_EVENTS);
     for (let i = 0; i < all.length; i += 1) {
       const found = getChoice(all[i], choiceId);
       if (found) return found;
@@ -1666,6 +1670,149 @@
     });
   }
 
+  /*
+   * 4 月 2 日之后的可选战役收束。
+   * A：直接结束（沿用 4 月 2 日已判定的结局，无任何惩罚）。
+   * B：继续最多 14 天（c14—c16），只处理残局；可以随时提前结束。
+   */
+  const WRAP_TRACKS = {
+    mines: { label: '雷区与未爆物', words: ['大片区域尚未排查', '只清出了主要通道', '重点地段陆续排查', '主要区域基本排查完', '大部分区域已确认安全'] },
+    roads: { label: '道路与桥梁', words: ['多处断路无法通行', '勉强通行，车队很慢', '主干道基本畅通', '主要通道已恢复', '通行基本稳定'] },
+    reentry: { label: '重新进入与安全', words: ['几乎没有组织进入', '少量人员在护送下进入', '分区有序进入', '大部分地区可有序进入', '进入已成常态'] },
+    infra: { label: '水电通信', words: ['多数地方仍然中断', '医院和少数地点有供应', '部分城镇恢复供应', '多数城镇恢复供应', '大体恢复'] },
+    missing: { label: '搜救与失踪人员', words: ['登记刚刚开始', '登记和搜救在推进', '多数线索已核对', '大部分信息已登记核对', '登记渠道稳定运转'] },
+    returnees: { label: '平民返回', words: ['几乎无人返回', '少数人回家查看', '部分居民获准返回', '较多居民已经返回', '大部分居民已回家'] },
+    recovery: { label: '部队恢复', words: ['部队仍在连续作战状态', '开始轮换', '部分单位完成休整', '多数单位完成休整', '主要单位已恢复'] },
+    intel: { label: '撤退情报确认', words: ['说法不一，未能确认', '有零散证据', '多个来源相互印证', '基本确认对方已离开', '已确认，仍保持警戒'] }
+  };
+  function wrapWord(key, value) {
+    const spec = WRAP_TRACKS[key];
+    const idx = value < 20 ? 0 : value < 40 ? 1 : value < 60 ? 2 : value < 80 ? 3 : 4;
+    return spec.words[idx];
+  }
+  function initialWrapTracks(state) {
+    const f = state.flags || {};
+    return {
+      mines: f.c_staged_return ? 30 : f.c_fast_return ? 12 : 18,
+      roads: 25,
+      reentry: f.c_fast_return ? 35 : f.c_staged_return ? 22 : 25,
+      infra: f.c_restore_services ? 38 : 30,
+      missing: f.c_documented ? 22 : 15,
+      returnees: 8,
+      recovery: clamp(Math.round((state.stats.army || 40) * 0.5), 10, 50),
+      intel: f.c_verify_signal ? 55 : 40
+    };
+  }
+  function applyWrapTracks(state, wrap) {
+    if (!state.wrapup || !state.wrapup.tracks || !wrap) return;
+    Object.keys(wrap).forEach(function (key) {
+      if (typeof state.wrapup.tracks[key] === 'number') state.wrapup.tracks[key] = clamp(state.wrapup.tracks[key] + wrap[key], 0, 100);
+    });
+  }
+  function wrapUpAvailable(state) {
+    return isCampaign(state) && !(state.wrapup && (state.wrapup.started || state.wrapup.declined)) && !state.ending;
+  }
+  function offerWrapUp(state, commandResults, summary, totals, pressureBefore, pressureTotal) {
+    const pending = buildCampaignEnding(state, null);
+    state.wrapup = { offered: true, started: false, declined: false, pending: pending, tracks: null, incident: false, windows: 0 };
+    state.phase = 'wrapup_offer';
+    state.apMax = 0;
+    state.ap = 0;
+    addLog(state, 'campaign', '4 月 2 日：战役告一段落', '可以现在结束，也可以再用最多 14 天处理战争留下的残局。');
+    state.interlude = {
+      round: state.round, dateLabel: '4 月 2 日', campaign: summary, echoes: [], aid: [],
+      pressure: { before: pressureBefore, rise: pressureTotal, delayed: 0, after: state.pressure },
+      attrition: totals, delayed: [], commandResults: commandResults, blocked: [], settledDispatches: [], dispatches: [], alarms: [], ap: 0, wrapOffer: true
+    };
+    return { ok: true, ending: null, wrapOffer: true, interlude: state.interlude, pressure: state.interlude.pressure, attrition: totals, delayed: [], commandResults: commandResults, campaign: summary };
+  }
+  function declineWrapUp(state) {
+    if (!state.wrapup || state.phase !== 'wrapup_offer') return { ok: false, error: '现在没有可结束的收束选择。' };
+    state.wrapup.declined = true;
+    finalizeEnding(state, state.wrapup.pending);
+    return { ok: true, ending: state.ending };
+  }
+  function startWrapUp(state) {
+    if (!state.wrapup || state.phase !== 'wrapup_offer') return { ok: false, error: '现在不能开始战役收束。' };
+    const c = state.campaign;
+    state.wrapup.started = true;
+    state.wrapup.tracks = initialWrapTracks(state);
+    state.wrapup.startRound = state.round + 1;
+    state.round += 1;
+    const next = getEvent(state);
+    state.apMax = next.ap;
+    state.ap = next.ap;
+    state.executed = [];
+    state.coordinationThisRound = {};
+    state.communicationsThisRound = {};
+    c.carryDays = 0;
+    c.day = next.day;
+    const delayed = resolveDueDelayed(state, state.round);
+    const aidEvents = advanceAidLines(state);
+    recordTimeline(state);
+    addLog(state, 'campaign', '战役收束开始', '时间继续推进，最晚到 4 月 16 日。随时可以结束。');
+    state.phase = 'interlude';
+    state.interlude = {
+      round: state.round, dateLabel: next.dateLabel,
+      campaign: { fromLabel: campaignDateLabel(c.day), toLabel: campaignDateLabel(c.day), days: 0, interruption: null },
+      echoes: [], aid: aidEvents, pressure: { before: state.pressure, rise: 0, delayed: 0, after: state.pressure },
+      attrition: {}, delayed: delayed, commandResults: [], blocked: [], settledDispatches: [], dispatches: [], alarms: [], ap: state.ap, wrapStart: true
+    };
+    return { ok: true, ending: null, interlude: state.interlude };
+  }
+  /* 每个收束窗口结束时的自然推进：很慢，且依赖已有资源和安全条件；贸然进入会留下后果。 */
+  function advanceWrapUp(state) {
+    const w = state.wrapup;
+    if (!w || !w.started || !w.tracks) return;
+    w.windows = (w.windows || 0) + 1;
+    const t = w.tracks;
+    const step = function (key, amount) { t[key] = clamp(t[key] + amount, 0, 100); };
+    step('mines', state.stats.reserve >= 25 ? 3 : 1);
+    step('roads', state.stats.reserve >= 25 ? 3 : 1);
+    step('infra', 2);
+    step('missing', 2);
+    step('recovery', state.stats.reserve >= 20 ? 3 : 1);
+    step('intel', 2);
+    step('reentry', 2);
+    step('returnees', t.mines >= 40 && t.reentry >= 40 ? 4 : 1);
+    if (!w.incident && t.reentry - t.mines > 22) {
+      w.incident = true;
+      applyEffectValues(state, { will: -3, safety: -3 });
+      addLog(state, 'wrapup', '进入过快，出现伤亡报告', '清理没有跟上进入的速度，有人员在未排查区域受伤。事故已记录在收束阶段的复盘里。');
+    }
+  }
+  function wrapAftermath(state) {
+    const w = state.wrapup || {};
+    const t = w.tracks || {};
+    const days = Math.max(0, Math.min(52, Math.floor(state.campaign.day || 38)) - 38);
+    const tracks = Object.keys(WRAP_TRACKS).map(function (key) {
+      return { key: key, label: WRAP_TRACKS[key].label, value: t[key], word: wrapWord(key, t[key]) };
+    });
+    const avg = tracks.reduce(function (sum, item) { return sum + item.value; }, 0) / (tracks.length || 1);
+    const mood = w.incident ? '进入速度超过了清理速度，收束阶段留下了一次本可避免的事故。'
+      : avg >= 55 ? '残局在有序推进，但雷区、失踪人员和受损设施的工作还要持续很久。'
+      : '残局刚刚进入处理阶段，大部分工作还在前面。';
+    return { days: days, endLabel: campaignDateLabel(38 + days), tracks: tracks, incident: !!w.incident, mood: mood, note: '这些描述是模拟推演，不代表真实的清理进度或数量。' };
+  }
+  function wrapUpEnding(state) {
+    const base = state.wrapup && state.wrapup.pending ? JSON.parse(JSON.stringify(state.wrapup.pending)) : buildCampaignEnding(state, null);
+    base.aftermath = wrapAftermath(state);
+    return base;
+  }
+  /* 收束阶段中随时结束（只在简报阶段，且已经开始收束）。 */
+  function finishWrapUp(state) {
+    if (!state.wrapup || !state.wrapup.started || state.phase === 'ending' || state.ending) return { ok: false, error: '现在不能提前结束收束。' };
+    finalizeEnding(state, wrapUpEnding(state));
+    return { ok: true, ending: state.ending };
+  }
+  function getWrapStatus(state) {
+    const w = state.wrapup;
+    if (!w) return null;
+    const out = { offered: !!w.offered, started: !!w.started, tracks: [] };
+    if (w.tracks) out.tracks = Object.keys(WRAP_TRACKS).map(function (key) { return { key: key, label: WRAP_TRACKS[key].label, word: wrapWord(key, w.tracks[key]), value: w.tracks[key] }; });
+    return out;
+  }
+
   function getAlarms(state) {
     const alarms = [];
     if (state.stats.gov <= 25) alarms.push({ key: 'gov', label: '政府连续性', value: state.stats.gov, level: 'critical' });
@@ -1936,18 +2083,18 @@
   }
 
   function campaignActFor(event) {
-    const acts = (CAMPAIGN && CAMPAIGN.acts) || [];
+    const acts = ((CAMPAIGN && CAMPAIGN.acts) || []).concat(CAMPAIGN && CAMPAIGN.wrapAct ? [CAMPAIGN.wrapAct] : []);
     return acts.filter(function (act) { return act.id === (event && event.act); })[0] || acts[0] || { id: 1, weight: 0.5, music: 'day', title: '' };
   }
 
   function getCampaignStatus(state) {
     if (!isCampaign(state)) return null;
     const event = getEvent(state);
-    const day = Math.min(CAMPAIGN.totalDays || 38, Math.floor(state.campaign.day || 1));
+    const day = Math.min(totalDaysFor(state), Math.floor(state.campaign.day || 1));
     const act = campaignActFor(event);
     return {
       day: day,
-      totalDays: CAMPAIGN.totalDays,
+      totalDays: totalDaysFor(state),
       dateLabel: campaignDateLabel(day),
       act: act,
       window: state.round,
@@ -2055,7 +2202,11 @@
     c.windows.push({ round: state.round, eventId: event.id, fromDay: Math.floor(startDay), toDay: Math.floor(c.day), simulated: simulated, interrupted: !!interruption });
     addLog(state, 'pressure', '内部逐日推进 ' + simulated + ' 天', '压力 ' + pressureBefore + ' → ' + state.pressure + '。' + (Object.keys(totals).length ? ' 累计侵蚀：' + formatDeltaText(totals, 0) : ''));
 
-    if (!ending && state.round >= finalRoundFor(state)) ending = buildCampaignEnding(state, null);
+    let wrapOffer = false;
+    if (!ending && state.round >= finalRoundFor(state)) {
+      if (wrapUpAvailable(state)) wrapOffer = true;
+      else ending = state.wrapup && state.wrapup.started ? wrapUpEnding(state) : buildCampaignEnding(state, null);
+    }
     const summary = {
       fromLabel: campaignDateLabel(startDay),
       toLabel: campaignDateLabel(Math.max(startDay, c.day - 0.01)),
@@ -2067,6 +2218,7 @@
       return { ok: true, ending: state.ending, commandResults: commandResults, pressure: { before: pressureBefore, rise: pressureTotal, after: state.pressure }, attrition: totals, campaign: summary };
     }
 
+    if (wrapOffer) return offerWrapUp(state, commandResults, summary, totals, pressureBefore, pressureTotal);
     state.round += 1;
     const next = getEvent(state);
     state.apMax = next && next.ap ? next.ap : AP_MAX;
@@ -2083,6 +2235,7 @@
     });
     expireStanding(state);
     const aidEvents = advanceAidLines(state);
+    advanceWrapUp(state);
     const echoes = applyCampaignOnEnter(state, next);
     recordTimeline(state);
     ending = checkCollapse(state);
@@ -2117,7 +2270,7 @@
     const result = CAMPAIGN.evaluate(state);
     const meta = CAMPAIGN.endings[result.id] || { code: '?', title: '战役结束', plausibility: '中', tone: 'costly', summary: '' };
     const toneMap = { held: 'success', costly: 'warning', hollow: 'warning', collapse: 'danger' };
-    const day = Math.min(CAMPAIGN.totalDays || 38, Math.floor(state.campaign.day || 1));
+    const day = Math.min(totalDaysFor(state), Math.floor(state.campaign.day || 1));
     const keyDecisions = (state.choices || []).map(function (record) {
       const choice = findChoiceAnywhere(record.choiceId);
       if (!choice || !choice.keyDecision) return null;
@@ -2156,7 +2309,7 @@
       reasons: result.reasons.slice(),
       dims: result.dims,
       epilogue: [
-        '战役在 ' + campaignDateLabel(day) + ' 收束（第 ' + day + ' / ' + CAMPAIGN.totalDays + ' 天，' + state.round + ' 个决策窗口）。',
+        '战役在 ' + campaignDateLabel(day) + ' 收束（第 ' + day + ' / ' + totalDaysFor(state) + ' 天，' + state.round + ' 个决策窗口）。',
         '结局由多项条件共同判定：政府连续性、首都、军队、行政运转、后勤、平民承受、国际支持和未来主动权。没有单一胜负分。',
         '所有数值是游戏模拟值，不代表真实伤亡、装备或兵力统计。'
       ],
@@ -2186,6 +2339,7 @@
   }
 
   function checkCollapse(state) {
+    if (state.wrapup && state.wrapup.started) return null;
     const id = collapseIdFor(state);
     if (!id) return null;
     if (isCampaign(state)) return buildCampaignEnding(state, id);
@@ -2581,7 +2735,7 @@
       endingTitle: state.ending ? state.ending.title : '',
       scenario: state.scenario || 'classic',
       finalRound: finalRoundFor(state),
-      day: state.campaign ? Math.min(CAMPAIGN.totalDays || 38, Math.floor(state.campaign.day)) : null,
+      day: state.campaign ? Math.min(totalDaysFor(state), Math.floor(state.campaign.day)) : null,
       stats: state.stats
     };
   }
@@ -2834,6 +2988,10 @@
     grantStanding: grantStanding,
     revokeStanding: revokeStanding,
     getAidStatus: getAidStatus,
+    startWrapUp: startWrapUp,
+    declineWrapUp: declineWrapUp,
+    finishWrapUp: finishWrapUp,
+    getWrapStatus: getWrapStatus,
     advanceAidLines: advanceAidLines,
     getDispatches: getDispatches,
     resolveDispatch: resolveDispatch,

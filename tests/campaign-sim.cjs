@@ -75,6 +75,10 @@ function play(plan, opts) {
     const ended = L.endRound(state);
     assert.equal(ended.ok, true, event.id + ' endRound: ' + (ended.error || ''));
     trace.push({ id: event.id, picks: state.choices.filter((c) => c.eventId === event.id).map((c) => c.choiceId), day: Math.floor(state.campaign.day), pressure: state.pressure, stats: Object.assign({}, state.stats), interrupted: !!(ended.campaign && ended.campaign.interruption) });
+    /* 4 月 2 日后的收束选择：默认选 A（直接结束，沿用已判定的结局）；o.wrap === 'continue' 时进入收束阶段。 */
+    if (state.phase === 'wrapup_offer') {
+      if (o.wrap === 'continue') { const sw = L.startWrapUp(state); assert.equal(sw.ok, true, 'startWrapUp'); } else { const dw = L.declineWrapUp(state); assert.equal(dw.ok, true, 'declineWrapUp'); }
+    }
     if (state.phase === 'interlude') L.continueFromInterlude(state);
   }
   assert.ok(state.ending, '战役没有结束（可能死锁）');
