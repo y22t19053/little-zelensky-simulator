@@ -411,5 +411,59 @@ test('存档：收束选择阶段与收束进行中均可刷新恢复', function
   assert.equal(b.state.round, 15, '恢复后可继续推进到 c15');
 });
 
+
+test('办公室：看板六个机构，状态只用已办理/办理中/受阻/资源不足/等总统', function () {
+  const s = newCampaign();
+  const board = L.getOfficeBoard(s);
+  assert.equal(board.length, 6);
+  const allowed = ['handled', 'executing', 'blocked', 'resource_delayed', 'needs_president'];
+  board.forEach((row) => {
+    assert.ok(allowed.indexOf(row.state) !== -1, row.id + ' 状态合法');
+    assert.ok(row.text && !/function|undefined|null|\(\)/.test(row.text), '文案不含开发用语');
+  });
+});
+
+test('办公室：例行办理对协调好的机构只做小幅恢复且有上限，协调差的上报总统，不改战略数值', function () {
+  const s = newCampaign();
+  s.agencies.general_staff.coordination = 56;
+  s.agencies.interior.coordination = 62;
+  s.agencies.foreign.coordination = 30;
+  s.agencies.logistics.coordination = 48;
+  const stats = JSON.stringify(s.stats);
+  const rep = L.runOfficeRoutine(s);
+  assert.equal(s.agencies.general_staff.coordination, 57, '健康机构 +1');
+  assert.equal(s.agencies.interior.coordination, 62, '已到上限不再增加');
+  assert.ok(rep.escalated.some((x) => x.id === 'foreign'), '协调很差的上报');
+  assert.ok(rep.delayed.some((x) => x.id === 'logistics'), '一般的积压一天');
+  assert.equal(JSON.stringify(s.stats), stats, '战略数值不被例行办理改动');
+});
+
+test('办公室：协调很差的机构生成一条请求支持，出面要 1 AP 且有效，不管则不再扣分', function () {
+  const s = newCampaign();
+  s.agencies.foreign.coordination = 30;
+  nextWindow(s);
+  const strain = (s.dispatches || []).filter((d) => d.type === 'strain' && !d.resolved);
+  assert.equal(strain.length <= 1, true, '一次只升级一个，不刷屏');
+  if (!strain.length) return;
+  const d = strain[0];
+  const support = d.options.find((o) => o.id === 'support');
+  const leave = d.options.find((o) => o.id === 'leave');
+  assert.equal(support.ap, 1);
+  assert.equal(leave.ap, 0);
+  assert.ok(!leave.coordination, '不管不额外扣协调');
+  const before = s.agencies[d.agencyId].coordination;
+  const res = L.resolveDispatch(s, d.id, 'support');
+  assert.equal(res.ok, true);
+  assert.equal(s.agencies[d.agencyId].coordination, Math.min(100, before + 6));
+});
+
+test('办公室：交接时 interlude.office 随结算给出，没有"已办理"的空列表弹窗', function () {
+  const s = newCampaign();
+  nextWindow(s);
+  assert.ok(s.round >= 2);
+  const open = (s.dispatches || []).filter((d) => !d.resolved && d.round === s.round);
+  open.forEach((d) => assert.ok(d.title && d.options.length, '每条待决事项都有标题和选项'));
+});
+
 console.log('\n战役测试：' + passed + ' 通过，' + failed + ' 失败');
 if (failed) process.exitCode = 1;

@@ -1369,6 +1369,23 @@
       });
       if (d) made.push(d);
     });
+    // 协调很差的机构请求总统出面（仅战役；一次只升级一个，避免通知刷屏）
+    if (isCampaign(state) && !(state.wrapup && state.wrapup.started)) {
+      const strained = getAgencyLoads(state).filter(function (load) {
+        return !load.overloaded && load.coordination < OFFICE_ROUTINE.strainedBelow;
+      }).sort(function (a, b) { return a.coordination - b.coordination; })[0];
+      if (strained) {
+        const d = addDispatch(state, 'strain', {
+          agencyId: strained.id,
+          options: [
+            { id: 'support', label: '出面协调一次（1 AP，' + strained.short + '协调 +6）', ap: 1, coordination: 6, agencyId: strained.id },
+            { id: 'leave', label: '让部门自行消化，不再追加协调', ap: 0 }
+          ],
+          defaultOption: 'leave'
+        });
+        if (d) made.push(d);
+      }
+    }
     // 办公室积压：最近 N 天中每天都亲自介入
     const spec = STRAT.interventionBacklog || { windowDays: 3, minDays: 3 };
     const recent = (state.interventionRounds || []).filter(function (r) { return r >= round - spec.windowDays && r < round; });
@@ -1386,6 +1403,78 @@
       if (d) made.push(d);
     }
     return made;
+  }
+
+  /*
+   * 办公室例行办理（战役模式）：每个窗口交接时，各机构按协调余量与在办数量自行处理例行事务。
+   * 自动办理不等于成功：协调好的机构缓慢恢复，一般的机构积压一天，协调很差的机构向总统请求支持。
+   * 不改变任何战略数值，也不凭空产生资源。
+   */
+  const OFFICE_ROUTINE = { healthyAt: 55, recoverCap: 62, recover: 1, strainedBelow: 40 };
+
+  function agencyOfficeState(state, load) {
+    const own = (state.commands || []).filter(function (command) {
+      return command.executorId === load.id && !isTerminalCommand(command);
+    });
+    const blocked = own.filter(function (command) { return command.status === 'blocked' && command.blockedCode !== 'APPROVAL'; });
+    const waiting = own.filter(function (command) { return command.status === 'blocked' && command.blockedCode === 'APPROVAL'; });
+    const executing = own.filter(function (command) { return command.status === 'executing' || command.status === 'issued' || command.status === 'awaiting_feedback'; });
+    const open = (state.dispatches || []).filter(function (item) { return !item.resolved && item.round === state.round && item.agencyId === load.id; });
+    let key = 'handled';
+    let text = '例行公文已按现有授权办理，不需要总统过目。';
+    if (open.length || waiting.length) {
+      key = 'needs_president';
+      text = waiting.length ? '有' + waiting.length + '项方案等总统批准。' : '有事项超出部门权限，等总统决定。';
+    } else if (blocked.length) {
+      key = 'blocked';
+      text = '《' + blocked[0].title + '》被卡住：' + (blocked[0].blockedReason || '条件未满足') + '。';
+    } else if (load.overloaded) {
+      key = 'resource_delayed';
+      text = '在办事项已满，新的例行工作排在后面。';
+    } else if (load.strained) {
+      key = 'resource_delayed';
+      text = '部门之间衔接不畅，例行文件积压了一天。';
+    } else if (executing.length) {
+      key = 'executing';
+      text = '正在办理' + executing.length + '项命令，按期限推进。';
+    }
+    return { id: load.id, label: load.label, short: load.short, state: key, text: text, executing: executing.length, blocked: blocked.length, waiting: waiting.length };
+  }
+
+  const OFFICE_STATE_LABEL = { handled: '已办理', executing: '办理中', blocked: '受阻', resource_delayed: '资源不足', needs_president: '等总统' };
+
+  function getOfficeBoard(state) {
+    if (!isCampaign(state)) return null;
+    return getAgencyLoads(state).map(function (load) {
+      const row = agencyOfficeState(state, load);
+      row.stateLabel = OFFICE_STATE_LABEL[row.state];
+      row.standing = !!(state.standing && state.standing[load.id] && state.standing[load.id].active);
+      return row;
+    });
+  }
+
+  function runOfficeRoutine(state) {
+    if (!isCampaign(state)) return null;
+    const report = { handled: [], delayed: [], escalated: [] };
+    getAgencyLoads(state).forEach(function (load) {
+      const rec = state.agencies[load.id];
+      if (!rec) return;
+      const touched = state.lastSettledRound >= state.round - 1 && (state.interventionRounds || []).indexOf(state.round - 1) !== -1 && rec.lastActionRound === state.round - 1;
+      if (load.overloaded) {
+        report.delayed.push({ id: load.id, label: load.label, note: '在办事项已满，例行工作排队' });
+      } else if (load.coordination < OFFICE_ROUTINE.strainedBelow) {
+        report.escalated.push({ id: load.id, label: load.label, note: '协调松动，请求总统出面' });
+      } else if (load.coordination < OFFICE_ROUTINE.healthyAt) {
+        report.delayed.push({ id: load.id, label: load.label, note: '例行文件积压一天' });
+      } else {
+        if (!touched && rec.coordination < OFFICE_ROUTINE.recoverCap) {
+          rec.coordination = clamp(rec.coordination + OFFICE_ROUTINE.recover, 0, 100);
+        }
+        report.handled.push({ id: load.id, label: load.label, note: '例行事务自行办理' });
+      }
+    });
+    state.officeReport = report;
+    return report;
   }
 
   function findChoiceAnywhere(choiceId) {
@@ -2236,6 +2325,7 @@
     expireStanding(state);
     const aidEvents = advanceAidLines(state);
     advanceWrapUp(state);
+    const officeReport = runOfficeRoutine(state);
     const echoes = applyCampaignOnEnter(state, next);
     recordTimeline(state);
     ending = checkCollapse(state);
@@ -2251,6 +2341,7 @@
       campaign: summary,
       echoes: echoes,
       aid: aidEvents,
+      office: officeReport,
       pressure: { before: pressureBefore, rise: pressureTotal, delayed: delayedPressure, after: state.pressure },
       attrition: totals,
       delayed: delayed,
@@ -3001,6 +3092,8 @@
     getLinkEffect: getLinkEffect,
     grantStanding: grantStanding,
     revokeStanding: revokeStanding,
+    getOfficeBoard: getOfficeBoard,
+    runOfficeRoutine: runOfficeRoutine,
     getAidStatus: getAidStatus,
     startWrapUp: startWrapUp,
     declineWrapUp: declineWrapUp,
