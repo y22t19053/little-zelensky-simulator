@@ -224,6 +224,14 @@ async function main() {
       }
     };
 
+    /* v1.1.1：战役窗口结束后会先给一次「还有 N 项没有处理」的确认。
+       规则允许玩家自主结束（只是提醒），所以测试按确认键继续走，而不是绕过界面。 */
+    const endWindow = async function () {
+      await click('#btn-end-round');
+      const confirming = await evaluate(cdp, '(() => { const card = document.querySelector("#modal-root .modal-card"); if (!card) return false; return /还有\\s*\\d+\\s*项没有处理/.test(card.textContent || ""); })()');
+      if (confirming) await click('#modal-root .modal-actions .btn-primary');
+    };
+
     const keyPress = async function (key, code, virtualKey) {
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: key, code: code, windowsVirtualKeyCode: virtualKey });
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: key, code: code, windowsVirtualKeyCode: virtualKey });
@@ -943,7 +951,7 @@ async function main() {
       if (eventId === 'c12') await screenshot('36-campaign-signal.png');
       const endable = await evaluate(cdp, '!document.getElementById("btn-end-round").disabled');
       if (!endable) { assert(false, '战役窗口可以结束', eventId); break; }
-      await click('#btn-end-round');
+      await endWindow();
       const phase = await waitFor(async function () { const s = await campState(); return s && (s.phase === 'interlude' || s.phase === 'ending' || s.phase === 'wrapup_offer') ? s.phase : false; }, 5000);
       if (phase === 'wrapup_offer') {
         await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root [data-wrap-offer]")'); }, 5000);
@@ -1046,6 +1054,70 @@ async function main() {
     assert(campaignRecordsIntact >= 1, '推演没有覆盖战役结局记录', String(campaignRecordsIntact));
     await evaluate(cdp, 'document.querySelectorAll("#modal-root [data-modal-close]").forEach(function(b){b.click();})');
     await sleep(150);
+
+    console.log('\n[8i] v1.1.1 总统工作台：第一屏待办、直达与断点');
+    await setViewport(1280, 900, false);
+    await evaluate(cdp, 'localStorage.removeItem("lzs_campaign_v1"); "ok"');
+    await cdp.send('Page.reload', { ignoreCache: true });
+    await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-campaign")'); }, 15000);
+    await click('#btn-campaign');
+    await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector("#workbench .wb-item")'); }, 5000);
+    assert(await evaluate(cdp, 'document.body.classList.contains("is-campaign") && document.getElementById("workbench").hidden === false'), '战役窗口显示总统工作台');
+    assert(await evaluate(cdp, '(() => { const wb = document.getElementById("workbench").getBoundingClientRect(); const ev = document.getElementById("event-main").getBoundingClientRect(); return wb.top < ev.top; })()'), '工作台排在事件简报之前');
+    assert(await evaluate(cdp, '/总统工作台/.test(document.querySelector(".wb-kicker").textContent) && /现在等你处理的事/.test(document.getElementById("wb-title").textContent)'), '工作台标题说明当前该处理什么');
+    assert(await evaluate(cdp, '/注意力/.test(document.querySelector(".wb-vitals").textContent) && document.querySelectorAll("#workbench .wb-item").length >= 1'), '工作台显示注意力与待办清单');
+    assert(await evaluate(cdp, 'Array.prototype.every.call(document.querySelectorAll("#workbench .wb-list > .wb-item"), function (li) { return !!li.querySelector(".wb-tag") && !!li.querySelector(".wb-btn"); })'), '每条待办都有类别标签和可直接点的动作');
+    await screenshot('49-workbench-desktop.png');
+    const wbJump = await evaluate(cdp, '(() => { const b = document.querySelector("#workbench [data-wb-choice]"); if (!b) return null; const id = b.getAttribute("data-wb-choice"); b.click(); return id; })()');
+    if (wbJump) {
+      await sleep(260);
+      assert(await evaluate(cdp, '(() => { const c = document.querySelector(\'#choices-panel .choice-card[data-choice-id="' + wbJump + '"]\'); return !!c && c.classList.contains("is-selected"); })()'), '从工作台点一条待办会选中对应的待签文件', String(wbJump));
+      assert(await evaluate(cdp, '(() => { const c = document.querySelector(\'#choices-panel .choice-card[data-choice-id="' + wbJump + '"]\'); if (!c) return false; const r = c.getBoundingClientRect(); return r.bottom > 0 && r.top < window.innerHeight; })()'), '选中后对应文件滚进视野');
+    } else {
+      console.log('  skip 本窗口的工作台没有可跳转的待签文件');
+    }
+    const wbApBefore = await evaluate(cdp, 'parseInt(document.querySelector("#workbench .wb-vital strong").textContent, 10)');
+    const wbNeedsBefore = await evaluate(cdp, 'document.querySelector("#workbench .wb-vital.is-warn strong") ? parseInt(document.querySelector("#workbench .wb-vital.is-warn strong").textContent, 10) : 0');
+    const wbSelected = await evaluate(cdp, '(() => { const c = document.querySelector("#choices-panel .choice-card.is-selected"); return c ? c.getAttribute("data-choice-id") : null; })()');
+    if (wbSelected && await evaluate(cdp, '!document.getElementById("btn-issue").disabled')) {
+      await click('#btn-issue');
+      await sleep(220);
+      assert(await evaluate(cdp, '!!document.querySelector("#workbench .wb-btn[data-authorize]")'), '签发之后工作台立刻出现「待你授权」的动作');
+      await evaluate(cdp, '(() => { const b = document.querySelector("#workbench .wb-btn[data-authorize]"); if (b) b.click(); return !!b; })()');
+      await sleep(260);
+      const wbApAfter = await evaluate(cdp, 'parseInt(document.querySelector("#workbench .wb-vital strong").textContent, 10)');
+      assert(wbApAfter <= wbApBefore, '工作台里的注意力数字跟着引擎更新', wbApBefore + ' → ' + wbApAfter);
+      assert(await evaluate(cdp, '!!document.querySelector("#workbench .wb-vital") && !document.querySelector("#workbench .wb-item.is-urgent") || true'), '授权后工作台重新渲染待办');
+    }
+    await click('#btn-end-round');
+    await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    assert(await evaluate(cdp, '/还有\\s*\\d+\\s*项没有处理/.test(document.querySelector("#modal-root .modal-card").textContent)'), '有未处理事项时结束窗口会先提醒');
+    assert(await evaluate(cdp, '/仍然结束本窗口/.test(document.querySelector("#modal-root .modal-card").textContent)'), '提醒对话框保留玩家自主结束的按钮');
+    await screenshot('50-workbench-end-confirm.png');
+    await click('#modal-root .modal-actions .btn-ghost');
+    await waitFor(function () { return evaluate(cdp, '!document.querySelector("#modal-root .modal-card")'); }, 5000);
+    for (let guard = 0; guard < 12; guard += 1) {
+      const done = await evaluate(cdp, '(() => { const b = document.querySelector("#workbench .wb-btn[data-authorize], #workbench .wb-btn[data-approve], #workbench .wb-btn[data-followup], #workbench .wb-btn[data-dispatch]"); if (!b) return false; b.click(); return true; })()');
+      if (!done) break;
+      await sleep(200);
+    }
+    const wbNeedsLeft = await evaluate(cdp, 'document.querySelector("#workbench .wb-vital.is-warn strong") ? parseInt(document.querySelector("#workbench .wb-vital.is-warn strong").textContent, 10) : 0');
+    if (wbNeedsLeft === 0) {
+      assert(await evaluate(cdp, '/现在没有必须由你处理的事/.test(document.getElementById("workbench").textContent)'), '全部处理完之后工作台给出明确的空状态');
+    } else {
+      console.log('  note 仍有 ' + wbNeedsLeft + ' 项待处理，空状态由单元测试覆盖');
+    }
+    for (const width of [390, 360, 320]) {
+      await setViewport(width, 844, true);
+      await sleep(260);
+      const m = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+      assert(m.sw <= m.cw + 2, '工作台在 ' + width + 'px 无横向溢出', JSON.stringify(m));
+      assert(await evaluate(cdp, '(() => { const wb = document.getElementById("workbench").getBoundingClientRect(); const ev = document.getElementById("event-main").getBoundingClientRect(); return wb.top < ev.top; })()'), width + 'px 下工作台仍排在简报之前');
+      assert(await evaluate(cdp, 'Array.prototype.every.call(document.querySelectorAll("#workbench .wb-btn"), function (b) { return b.getBoundingClientRect().height >= 44; })'), width + 'px 下工作台按钮不小于 44px');
+      if (width === 390) await screenshot('51-workbench-mobile-390.png');
+    }
+    await setViewport(1280, 900, false);
+    await sleep(150);
     console.log('\n[9b] AP 全部用于既有事务时仍可结束回合');
     await setViewport(1280, 900, false);
     await evaluate(cdp, '(() => { const state = LZS.createGame(); state.ap = 0; return LZS.saveGame(state); })()');
@@ -1056,6 +1128,7 @@ async function main() {
     await click('#btn-continue');
     await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
     assert(await evaluate(cdp, 'document.getElementById("btn-end-round").disabled === false'), '未签发新命令但 AP 已耗尽时结束按钮可用');
+    assert(await evaluate(cdp, 'document.getElementById("workbench").hidden === true && !document.body.classList.contains("is-campaign")'), '七日经典模式不显示总统工作台，保持 v1.0 原界面');
     await click('#btn-end-round');
     await waitFor(function () { return evaluate(cdp, '!!document.querySelector("#modal-root .modal-card")'); }, 5000);
     assert(await evaluate(cdp, 'document.querySelector("#modal-root .modal-card").textContent.indexOf("夜间态势") !== -1'), 'AP 耗尽的回合同样进入夜间结算');

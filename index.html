@@ -43,7 +43,7 @@
             <button id="btn-clear-save" class="text-btn is-muted" type="button" hidden>清除存档</button>
           </div>
           <p id="save-summary" class="save-summary" hidden></p>
-          <p class="intro-version"><span id="intro-version">v1.1.0</span> · 多周目、动态战役与决策推演</p>
+          <p class="intro-version"><span id="intro-version">v1.1.1</span> · 多周目、动态战役与决策推演</p>
           <ul class="intro-facts" aria-label="游戏概览">
             <li><strong>38 天</strong><span>四幕基辅战役 · 13 个决策窗口</span></li>
             <li><strong>3—5 AP</strong><span>每个决策窗口的总统注意力</span></li>
@@ -99,6 +99,7 @@
 
       <div class="game-grid">
         <div class="primary-column">
+          <section id="workbench" class="workbench" aria-labelledby="wb-title"></section>
           <main id="event-main" class="event-column" aria-live="polite"></main>
           <section id="choices-panel" class="choices-section" aria-labelledby="choices-title"></section>
         </div>
@@ -135,6 +136,7 @@
   <script src="js/dynamic.js"></script>
   <script src="js/replay.js"></script>
   <script src="js/archive.js"></script>
+  <script src="js/workbench.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/review.js"></script>

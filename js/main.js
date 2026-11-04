@@ -36,6 +36,7 @@
     apValue: document.getElementById('ap-value'),
     apPips: document.getElementById('ap-pips'),
     apNote: document.getElementById('ap-note'),
+    workbench: document.getElementById('workbench'),
     eventMain: document.getElementById('event-main'),
     choicesPanel: document.getElementById('choices-panel'),
     commandPanel: document.getElementById('command-panel'),
@@ -76,7 +77,8 @@
     intelCategory: 'military',
     opsTab: 'intel',
     replaySession: null,
-    replayInfoMode: 'then'
+    replayInfoMode: 'then',
+    wbReturn: false
   };
 
   const LOG_TYPE_LABEL = {
@@ -128,6 +130,7 @@
     Object.keys(map).forEach(function (key) { map[key].hidden = key !== name; });
     ui.screen = name;
     document.body.classList.toggle('is-playing', name === 'game');
+    if (name !== 'game') document.body.classList.remove('is-campaign');
     document.title = name === 'intro' ? '小泽模拟器 · 你能顶住几天？' : name === 'ending' ? '阶段结局 · 小泽模拟器' : '总统办公室 · 小泽模拟器';
     if (A) A.setTheme(name === 'intro' ? 'menu' : name === 'ending' ? 'ending' : (ui.game && ui.game.phase === 'interlude' ? 'night' : dayTheme()));
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -497,6 +500,7 @@
     const event = L.getEvent(ui.game);
     if (!event) { toast('事件数据缺失，无法继续。', true); return; }
     renderTop();
+    renderWorkbench();
     renderEvent();
     renderCommandPanel();
     renderStats();
@@ -505,6 +509,8 @@
     renderLogPanel();
     renderChoices(event);
     renderOrder();
+    bindWorkbenchJumps();
+    if (ui.wbReturn) { ui.wbReturn = false; returnToWorkbench(); }
   }
 
   function renderTop() {
@@ -564,7 +570,8 @@
           '</div></details>' +
           '<div class="dossier-foot"><span>文电为合成文本</span><span>参数为模拟设计值</span></div>' +
         '</article>' +
-      '</div>' + dispatchTrayHtml() + echoesHtml();
+      /* 战役窗口的来信进工作台；七日模式仍然按原样挂在简报下方。 */
+      '</div>' + (isCampaignGame() ? '' : dispatchTrayHtml()) + echoesHtml();
     bindDispatches(el.eventMain);
   }
 
@@ -834,34 +841,225 @@
     return '<small class="dispatch-history"><span class="history-kind">' + escapeHtml(item.historyLabel) + '</span>' + (item.historyNote ? ' · ' + escapeHtml(item.historyNote) : '') + '</small>';
   }
 
-  function dispatchTrayHtml() {
+  function dispatchRowHtml(item) {
     const g = ui.game;
-    if (!L.getDispatches) return '';
-    const items = L.getDispatches(g, true);
+    const actions = item.resolved ? '<p class="dispatch-outcome">已处理：' + escapeHtml(item.outcome && item.outcome.label ? item.outcome.label : '已阅') + '</p>' :
+      '<div class="dispatch-actions">' + (item.options || []).map(function (option) {
+        const cost = option.ap ? option.ap + ' AP' : '不耗 AP';
+        const isDefault = option.id === item.defaultOption;
+        return '<button type="button" class="mini-action' + (option.ap ? ' is-primary' : '') + '" data-dispatch="' + escapeHtml(item.id) + '" data-option="' + escapeHtml(option.id) + '"' + ((option.ap || 0) > g.ap || g.phase !== 'briefing' ? ' disabled' : '') + '>' + escapeHtml(option.label) + (option.label.indexOf('AP') === -1 ? ' · ' + cost : '') + (isDefault && (item.options || []).length > 1 ? ' · 不处理则默认' : '') + '</button>';
+      }).join('') + '</div>';
+    return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' + (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + historyTagHtml(item) + actions + '</li>';
+  }
+
+  /* 七日模式（以及战役里还没进工作台的旧渲染路径）仍然用这个托盘。 */
+  function dispatchTrayHtml() {
+    const items = L.getDispatches(ui.game, true) || [];
     if (!items.length) return '';
-    return '<section class="dispatch-tray" aria-label="晨间电报"><div class="dispatch-head"><h2>晨间电报</h2><span>由此前命令与机构状态触发 · 模拟反馈</span></div><ol class="dispatch-list">' + items.map(function (item) {
-      const actions = item.resolved ? '<p class="dispatch-outcome">已处理：' + escapeHtml(item.outcome && item.outcome.label ? item.outcome.label : '已阅') + '</p>' :
-        '<div class="dispatch-actions">' + (item.options || []).map(function (option) {
-          const cost = option.ap ? option.ap + ' AP' : '不耗 AP';
-          const isDefault = option.id === item.defaultOption;
-          return '<button type="button" class="mini-action' + (option.ap ? ' is-primary' : '') + '" data-dispatch="' + escapeHtml(item.id) + '" data-option="' + escapeHtml(option.id) + '"' + ((option.ap || 0) > g.ap || g.phase !== 'briefing' ? ' disabled' : '') + '>' + escapeHtml(option.label) + (option.label.indexOf('AP') === -1 ? ' · ' + cost : '') + (isDefault && (item.options || []).length > 1 ? ' · 不处理则默认' : '') + '</button>';
-        }).join('') + '</div>';
-      return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' + (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + historyTagHtml(item) + actions + '</li>';
-    }).join('') + '</ol></section>';
+    const open = items.filter(function (item) { return !item.resolved; }).length;
+    return '<section class="dispatch-tray" aria-label="事务电报">' +
+      '<div class="tray-head"><h2>事务电报</h2><span>' + (open ? open + ' 份待处理' : '今日已处理完') + '</span></div>' +
+      '<ol class="dispatch-list">' + items.map(dispatchRowHtml).join('') + '</ol>' +
+    '</section>';
   }
 
   function bindDispatches(scope) {
     Array.prototype.forEach.call(scope.querySelectorAll('[data-dispatch]'), function (button) {
       button.addEventListener('click', function () {
         if (!ui.game || ui.busy) return;
+        const inWorkbench = !!(button.closest && button.closest('#workbench'));
         const result = L.resolveDispatch(ui.game, button.getAttribute('data-dispatch'), button.getAttribute('data-option'));
         if (!result.ok) { if (A) A.playSfx('invalid'); toast(result.error || '无法处理这份电报。', true); return; }
         if (A) A.playSfx('file');
         saveGame(false);
         renderGame();
+        if (inWorkbench) returnToWorkbench();
         toast('电报已处理并归档。');
       });
     });
+  }
+
+  /* ---------- v1.1.1：总统工作台 ----------
+     把「现在有什么在等我」集中到进入窗口后的第一屏。清单由 js/workbench.js 从真实状态算出来，
+     这里的按钮全部调用引擎里原有的函数：授权、批准、介入、处理电报、签发文件。 */
+  function wbApi() { return window.LZS_WORKBENCH || null; }
+
+  function wbScrollTo(node, offset) {
+    if (!node) return;
+    const top = node.getBoundingClientRect().top + window.scrollY - (offset == null ? 10 : offset);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: Math.max(0, top), behavior: reduce ? 'auto' : 'smooth' });
+  }
+
+  function returnToWorkbench() {
+    if (!el.workbench) return;
+    wbScrollTo(el.workbench, 8);
+    el.workbench.classList.add('is-updated');
+    window.setTimeout(function () { if (el.workbench) el.workbench.classList.remove('is-updated'); }, 1400);
+  }
+
+  function wbActionHtml(action) {
+    const cls = 'wb-btn' + (action.primary ? ' is-primary' : '') + (action.type === 'jump' ? ' is-quiet' : '');
+    const disabled = action.disabled ? ' disabled' : '';
+    const label = escapeHtml(action.label) + (action.note ? ' <span class="wb-btn-note">' + escapeHtml(action.note) + '</span>' : '');
+    if (action.type === 'approve') return '<button type="button" class="' + cls + '" data-approve="' + escapeHtml(action.commandId) + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'authorize') return '<button type="button" class="' + cls + '" data-authorize="' + escapeHtml(action.commandId) + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'delegate') return '<button type="button" class="' + cls + '" data-delegate="' + escapeHtml(action.commandId) + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'followup') return '<button type="button" class="' + cls + '" data-followup="' + escapeHtml(action.commandId) + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'choice') return '<button type="button" class="' + cls + '" data-wb-choice="' + escapeHtml(action.choiceId) + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'dispatch') return '<button type="button" class="' + cls + '" data-dispatch="' + escapeHtml(action.dispatchId) + '" data-option="' + escapeHtml(action.optionId) + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'intel') return '<button type="button" class="' + cls + '" data-open-intel="' + escapeHtml(action.category || 'military') + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'ops') return '<button type="button" class="' + cls + '" data-wb-ops="' + escapeHtml(action.tab || 'agencies') + '"' + disabled + '>' + label + '</button>';
+    if (action.type === 'jump') return '<button type="button" class="' + cls + '" data-wb-jump="' + escapeHtml(action.target || 'command-panel') + '"' + disabled + '>' + label + '</button>';
+    return '';
+  }
+
+  function wbItemHtml(item) {
+    const actions = (item.actions || []).map(wbActionHtml).join('');
+    const foot = [item.source, item.meta].filter(function (part) { return !!part; }).join(' · ');
+    return '<li class="wb-item is-' + escapeHtml(item.kind) + (item.urgent ? ' is-urgent' : '') + '">' +
+      '<div class="wb-item-grid"><div class="wb-item-text">' +
+        '<h3 class="wb-item-title"><span class="wb-tag tag-' + escapeHtml(item.kind) + '">' + escapeHtml(item.tag) + '</span>' + escapeHtml(item.title) + '</h3>' +
+        (item.body ? '<p class="wb-item-body">' + escapeHtml(item.body) + '</p>' : '') +
+        (foot ? '<p class="wb-item-meta">' + escapeHtml(foot) + '</p>' : '') +
+      '</div>' + (actions ? '<div class="wb-actions">' + actions + '</div>' : '') + '</div>' +
+    '</li>';
+  }
+
+  function workbenchHtml() {
+    const WB = wbApi();
+    if (!WB || !ui.game) return '';
+    const view = WB.classify(ui.game, L);
+    const s = view.situation || {};
+    const head = '<header class="wb-head"><div class="wb-head-main">' +
+        '<span class="wb-kicker">总统工作台' + (s.windowText ? ' · ' + escapeHtml(s.windowText) : '') + '</span>' +
+        '<h2 id="wb-title">现在等你处理的事</h2>' +
+        '<p class="wb-situation">' + escapeHtml((s.dateLabel || '') + (s.actTitle ? ' · ' + s.actTitle : '')) + (s.line ? '　' + escapeHtml(s.line) : '') + '</p>' +
+      '</div><div class="wb-vitals">' +
+        '<span class="wb-vital"><span>注意力</span><strong>' + view.ap + '</strong><em>/ ' + view.apMax + '</em></span>' +
+        (s.keyStat ? '<span class="wb-vital is-' + escapeHtml(s.keyStat.level) + '"><span>' + escapeHtml(s.keyStat.label) + '</span><strong>' + s.keyStat.value + '</strong></span>' : '') +
+        '<span class="wb-vital' + (view.counts.needs ? ' is-warn' : '') + '"><span>等你处理</span><strong>' + view.counts.needs + '</strong></span>' +
+      '</div></header>';
+
+    if (!view.briefing) {
+      return head + '<div class="wb-empty"><strong>本窗口正在结算。</strong><p>时间在往前走：命令照常执行或延误，机构继续办手上的事。等结算结束，下一个窗口的待办会出现在这里。</p></div>';
+    }
+
+    const needList = view.needs.length
+      ? '<ol class="wb-list">' + view.needs.map(wbItemHtml).join('') + '</ol>'
+      : '<div class="wb-empty"><strong>现在没有必须由你处理的事。</strong><p>你可以读晨间电报、检查在办的命令，或者直接结束这个窗口。想主动出手，就往下看本窗口的待签文件。</p>' +
+        '<div class="wb-empty-actions"><button type="button" class="wb-btn" data-wb-jump="choices-panel">看本窗口的待签文件</button>' +
+        '<button type="button" class="wb-btn is-quiet" data-wb-jump="event-main">读完整简报</button></div></div>';
+
+    const watch = view.watch.length
+      ? '<details class="wb-group wb-watch"' + (view.watch.some(function (item) { return item.urgent; }) ? ' open' : '') + '><summary>' + view.watch.length + ' 项在推进，不需要你逐项操作</summary><ul class="wb-list is-soft">' + view.watch.map(wbItemHtml).join('') + '</ul></details>'
+      : '';
+
+    const softRows = view.soft.map(wbItemHtml).join('');
+    const resolved = (L.getDispatches ? L.getDispatches(ui.game, true) : []).filter(function (item) { return item.resolved; });
+    const softTotal = view.soft.length + resolved.length;
+    const soft = softTotal
+      ? '<details class="wb-group wb-soft"><summary>其他来信 · ' + softTotal + ' 份（可以延后或已经处理）</summary>' +
+        (softRows ? '<ul class="wb-list is-soft">' + softRows + '</ul>' : '') +
+        (resolved.length ? '<ol class="dispatch-list">' + resolved.map(dispatchRowHtml).join('') + '</ol>' : '') +
+        '</details>'
+      : '';
+
+    const blockers = view.blockers.length
+      ? '<ul class="wb-blockers">' + view.blockers.map(function (item) { return '<li>' + escapeHtml(item.text) + '</li>'; }).join('') + '</ul>'
+      : '';
+    const foot = '<footer class="wb-foot"><p>' + escapeHtml(WB.endWindowNote(view)) + '</p>' +
+      '<div class="wb-foot-actions">' +
+        '<button type="button" class="wb-btn is-primary" data-wb-end' + (view.blockers.length ? ' disabled' : '') + '>结束本窗口</button>' +
+        '<button type="button" class="wb-btn is-quiet" data-wb-jump="choices-panel">待签文件</button>' +
+        '<button type="button" class="wb-btn is-quiet" data-wb-jump="stats-panel">国家状态</button>' +
+      '</div></footer>';
+    return head + needList + blockers + watch + soft + foot;
+  }
+
+  function renderWorkbench() {
+    if (!el.workbench) return;
+    /* 只有战役窗口需要工作台：十三窗口、多机构、跨窗口命令才有「这一窗还有什么在等我」的问题。
+       七日经典模式维持原来的单文件界面，不额外加一层。 */
+    const show = !!(ui.game && isCampaignGame());
+    document.body.classList.toggle('is-campaign', show);
+    el.workbench.hidden = !show;
+    if (!show) { el.workbench.innerHTML = ''; return; }
+    el.workbench.innerHTML = workbenchHtml();
+    bindCommandActions(el.workbench);
+    bindDispatches(el.workbench);
+    Array.prototype.forEach.call(el.workbench.querySelectorAll('[data-wb-choice]'), function (button) {
+      button.addEventListener('click', function () { jumpToChoice(button.getAttribute('data-wb-choice')); });
+    });
+    Array.prototype.forEach.call(el.workbench.querySelectorAll('[data-wb-ops]'), function (button) {
+      button.addEventListener('click', function () { openOperations(button.getAttribute('data-wb-ops') || 'agencies'); });
+    });
+    Array.prototype.forEach.call(el.workbench.querySelectorAll('[data-wb-end]'), function (button) {
+      button.addEventListener('click', requestEndRound);
+    });
+    // 在工作台里按下授权/批准/介入之后，回到工作台看更新过的清单（只在本区生效，别处维持原位）。
+    if (!el.workbench.getAttribute('data-wb-click')) {
+      el.workbench.setAttribute('data-wb-click', '1');
+      el.workbench.addEventListener('click', function (event) {
+        const hit = event.target && event.target.closest ? event.target.closest('[data-approve],[data-authorize],[data-followup]') : null;
+        if (hit) ui.wbReturn = true;
+      }, true);
+    }
+  }
+
+  function jumpToChoice(choiceId) {
+    if (!ui.game) return;
+    const status = L.getChoiceStatus(ui.game, choiceId);
+    if (!status.canIssue) { if (A) A.playSfx('invalid'); toast(status.message || '这项文件现在不能签发。', true); return; }
+    if (ui.selectedChoiceId !== choiceId) selectChoice(choiceId);
+    const card = el.choicesPanel.querySelector('[data-choice-id="' + choiceId + '"]');
+    if (!card) return;
+    card.classList.add('is-flash');
+    window.setTimeout(function () { card.classList.remove('is-flash'); }, 1600);
+    wbScrollTo(card, 70);
+    card.focus({ preventScroll: true });
+  }
+
+  function bindWorkbenchJumps() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-wb-jump]'), function (button) {
+      if (button.getAttribute('data-wb-bound')) return;
+      button.setAttribute('data-wb-bound', '1');
+      button.addEventListener('click', function () {
+        const target = button.getAttribute('data-wb-jump');
+        if (target === 'workbench') { returnToWorkbench(); return; }
+        const node = document.getElementById(target) || el.workbench;
+        wbScrollTo(node, 70);
+      });
+    });
+  }
+
+  /* 结束窗口：先把「引擎一定会拒绝」和「只是提醒」分开，再按玩家自己的决定推进。 */
+  function requestEndRound() {
+    if (ui.busy || !ui.game || ui.game.phase !== 'briefing') return;
+    /* 七日经典模式维持原样：没有工作台，也不额外弹确认。 */
+    if (!isCampaignGame()) { endRound(); return; }
+    const WB = wbApi();
+    const view = WB ? WB.classify(ui.game, L) : null;
+    if (view && view.blockers.length) {
+      if (A) A.playSfx('invalid');
+      toast(view.blockers[0].text, true);
+      returnToWorkbench();
+      return;
+    }
+    if (view && view.counts.needs) {
+      const rows = view.needs.slice(0, 6).map(function (item) {
+        return '<li><strong>' + escapeHtml(item.tag) + ' · ' + escapeHtml(item.title) + '</strong>' + (item.urgent ? '<span>过了本窗口就来不及</span>' : '') + '</li>';
+      }).join('');
+      openConfirm({
+        kicker: '结束窗口 / END WINDOW',
+        title: '还有 ' + view.counts.needs + ' 项没有处理',
+        message: '<p>结束之后时间会往前走：命令照常执行或延误，没人处理的来信按默认方式结算，机构继续消耗。这些是还没处理的：</p><ul class="confirm-list">' + rows + '</ul><p>你可以现在结束，也可以回去处理。游戏不会替你判断哪一项更重要。</p>',
+        confirmLabel: '仍然结束本窗口',
+        onConfirm: function () { endRound(); }
+      });
+      return;
+    }
+    endRound();
   }
 
   function listHtml(items) {    if (!items || !items.length) return '<ul class="epistemic-list"><li>暂无可靠条目。</li></ul>';
@@ -871,9 +1069,9 @@
   function choiceHint() {
     const g = ui.game;
     if (g.phase !== 'briefing') return '本回合正在结算';
-    if (g.ap <= 0) return '注意力已耗尽 · 请结束回合';
-    if (!L.getAvailableChoices(g).length) return '剩余 AP 不足 · 请结束回合';
-    return '选择文件展开评估 · 底栏确认签发';
+    if (g.ap <= 0) return '注意力已用完 · 可以结束本窗口了';
+    if (!L.getAvailableChoices(g).length) return '剩下的注意力不够签发任何文件';
+    return '点开一份文件看代价与延迟后果，再到底栏签发';
   }
 
   function effectChips(effects, pressureDelta) {
@@ -953,7 +1151,12 @@
         (executed ? '<span class="choice-stamp">已签发</span>' : conflict ? '<span class="choice-stamp is-conflict-stamp">互斥</span>' : '') +
       '</article>';
     }).join('');
-    el.choicesPanel.innerHTML = '<div class="section-heading"><div><span class="section-kicker">DECISION FILES</span><h2 id="choices-title">待签决策文件</h2></div><span class="section-hint">' + choiceHint() + '</span></div><div class="choice-grid">' + cards + '</div>';
+    /* 战役窗口里，文件列表上方给一个回到工作台的落脚点；七日模式没有工作台，不加这一行。 */
+    const headingRight = isCampaignGame()
+      ? '<div class="section-heading-side"><span class="section-hint">' + choiceHint() + '</span><button type="button" class="text-btn section-jump" data-wb-jump="workbench">↑ 回到工作台</button></div>'
+      : '<span class="section-hint">' + choiceHint() + '</span>';
+    const headingTitle = isCampaignGame() ? '本窗口的待签文件' : '决策文件';
+    el.choicesPanel.innerHTML = '<div class="section-heading"><div><span class="section-kicker">DECISION FILES</span><h2 id="choices-title">' + headingTitle + '</h2></div>' + headingRight + '</div><div class="choice-grid">' + cards + '</div>';
     bindChoiceCards();
   }
 
@@ -1995,7 +2198,7 @@
     el.menuBtn.addEventListener('click', openMenu);
     el.issue.addEventListener('click', issueSelected);
     if (el.issueDelegate) el.issueDelegate.addEventListener('click', openIssueDelegateModal);
-    el.endRound.addEventListener('click', endRound);
+    el.endRound.addEventListener('click', requestEndRound);
     if (el.opsBtn) el.opsBtn.addEventListener('click', function () { openOperations('intel'); });
     renderIntro();
   }

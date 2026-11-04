@@ -120,16 +120,17 @@ async function main() {
       return evaluate(cdp, 'document.readyState === "complete" && !!window.LZS && !!document.getElementById("btn-start")');
     }, 30000);
 
-    const info = await evaluate(cdp, 'JSON.stringify({ver: (window.EVENTS_DATA && window.EVENTS_DATA.ui && window.EVENTS_DATA.ui.version) || (window.LZS && window.LZS.META && window.LZS.META.version) || null, dyn: !!window.LZS_DYNAMIC, rep: !!window.LZS_REPLAY, arc: !!window.LZS_ARCHIVE, dynCount: window.LZS_DYNAMIC ? window.LZS_DYNAMIC.count : null, repCount: window.LZS_REPLAY ? window.LZS_REPLAY.count : null, btn: (document.getElementById("btn-replay-room")||{}).textContent, fatal: !!document.querySelector(".fatal")})');
+    const info = await evaluate(cdp, 'JSON.stringify({ver: (window.EVENTS_DATA && window.EVENTS_DATA.ui && window.EVENTS_DATA.ui.version) || (window.LZS && window.LZS.META && window.LZS.META.version) || null, dyn: !!window.LZS_DYNAMIC, rep: !!window.LZS_REPLAY, arc: !!window.LZS_ARCHIVE, wb: !!window.LZS_WORKBENCH, dynCount: window.LZS_DYNAMIC ? window.LZS_DYNAMIC.count : null, repCount: window.LZS_REPLAY ? window.LZS_REPLAY.count : null, btn: (document.getElementById("btn-replay-room")||{}).textContent, fatal: !!document.querySelector(".fatal")})');
     const parsed = JSON.parse(info);
     console.log('  live: ' + info);
     assert(!parsed.fatal, '线上页面没有载入失败');
     assert(parsed.dyn && parsed.rep && parsed.arc, '三个 v1.1 脚本都在线上加载');
+    assert(parsed.wb, 'v1.1.1 的总统工作台脚本在线上加载');
     assert(parsed.dynCount === 37 && parsed.repCount === 6, '线上事件模板 37 条、推演模块 6 个', info);
     assert(/决策推演室/.test(parsed.btn || ''), '封面有推演室入口', parsed.btn);
     assert(/通关后解锁/.test(parsed.btn || ''), '没有战役记录时显示解锁条件', parsed.btn);
-    const hasVer = await evaluate(cdp, 'document.body.innerText.indexOf("1.1.0") !== -1');
-    assert(hasVer, '页面文案里能读到 1.1.0');
+    const hasVer = await evaluate(cdp, 'document.body.innerText.indexOf("1.1.1") !== -1');
+    assert(hasVer, '页面文案里能读到 1.1.1');
 
     await evaluate(cdp, 'document.getElementById("btn-replay-room").click()');
     await sleep(800);
