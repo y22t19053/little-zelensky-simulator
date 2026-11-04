@@ -34,9 +34,10 @@
             <button id="btn-start" class="btn btn-ghost" type="button"><span>七日开局 · 进入总统办公室</span><span aria-hidden="true">→</span></button>
             <button id="btn-continue" class="btn btn-ghost" type="button" hidden>继续七日开局</button>
           </div>
-          <p class="mode-note"><strong>基辅战役</strong>：2 月 24 日至 4 月 2 日，四幕、13 个决策窗口，窗口之间系统逐日模拟。<strong>七日开局</strong>：v0.5 的 7 个每日回合，存档互不影响。</p>
+          <p class="mode-note"><strong>基辅战役</strong>：2 月 24 日至 4 月 2 日，四幕、13 个决策窗口，窗口之间系统逐日模拟；条件事件会随你此前的决定出现。<strong>七日开局</strong>：v0.5 的 7 个每日回合，存档互不影响。</p>
           <div class="intro-links">
             <button id="btn-how" class="text-btn" type="button">怎么玩</button>
+            <button id="btn-replay-room" class="text-btn" type="button" aria-haspopup="dialog">决策推演室</button>
             <button id="btn-audio-intro" class="text-btn" type="button" aria-haspopup="dialog">声音设置</button>
             <button id="btn-disclaimer" class="text-btn" type="button">历史资料与免责声明</button>
             <button id="btn-clear-save" class="text-btn is-muted" type="button" hidden>清除存档</button>
@@ -44,7 +45,7 @@
           <p id="save-summary" class="save-summary" hidden></p>
           <ul class="intro-facts" aria-label="游戏概览">
             <li><strong>38 天</strong><span>四幕基辅战役 · 13 个决策窗口</span></li>
-            <li><strong>2—3 AP</strong><span>每个决策窗口的总统注意力</span></li>
+            <li><strong>3—5 AP</strong><span>每个决策窗口的总统注意力</span></li>
             <li><strong>A—H</strong><span>八个维度共同判定的战役结局</span></li>
           </ul>
         </div>
@@ -129,7 +130,10 @@
   <script src="js/events.js"></script>
   <script src="js/intel.js"></script>
   <script src="js/strategy.js"></script>
-    <script src="js/campaign.js"></script>
+  <script src="js/campaign.js"></script>
+  <script src="js/dynamic.js"></script>
+  <script src="js/replay.js"></script>
+  <script src="js/archive.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/history.js"></script>
   <script src="js/review.js"></script>

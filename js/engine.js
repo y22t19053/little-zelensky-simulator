@@ -20,7 +20,8 @@
   const CAMPAIGN = root.LZS_CAMPAIGN || null;
   const CAMPAIGN_EVENTS = CAMPAIGN ? CAMPAIGN.events : [];
   const WRAP_EVENTS = CAMPAIGN && CAMPAIGN.wrapupEvents ? CAMPAIGN.wrapupEvents : [];
-  const CAMPAIGN_VERSION = 5; /* v1.0：新增 aid / wrapup；仍可读取 v0.6 的 4 */
+  const CAMPAIGN_VERSION = 6; /* v1.1：新增 seed / dyn（动态事件）；仍可读取 v0.6 的 4 与 v1.0 的 5 */
+  const DYN = root.LZS_DYNAMIC || null;
 
   function isCampaign(state) { return !!(state && state.scenario === 'campaign' && CAMPAIGN); }
   function eventsFor(state) { return isCampaign(state) ? (state.wrapup && state.wrapup.started ? CAMPAIGN_EVENTS.concat(WRAP_EVENTS) : CAMPAIGN_EVENTS) : EVENTS; }
@@ -582,6 +583,9 @@
     if (campaignMode) {
       state.version = CAMPAIGN_VERSION;
       state.campaign = { day: 1, carryDays: 0, interruptions: [], entered: [], echoes: [], attritionCarry: {}, windows: [] };
+      /* v1.1：本局随机种子写入存档，用于复盘与复现（同种子 + 同决策 → 同样的事件集合）。 */
+      state.campaign.seed = (options && Number.isInteger(options.seed) && options.seed > 0) ? options.seed : (DYN ? DYN.makeSeed() : ((Date.now() >>> 0) || 1));
+      state.campaign.dyn = { fired: {}, log: [] };
     }
     recordTimeline(state);
     addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 ' + state.ap + ' 点注意力，用来决定这个国家先处理什么。' + (campaignMode ? '例行公文由各部门按授权自行办理，总统的注意力留给重大决定、批准方案和出面协调。' : '信息可以免费阅读，追问与协调会占用注意力。'));
@@ -1205,6 +1209,15 @@
     });
   }
 
+  /* v1.1：某一回合的动态事件（含已处理），用于「战役探索记录」与复盘。 */
+  function getDynamicEvents(state, includeResolved) {
+    return (state && state.dispatches || []).filter(function (item) {
+      if (item.type !== 'dynamic') return false;
+      if (item.round !== state.round && !includeResolved) return false;
+      return includeResolved || !item.resolved;
+    });
+  }
+
   function dispatchTemplate(type, vars) {
     const tpl = (STRAT.dispatchText || {})[type] || { kicker: '模拟反馈', title: '', body: '', source: '' };
     function fill(text) {
@@ -1269,6 +1282,37 @@
     if (option.extraSlot && option.agencyId && state.agencies[option.agencyId]) {
       state.agencies[option.agencyId].workload = Math.max(0, state.agencies[option.agencyId].workload - 1);
       item.extraSlotUsed = true;
+    }
+    /* v1.1：动态事件的处理方式可以写入标记、安排延迟后果（与决策的 delayed 同一套记录）。 */
+    if (option.setFlags && option.setFlags.length) {
+      option.setFlags.forEach(function (flag) { state.flags[flag] = true; });
+    }
+    if (option.delayed && option.delayed.length) {
+      option.delayed.forEach(function (spec, index) {
+        const dueRound = state.round + (spec.delay || 1);
+        const record = {
+          id: (item.dynId || item.id) + ':' + option.id + ':d' + index,
+          sourceEventId: item.dynId ? ('dyn:' + item.dynId) : item.id,
+          sourceChoiceId: option.id,
+          sourceCommandId: item.commandId || null,
+          sourceLabel: item.title,
+          dueRound: dueRound,
+          label: spec.label,
+          note: spec.note || '',
+          when: spec.when || null,
+          effects: Object.assign({}, spec.effects || {})
+        };
+        state.pending.push(record);
+        state.effects.push({
+          id: 'delayed:' + record.id + ':r' + dueRound,
+          commandId: item.commandId || null,
+          kind: 'delayed',
+          status: 'pending',
+          dueRound: dueRound,
+          issuedRound: state.round,
+          label: spec.label
+        });
+      });
     }
     item.resolved = true;
     item.outcome = { optionId: option.id, label: option.label, automatic: !!automatic, deltas: result.deltas, coordination: option.coordination || 0 };
@@ -1401,6 +1445,34 @@
         defaultOption: 'defer'
       });
       if (d) made.push(d);
+    }
+    /* v1.1：动态事件。由「此前关键决策 + 当前状态 + 已发生事件 + 时间窗口」决定，
+       只做有限随机扰动；同种子同决策得到同一集合，因此可以复盘。 */
+    if (isCampaign(state) && DYN && !(state.wrapup && state.wrapup.started)) {
+      DYN.roll(state, round).forEach(function (template) {
+        const built = DYN.build(state, template);
+        const d = addDispatch(state, 'dynamic', {
+          key: template.id,
+          dynId: template.id,
+          layer: template.layer,
+          kicker: built.kicker,
+          title: built.title,
+          body: built.body,
+          source: built.source,
+          agencyId: built.agencyId,
+          history: built.history,
+          historyLabel: built.historyLabel,
+          historyNote: built.historyNote,
+          replay: built.replay,
+          needAction: built.needAction,
+          options: built.options,
+          defaultOption: built.defaultOption
+        });
+        if (d) {
+          DYN.record(state, template, round);
+          made.push(d);
+        }
+      });
     }
     return made;
   }
@@ -2609,6 +2681,14 @@
     ending.governance = getGovernanceProfile(state);
     ending.turningPoints = getTurningPoints(state);
     ending.record = recordRun(state, ending, ending.governance);
+    /* v1.1：多周目档案（独立存档键），只追加本局的探索记录，不改动战役记录与推演记录。 */
+    if (isCampaign(state) && root.LZS_ARCHIVE && typeof root.LZS_ARCHIVE.recordCampaign === 'function') {
+      try {
+        ending.archive = root.LZS_ARCHIVE.recordCampaign(state, ending);
+      } catch (error) {
+        ending.archive = null;
+      }
+    }
     ending.finalStats = Object.assign({}, state.stats);
     ending.finalPressure = state.pressure;
     ending.finalRound = state.round;
@@ -2868,7 +2948,7 @@
       if (!raw) return null;
       const data = JSON.parse(raw);
       /* 七日存档与战役存档分键保存：旧七日存档不会被当作 38 天战役读入。 */
-      if (!data || !data.state || (campaignKey ? [4, CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
+      if (!data || !data.state || (campaignKey ? [4, 5, CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
       if (campaignKey && data.state.scenario !== 'campaign') return null;
       if (!campaignKey && data.state.scenario === 'campaign') return null;
       const state = normalizeLoadedState(data.state, data.version);
@@ -2990,7 +3070,13 @@
         entered: Array.isArray(c.entered) ? c.entered : [],
         echoes: Array.isArray(c.echoes) ? c.echoes : [],
         attritionCarry: c.attritionCarry && typeof c.attritionCarry === 'object' ? c.attritionCarry : {},
-        windows: Array.isArray(c.windows) ? c.windows : []
+        windows: Array.isArray(c.windows) ? c.windows : [],
+        /* v1.1：旧存档没有种子与动态事件记录；补一个种子并留空记录，不伪造过去发生的动态事件。 */
+        seed: Number.isInteger(c.seed) && c.seed > 0 ? c.seed : (DYN ? DYN.makeSeed() : 1),
+        dyn: {
+          fired: c.dyn && c.dyn.fired && typeof c.dyn.fired === 'object' ? c.dyn.fired : {},
+          log: c.dyn && Array.isArray(c.dyn.log) ? c.dyn.log.slice(-80) : []
+        }
       };
       if (typeof input.collapseId === 'string') state.collapseId = input.collapseId;
       /* v0.6 存档没有援助线与收束字段；缺省为空，不伪造过去。 */
@@ -3104,6 +3190,12 @@
     advanceAidLines: advanceAidLines,
     getDispatches: getDispatches,
     resolveDispatch: resolveDispatch,
+    /* v1.1：动态事件与多周目/Schema 版本 */
+    campaignVersion: CAMPAIGN_VERSION,
+    dynamic: DYN,
+    getDynamicEvents: getDynamicEvents,
+    getDynamicSummary: function (state) { return DYN ? DYN.summary(state) : null; },
+    getBranchHints: function (state) { return DYN ? DYN.branchHints(state) : []; },
     getGovernanceProfile: getGovernanceProfile,
     getTurningPoints: getTurningPoints,
     getRecords: getRecords,

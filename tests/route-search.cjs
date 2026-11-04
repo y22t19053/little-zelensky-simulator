@@ -17,6 +17,7 @@ globalThis.localStorage = {
 require('../js/events.js');
 require('../js/intel.js');
 require('../js/strategy.js');
+require('../js/dynamic.js');
 require('../js/engine.js');
 const L = globalThis.LZS;
 

@@ -17,6 +17,7 @@ require('../js/events.js');
 require('../js/intel.js');
 require('../js/strategy.js');
 require('../js/campaign.js');
+require('../js/dynamic.js');
 require('../js/engine.js');
 const L = globalThis.LZS;
 const quiet = process.argv.includes('--quiet');
@@ -57,7 +58,8 @@ function spend(state, mode) {
 
 function play(plan, opts) {
   const o = opts || {};
-  const state = L.createGame({ scenario: 'campaign' });
+  /* v1.1：固定种子，使动态事件在测试中可复现；o.seed 可显式指定。 */
+  const state = L.createGame({ scenario: 'campaign', seed: o.seed || 20220224 });
   const trace = [];
   let guard = 0;
   while (!state.ending && guard++ < 40) {
@@ -152,10 +154,15 @@ const ENDING_ROUTES = {
   c_A: ROUTES.near_history,
   c_B: ROUTES.counterfactual,
   c_C: Object.assign({}, ROUTES.hard, { c3: ['c_address_nation'], c7: ['c_info_rules'], c11: ['c_prepare_return'] }),
-  c_D: { c1: ['c_martial', 'c_command_line'], c2: ['c_deny_runway'], c3: ['c_stay_capital', 'c_address_nation'], c4: ['c_counterintel', 'c_curfew'], c5: ['c_blow_bridges'], c6: ['c_harass_convoy', 'c_release_stocks'], c7: ['c_wishlist', 'c_info_rules'], c8: ['c_ammo_ration', 'c_rotation'], c9: ['c_reserve_hold'], c10: ['c_staff_rest', 'c_repair'], c11: ['c_counter_west'], c12: ['c_stay_alert', 'c_cautious_message'], c13: ['c_document', 'c_restore_services'] },
+  /* v1.1：动态事件（条件/状态/摩擦）会真实改变数值与后果，c_D 需要「预备队保留 + 东侧伏击」同时成立才够条件——
+     这与 c_D 结局本身的描述一致（空中通道拒止、河线障碍、对方补给受扰、局部反击及时），不是把门槛降低。 */
+  c_D: { c1: ['c_martial', 'c_command_line'], c2: ['c_deny_runway'], c3: ['c_stay_capital', 'c_address_nation'], c4: ['c_counterintel', 'c_curfew'], c5: ['c_blow_bridges'], c6: ['c_harass_convoy', 'c_release_stocks'], c7: ['c_wishlist', 'c_info_rules'], c8: ['c_ammo_ration', 'c_rotation'], c9: ['c_reserve_hold', 'c_brovary_ambush'], c10: ['c_staff_rest', 'c_repair'], c11: ['c_counter_west'], c12: ['c_stay_alert', 'c_cautious_message'], c13: ['c_fast_return'] }, /* v1.1：动态事件改变了数值走向，c_D 的判定（跑道拒止 + 河线障碍 + 补给受扰 + 西侧反击 + 首都/军队余量 + 压力 <= 55 + 无严重维度）需要第 13 窗口选择快速回到失地，才能在收束前把首都与军队余量托住。 */
   c_E: Object.assign({}, ROUTES.near_history, { c11: ['c_hold_lines', 'c_prepare_return'], c12: ['c_trust_redeploy'] }),
   c_F: ROUTES.hard,
-  c_G: Object.assign({}, ROUTES.hard, { c3: ['c_address_nation'], c9: ['c_reserve_brovary'], c11: ['c_hold_lines'] }),
+  /* v1.1：c_G（政府连续性断裂）要求「没有任何继任或转移安排」+ 政府连续性低于 45 + 崩溃线被触发。
+     这条路线在动态事件参与后仍然成立：西北方向保留桥梁、把预备队留在城内、授权地方自主都削弱了指挥统一，
+     第 36 天首都方向崩溃，而此前既没有继任安排也没有转移部分职能。 */
+  c_G: { c1: ['c_disperse'], c2: ['c_keep_airfield'], c3: ['c_address_nation'], c4: ['c_arm_volunteers'], c5: ['c_keep_bridges', 'c_form_reserve'], c6: ['c_release_stocks'], c7: ['c_info_rules'], c8: ['c_decentralize'], c9: ['c_reserve_hold'], c10: ['c_staff_rest'], c11: ['c_hold_lines'], c12: ['c_trust_redeploy'], c13: ['c_fast_return'] },
   c_H: Object.assign({}, ROUTES.counterfactual, { c1: ['c_first_appeal', 'c_command_line'], c7: ['c_wishlist', 'c_info_rules'], c12: ['c_verify_signal', 'c_cautious_message', 'c_stay_alert'], c13: ['c_staged_return', 'c_document'] })
 };
 
