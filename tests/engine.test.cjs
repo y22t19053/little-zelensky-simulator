@@ -19,6 +19,8 @@ require('../js/events.js');
 require('../js/intel.js');
 require('../js/strategy.js');
 require('../js/dynamic.js');
+require('../js/storylines.js');
+require('../js/afterward.js');
 require('../js/engine.js');
 
 const L = globalThis.LZS;

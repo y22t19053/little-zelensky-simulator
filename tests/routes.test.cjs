@@ -20,12 +20,13 @@ globalThis.localStorage = {
 };
 
 const root = path.join(__dirname, '..');
-['events', 'intel', 'strategy', 'campaign', 'dynamic', 'replay', 'archive', 'engine'].forEach(function (name) {
+['events', 'intel', 'strategy', 'campaign', 'dynamic', 'storylines', 'replay', 'archive', 'afterward', 'engine'].forEach(function (name) {
   require(path.join(root, 'js/' + name + '.js'));
 });
 
 const L = globalThis.LZS;
 const D = globalThis.LZS_DYNAMIC;
+const ST = globalThis.LZS_STORYLINES;
 const AGENCIES = ['office', 'general_staff', 'interior', 'foreign', 'logistics', 'communications'];
 
 let passed = 0;
@@ -336,6 +337,80 @@ test('路线差异体现在后续事件与条件上，而不只是结局名字',
   assert.ok(keptAirfield.length > 0, '保留设施路线没有触发机场方向的后续事件');
   const same = nearHistoryAirfield.filter(function (id) { return keptAirfield.indexOf(id) !== -1; });
   assert.ok(same.length < Math.min(nearHistoryAirfield.length, keptAirfield.length), '机场方向两条路线事件完全一样');
+});
+
+/* ── v1.2：故事线让不同路线产生不同的叙事过程 ─────────── */
+function playWithStory(plan, opts) {
+  const o = opts || {};
+  const state = L.createGame({ scenario: 'campaign', seed: o.seed || 20220224 });
+  let guard = 0;
+  while (!state.ending && guard++ < 40) {
+    if (state.phase === 'briefing') {
+      (state.dispatches || []).forEach(function (item) {
+        if (item.type !== 'story' || item.resolved) return;
+        const pick = (item.options || []).filter(function (opt) {
+          return opt.id !== 'defer' && (opt.ap || 0) <= state.ap;
+        }).sort(function (a, b) { return (a.ap || 0) - (b.ap || 0); })[0];
+        if (pick) L.resolveDispatch(state, item.id, pick.id);
+      });
+    }
+    const event = L.getEvent(state);
+    if (!event) break;
+    const wanted = (typeof plan === 'function' ? plan(state, event) : plan[event.id]) || [];
+    wanted.forEach(function (id) { issue(state, id); });
+    if (!state.executed.length) {
+      const cheap = L.getAvailableChoices(state).sort(function (a, b) { return a.ap - b.ap; })[0];
+      if (cheap) issue(state, cheap.id);
+    }
+    L.endRound(state);
+    if (state.phase === 'wrapup_offer') L.declineWrapUp(state);
+    if (state.phase === 'interlude') L.continueFromInterlude(state);
+  }
+  assert.ok(state.ending, '路线没有走到结局');
+  return state;
+}
+
+function storySignature(state) {
+  const store = state.campaign.story || {};
+  return (store.log || []).map(function (entry) { return entry.lineId + ':' + entry.stepId; }).sort();
+}
+
+test('八条路线都会展开故事线，且没有一条线完全没有下文', function () {
+  const names = Object.keys(ROUTES);
+  assert.ok(names.length >= 8, '应至少八条路线，实际 ' + names.length);
+  const samples = ['near_history', 'airfield_kept', 'gov_autonomy', 'northwest'];
+  samples.forEach(function (name) {
+    const state = playWithStory(ROUTES[name].plan, { seed: 20220224 });
+    const signature = storySignature(state);
+    assert.ok(signature.length >= 3, name + ' 的故事线推进太少：' + signature.length);
+    const store = state.campaign.story;
+    assert.ok((store.active || []).length >= ST.primaryLines, name + ' 没有激活足够的主轴故事线');
+  });
+});
+
+test('不同路线的故事线走向不同，不是只改结局名字', function () {
+  const a = storySignature(playWithStory(ROUTES.near_history.plan, { seed: 20220224 }));
+  const b = storySignature(playWithStory(ROUTES.airfield_kept.plan, { seed: 20220224 }));
+  const c = storySignature(playWithStory(ROUTES.gov_autonomy.plan, { seed: 20220224, standing: 'office' }));
+  const sameAsA = b.filter(function (id) { return a.indexOf(id) !== -1; });
+  assert.ok(sameAsA.length < a.length, '保留设施路线与近历史路线故事线完全一样');
+  const sigA = a.join('|');
+  const sigB = b.join('|');
+  const sigC = c.join('|');
+  assert.ok(sigA !== sigC, '政府自主路线与近历史路线故事线完全一样');
+  assert.ok(sigB !== sigC, '保留设施路线与政府自主路线故事线完全一样');
+});
+
+test('处理故事线文件会改变后续窗口的内容，而不只是最终数字', function () {
+  const engaged = playWithStory(ROUTES.near_history.plan, { seed: 20220224 });
+  const ignored = play(ROUTES.near_history.plan, { seed: 20220224 });
+  const engagedFeed = (engaged.campaign.feed || []).map(function (item) { return item.stepId; }).filter(Boolean);
+  const ignoredFeed = (ignored.campaign.feed || []).map(function (item) { return item.stepId; }).filter(Boolean);
+  const onlyEngaged = engagedFeed.filter(function (id) { return ignoredFeed.indexOf(id) === -1; });
+  const onlyIgnored = ignoredFeed.filter(function (id) { return engagedFeed.indexOf(id) === -1; });
+  assert.ok(onlyEngaged.length + onlyIgnored.length >= 3, '处理与不处理故事线文件，后续动态应至少差三条，实际 ' + (onlyEngaged.length + onlyIgnored.length));
+  const engagedPaths = Object.keys((engaged.campaign.story || {}).paths || {});
+  assert.ok(engagedPaths.length >= 1, '处理过文件之后应留下至少一条线的走向记录');
 });
 
 console.log('');

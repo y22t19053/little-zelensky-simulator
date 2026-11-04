@@ -1,13 +1,13 @@
 /*
- * 《小泽模拟器》v1.1.0 · 多周目档案
+ * 《小泽模拟器》v1.2.0 · 多周目探索档案
  * 每完成一次「2022 · 基辅防御战役」，就往这里追加一条探索记录：
- * 走过的关键路线、见过的条件事件、探明到哪一层分支、做过哪些推演。
+ * 本局激活的故事线、各自走到哪一步、做过的分支、见过的条件事件、做过的推演。
  * 独立存档键，与战役记录（lzs_records_v1）、推演记录（lzs_replay_v1）互不改写。
  */
 (function (root) {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const STORAGE_KEY = 'lzs_archive_v1';
   const BACKUP_KEY = 'lzs_archive_v1_broken';
   const MAX_RUNS = 40;
@@ -104,6 +104,30 @@
     }).filter(Boolean).slice(0, 26);
   }
 
+  /* 本局故事线快照：主轴/辅线、各线走到第几步、形成的分支、产出的决策文件数。 */
+  function storySnapshot(state) {
+    const out = { active: [], aux: [], lines: {}, paths: {}, files: 0, feed: 0, narrative: '' };
+    const story = state && state.campaign && state.campaign.story;
+    if (!story || !story.activated) return out;
+    out.active = (story.active || []).slice();
+    out.aux = (story.aux || []).slice();
+    out.files = story.files || 0;
+    out.paths = JSON.parse(JSON.stringify(story.paths || {}));
+    (story.log || []).forEach(function (entry) {
+      if (entry && entry.lineId) {
+        const line = out.lines[entry.lineId] || { seen: 0, steps: [] };
+        line.seen += 1;
+        if (entry.stepId && line.steps.indexOf(entry.stepId) === -1) line.steps.push(entry.stepId);
+        out.lines[entry.lineId] = line;
+      }
+    });
+    out.feed = (state.campaign.feed || []).length;
+    try {
+      if (root.LZS_STORYLINES) out.narrative = root.LZS_STORYLINES.narrative(state);
+    } catch (error) { out.narrative = ''; }
+    return out;
+  }
+
   /* 一次战役结束时追加一条记录。ending 直接用引擎产出的结局对象。 */
   function recordCampaign(state, ending) {
     if (!state || !ending) return null;
@@ -120,6 +144,7 @@
       wrappedUp: !!(state.campaign && state.campaign.wrapup && state.campaign.wrapup.used),
       events: events,
       branches: branchSnapshot(state),
+      story: storySnapshot(state),
       route: routeOf(state),
       stats: state.stats ? JSON.parse(JSON.stringify(state.stats)) : {}
     };
@@ -171,6 +196,61 @@
         state: state
       };
     });
+    /* 故事线探索状态：哪些线已经历过、走过最长到哪一步、本机见过几次。 */
+    const lineSeen = {};
+    runs.forEach(function (run) {
+      const story = run.story || null;
+      if (!story) return;
+      const ids = (story.active || []).concat(story.aux || []);
+      ids.forEach(function (id) {
+        const times = (lineSeen[id] && lineSeen[id].times) || 0;
+        const seen = (story.lines && story.lines[id] && story.lines[id].seen) || 0;
+        lineSeen[id] = { times: times + 1, seenMax: Math.max((lineSeen[id] && lineSeen[id].seenMax) || 0, seen) };
+      });
+    });
+    let lineIndex = [];
+    try {
+      if (root.LZS_STORYLINES) {
+        lineIndex = root.LZS_STORYLINES.storylines.map(function (line) {
+          const info = lineSeen[line.id] || { times: 0, seenMax: 0 };
+          return {
+            id: line.id,
+            title: line.title,
+            theme: line.theme,
+            steps: line.steps.length,
+            times: info.times,
+            seenMax: info.seenMax,
+            state: info.times === 0 ? 'unexplored' : (info.seenMax >= line.steps.length ? 'explored' : 'partial'),
+            hint: line.theme
+          };
+        });
+      }
+    } catch (error) { lineIndex = []; }
+    /* 相邻两局的差异：故事线组合与结局，用来回答「这几局到底哪里不一样」。 */
+    const compare = [];
+    for (let i = 1; i < runs.length; i += 1) {
+      const a = runs[i - 1];
+      const b = runs[i];
+      const la = ((a.story && a.story.active) || []).slice().sort();
+      const lb = ((b.story && b.story.active) || []).slice().sort();
+      const onlyA = la.filter(function (id) { return lb.indexOf(id) === -1; });
+      const onlyB = lb.filter(function (id) { return la.indexOf(id) === -1; });
+      const shared = la.filter(function (id) { return lb.indexOf(id) !== -1; });
+      const eventsA = a.events || [];
+      const eventsB = b.events || [];
+      const newEvents = eventsB.filter(function (id) { return eventsA.indexOf(id) === -1; });
+      compare.push({
+        from: a.id,
+        to: b.id,
+        sameSeed: a.seed != null && a.seed === b.seed,
+        onlyA: onlyA,
+        onlyB: onlyB,
+        shared: shared,
+        newEvents: newEvents,
+        endings: [a.endingId || '', b.endingId || '']
+      });
+    }
+    const lastRun = runs.length ? runs[runs.length - 1] : null;
     return {
       completed: runs.length,
       lastAt: runs.length ? runs[runs.length - 1].endedAt : null,
@@ -180,6 +260,14 @@
       endings: endings,
       branches: branches,
       unexplored: branches.filter(function (item) { return item.state === 'unexplored'; }).map(function (item) { return item.label; }),
+      lines: lineIndex,
+      linesUnexplored: lineIndex.filter(function (line) { return line.state === 'unexplored'; }).map(function (line) { return line.title; }),
+      linesExplored: lineIndex.filter(function (line) { return line.state !== 'unexplored'; }).length,
+      storyRuns: runs.filter(function (run) { return !!(run.story && (run.story.active || []).length); }).length,
+      narrative: lastRun && lastRun.story ? lastRun.story.narrative || '' : '',
+      lastSeed: lastRun ? lastRun.seed : null,
+      lastEnding: lastRun ? lastRun.endingId : null,
+      compare: compare.slice(-4),
       replayDone: replayDone,
       replayRuns: replayRuns,
       broken: !!store.broken

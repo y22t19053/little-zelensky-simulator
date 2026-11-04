@@ -49,7 +49,7 @@ test('战役与经典模式隔离：经典 createGame 不受影响', function ()
   assert.equal(camp.scenario, 'campaign');
   assert.equal(L.finalRoundFor(camp), 13);
   assert.equal(camp.schemaVersion, L.campaignVersion);
-  assert.equal(L.campaignVersion, 6, 'v1.1：schema 升到 6（seed / dyn）');
+  assert.equal(L.campaignVersion, 7, 'v1.2：schema 升到 7（story / feed）');
   assert.equal(L.getEvent(camp).id, 'c1');
 });
 
@@ -229,7 +229,7 @@ test('存档：战役使用独立键与 schema 5，不覆盖经典存档；刷�
   assert.equal(localStorage.getItem(L.saveKey), classicRaw, '经典存档未被改动');
   const raw = JSON.parse(localStorage.getItem(L.campaignSaveKey));
   assert.equal(raw.version, L.campaignVersion);
-  assert.equal(raw.state.schemaVersion, 6);
+  assert.equal(raw.state.schemaVersion, L.campaignVersion);
   const loaded = L.loadSavedGame('campaign');
   assert.ok(loaded && loaded.state);
   assert.equal(loaded.state.round, 2);
@@ -390,7 +390,7 @@ test('存档：v0.6（版本 4）战役存档仍可读取，常设授权补期�
   assert.deepEqual(loaded.state.aid.lines, []);
   assert.equal(loaded.state.wrapup, null);
   assert.equal(typeof loaded.state.standing.logistics.expiresRound, 'number');
-  assert.equal(loaded.state.schemaVersion, 6);
+  assert.equal(loaded.state.schemaVersion, L.campaignVersion);
   assert.ok(localStorage.getItem(L.campaignSaveKey), '读取不删除原存档');
 });
 

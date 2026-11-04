@@ -23,6 +23,7 @@
     clearSave: document.getElementById('btn-clear-save'),
     how: document.getElementById('btn-how'),
     replayRoom: document.getElementById('btn-replay-room'),
+    afterwardIntro: document.getElementById('btn-afterward-intro'),
     disclaimer: document.getElementById('btn-disclaimer'),
     saveSummary: document.getElementById('save-summary'),
     introVersion: document.getElementById('intro-version'),
@@ -219,12 +220,14 @@
     startNewGame(true, scenario);
   }
 
-  function startNewGame(force, arg) {
+  function startNewGame(force, arg, seed) {
     const scenario = scenarioArg(arg);
     if (!force && L.hasSave(scenario)) return;
     L.deleteSave(scenario);
     if (A) A.playSfx('menu');
-    ui.game = scenario === 'campaign' ? L.createGame({ scenario: 'campaign' }) : L.createGame();
+    const options = { scenario: 'campaign' };
+    if (scenario === 'campaign' && Number.isInteger(seed) && seed > 0) options.seed = seed;
+    ui.game = scenario === 'campaign' ? L.createGame(options) : L.createGame();
     ui.selectedChoiceId = null;
     ui.lastDeltas = null;
     ui.lastPressureDelta = 0;
@@ -571,8 +574,37 @@
           '<div class="dossier-foot"><span>文电为合成文本</span><span>参数为模拟设计值</span></div>' +
         '</article>' +
       /* 战役窗口的来信进工作台；七日模式仍然按原样挂在简报下方。 */
-      '</div>' + (isCampaignGame() ? '' : dispatchTrayHtml()) + echoesHtml();
+      '</div>' + (isCampaignGame() ? feedHtml() : dispatchTrayHtml()) + echoesHtml();
     bindDispatches(el.eventMain);
+  }
+
+  /* ---------- v1.2：局势动态与因果回报（免费内容，不占注意力、不进工作台） ---------- */
+  const FEED_KIND_LABEL = { brief: '局势动态', echo: '因果回报' };
+  function feedApi() { return L.getFeed ? L.getFeed : null; }
+
+  function feedItemHtml(item) {
+    const label = FEED_KIND_LABEL[item.kind] || '局势动态';
+    const lineName = item.lineTitle ? '<span class="feed-line">' + escapeHtml(item.lineTitle) + '</span>' : '';
+    return '<li class="feed-item type-' + escapeHtml(item.kind || 'brief') + '">' +
+      '<div class="feed-head"><span class="feed-kind">' + escapeHtml(label) + '</span>' + lineName + '</div>' +
+      '<strong>' + escapeHtml(item.title) + '</strong>' +
+      '<p>' + escapeHtml(item.body) + '</p>' +
+      '<small class="feed-source">' + escapeHtml(item.source || '总统办公室 · 值班记录') + '</small>' +
+      (item.historyLabel ? '<small class="dispatch-history"><span class="history-kind">' + escapeHtml(item.historyLabel) + '</span></small>' : '') +
+    '</li>';
+  }
+
+  function feedHtml() {
+    if (!isCampaignGame()) return '';
+    const items = (feedApi() && feedApi()(ui.game)) || [];
+    if (!items.length) return '';
+    const echoes = items.filter(function (item) { return item.kind === 'echo'; }).length;
+    const head = '<div class="tray-head"><h2>这几天里发生的事</h2><span>' + items.length + ' 条 · ' +
+      (echoes ? echoes + ' 条与此前的决定有关' : '形势与各部门的进展') + '</span></div>';
+    return '<section class="feed" aria-label="局势动态与因果回报">' + head +
+      '<ol class="feed-list">' + items.map(feedItemHtml).join('') + '</ol>' +
+      '<p class="feed-note">这一栏是免费内容：读不读都不影响注意力，也不会有事因为没读而必然出问题。</p>' +
+    '</section>';
   }
 
   /* ---------- v0.5：日焦点、办公桌状态、前序回响、事务电报 ---------- */
@@ -724,6 +756,27 @@
   const NODE_LABELS = { airfield: '安东诺夫机场', capital: '政府连续性', bridges: '伊尔平河与桥梁', reserve: '莫什春 / 布罗瓦雷预备队', signal: '3 月 29 日撤退信号', return: '重新进入失地' };
   const DIVERGE_LABELS = { near: '接近历史基线', diverged: '偏离历史基线', missed: '未作出或命令失效', abstract: '历史基线是抽象的，不逐项对比', none: '—' };
   const DIM_LEVEL = { good: '尚可', strained: '吃紧', severe: '严重受损' };
+  /* ---------- v1.2：本局故事线与关键因果链 ---------- */
+  const STORY_STATE_LABEL = { unexplored: '本局没有展开', pending: '刚开场', partial: '进行到中途', complete: '走完了' };
+  function storySectionHtml() {
+    if (!L.getStorySummary) return '';
+    const sum = L.getStorySummary(ui.game);
+    if (!sum) return '';
+    const narrative = L.getStoryNarrative ? L.getStoryNarrative(ui.game) : '';
+    const active = (sum.lines || []).filter(function (line) { return line.primary || line.auxiliary; });
+    if (!active.length) return '';
+    const chain = active.map(function (line) {
+      const path = line.path ? '<p class="story-path">本局走向：' + escapeHtml(line.path.label) + (line.path.note ? '——' + escapeHtml(line.path.note) : '') + '</p>' : '<p class="story-path is-open">这条线本局没有形成明确决定，事情按各部门现有安排继续。</p>';
+      return '<li class="story-line is-' + escapeHtml(line.state) + (line.primary ? '' : ' is-aux') + '">' +
+        '<div class="story-line-head"><span class="story-line-kind">' + (line.primary ? '主线' : '辅线') + '</span><strong>' + escapeHtml(line.title) + '</strong>' +
+        '<span class="story-line-state">' + escapeHtml(STORY_STATE_LABEL[line.state] || line.state) + '</span></div>' +
+        '<p class="stat-hint">' + escapeHtml(line.theme) + ' · 看到第 ' + line.seen + '/' + line.total + ' 步</p>' + path + '</li>';
+    }).join('');
+    return '<section class="ending-section story-review"><span class="section-kicker">THIS RUN</span><h2>本局战役故事</h2>' +
+      '<p>' + escapeHtml(narrative) + '</p><ol class="story-chain">' + chain + '</ol>' +
+      '<p class="stat-hint">故事线由本局种子与你的决定共同决定。换一个种子，展开的主线会不同；同种子同决定可以得到同样的走向。</p></section>';
+  }
+
   function campaignEndingMainHtml(ending) {
     const keys = ending.keyDecisions || [];
     const keyHtml = keys.length ? '<ol class="key-chain">' + keys.map(function (k) {
@@ -738,7 +791,7 @@
       const ev = eventsOf().filter(function (item) { return item.id === w.eventId; })[0];
       return '<li' + (w.interrupted ? ' class="is-interrupted"' : '') + '><span>' + escapeHtml(L.campaignDateLabel(Math.floor(w.fromDay)) + ' → ' + L.campaignDateLabel(Math.floor(w.toDay))) + '</span><strong>' + escapeHtml(ev ? ev.title : w.eventId) + '</strong><small>' + escapeHtml('内部模拟 ' + spanText(w.simulated) + (w.interrupted ? ' · 紧急中断' : '')) + '</small></li>';
     }).join('') + '</ol>' : '';
-    return '<section class="ending-section"><span class="section-kicker">KEY ORDERS</span><h2>重大决策如何走向战役结果</h2>' + keyHtml + '</section>' +
+    return '<section class="ending-section"><span class="section-kicker">KEY ORDERS</span><h2>重大决策如何走向战役结果</h2>' + keyHtml + '</section>' + storySectionHtml() +
       '<section class="ending-section"><h2>你的时间线与历史基线</h2><p class="stat-hint">' + escapeHtml(first ? '最早的偏离：' + (NODE_LABELS[first.node] || first.node) + (first.round ? '（窗口 ' + first.round + '）' : '') + '。偏离之后的差异包含模型内部推演，不等于历史事实。' : '本局关键节点与历史基线大体一致；差异来自数值与执行过程，也属于模型推演。') + '</p>' + divHtml + '</section>' +
       (winHtml ? '<section class="ending-section"><h2>38 天的时间推进</h2>' + winHtml + '</section>' : '');
   }
@@ -834,22 +887,27 @@
     return '<section class="echoes" aria-label="此前决定的回响"><h2>此前决定的回响</h2><ul>' + rows.slice(0, 5).map(function (row) { return '<li class="' + row.cls + '">' + escapeHtml(row.text) + '</li>'; }).join('') + '</ul><p class="echo-note">只列出由你此前签发、授权或放弃的事务引起的变化。</p></section>';
   }
 
-  /* 动态事件：显示这条报告的属性（历史事实 / 资料支持的合理决策 / 模拟推演 / 机制假设），
-     不显示内部编号，也不假装它是确凿事实。 */
+  /* 动态事件与故事线文件：显示这条报告 / 这份文件的属性（历史事实 / 资料支持的合理决策 /
+     模拟推演 / 机制假设），不显示内部编号，也不假装它是确凿事实。 */
   function historyTagHtml(item) {
-    if (!item || item.type !== 'dynamic' || !item.historyLabel) return '';
+    if (!item || (item.type !== 'dynamic' && item.type !== 'story') || !item.historyLabel) return '';
     return '<small class="dispatch-history"><span class="history-kind">' + escapeHtml(item.historyLabel) + '</span>' + (item.historyNote ? ' · ' + escapeHtml(item.historyNote) : '') + '</small>';
   }
 
   function dispatchRowHtml(item) {
     const g = ui.game;
+    const isStory = item.type === 'story';
     const actions = item.resolved ? '<p class="dispatch-outcome">已处理：' + escapeHtml(item.outcome && item.outcome.label ? item.outcome.label : '已阅') + '</p>' :
       '<div class="dispatch-actions">' + (item.options || []).map(function (option) {
         const cost = option.ap ? option.ap + ' AP' : '不耗 AP';
         const isDefault = option.id === item.defaultOption;
         return '<button type="button" class="mini-action' + (option.ap ? ' is-primary' : '') + '" data-dispatch="' + escapeHtml(item.id) + '" data-option="' + escapeHtml(option.id) + '"' + ((option.ap || 0) > g.ap || g.phase !== 'briefing' ? ' disabled' : '') + '>' + escapeHtml(option.label) + (option.label.indexOf('AP') === -1 ? ' · ' + cost : '') + (isDefault && (item.options || []).length > 1 ? ' · 不处理则默认' : '') + '</button>';
       }).join('') + '</div>';
-    return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' + (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + historyTagHtml(item) + actions + '</li>';
+    return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '">' +
+      '<span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span>' +
+      (isStory ? '<span class="story-line-badge">' + escapeHtml(item.storyTitle || '') + '</span>' : '') +
+      '<strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' +
+      (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + historyTagHtml(item) + actions + '</li>';
   }
 
   /* 七日模式（以及战役里还没进工作台的旧渲染路径）仍然用这个托盘。 */
@@ -1824,6 +1882,62 @@
     }).join('') + '</ol></section>';
   }
 
+  /* ---------- v1.2：《后来，战争走到了这里》 ----------
+     战役结束后的独立历史档案。内容与玩家本局的决定无关，也不属于 2022 年 2—4 月当时可知的信息。 */
+  function afterwardApi() { return window.LZS_AFTERWARD || null; }
+
+  function afterwardRecordHtml(record) {
+    const A = afterwardApi();
+    const statusLabel = (A && A.status && A.status[record.status]) || record.status;
+    const sources = (record.sources || []).map(function (s) {
+      return '<li><a href="' + escapeHtml(s.url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(s.name) + '</a>' + (s.date ? ' <span class="src-date">' + escapeHtml(s.date) + '</span>' : '') + '</li>';
+    }).join('');
+    return '<article class="afterward-card" id="' + escapeHtml(record.id) + '">' +
+      '<header><span class="afterward-era">' + escapeHtml(record.era || '') + '</span><span class="afterward-date">' + escapeHtml(record.dateLabel) + '</span>' +
+      '<span class="history-kind">' + escapeHtml(statusLabel) + '</span></header>' +
+      '<h3>' + escapeHtml(record.title) + '</h3><p class="afterward-lead">' + escapeHtml(record.lead || '') + '</p>' +
+      '<dl class="afterward-body">' +
+        '<div><dt>当时发生了什么</dt><dd>' + escapeHtml(record.happened) + '</dd></div>' +
+        '<div><dt>后来可以确认的</dt><dd>' + escapeHtml(record.confirmed) + '</dd></div>' +
+        '<div><dt>仍有争议或无法确认</dt><dd>' + escapeHtml(record.disputed) + '</dd></div>' +
+        '<div><dt>为什么值得重新理解战争</dt><dd>' + escapeHtml(record.why) + '</dd></div>' +
+      '</dl>' +
+      '<div class="afterward-sources"><strong>来源</strong><ol>' + sources + '</ol></div>' +
+    '</article>';
+  }
+
+  function openAfterward() {
+    const AW = afterwardApi();
+    if (!AW) { toast('历史档案没有载入。', true); return; }
+    const st = AW.unlockState ? AW.unlockState() : { unlocked: true };
+    if (!st.unlocked) { toast(st.reason || '先完整打完一次战役。', true); return; }
+    if (A) A.playSfx('archive');
+    const records = AW.list();
+    openModal({
+      kicker: '独立档案 / AFTER THE CAMPAIGN',
+      title: AW.title || '后来，战争走到了这里',
+      wide: true,
+      className: 'afterward-modal',
+      body: '<p class="afterward-warn">' + escapeHtml(AW.disclaimer) + '</p>' +
+        '<p class="modal-note">共 ' + records.length + ' 条。每条都分开写「当时发生」「后来确认」「仍有争议」，并且标注来源与报道日期。这些是战役结束后的历史，不是 2022 年 2—4 月总统能知道的东西。</p>' +
+        '<ol class="afterward-timeline">' + records.map(function (record) {
+          return '<li><span class="afterward-node">' + escapeHtml(record.dateLabel) + '</span>' + afterwardRecordHtml(record) + '</li>';
+        }).join('') + '</ol>',
+      actions: [{ label: '合上档案', className: 'btn btn-primary', onClick: function () {} }]
+    });
+  }
+
+  function afterwardTeaserHtml() {
+    const A = afterwardApi();
+    if (!A) return '';
+    let unlocked = false;
+    try { unlocked = !!(A.unlockState && A.unlockState().unlocked); } catch (error) { unlocked = false; }
+    if (!unlocked) return '';
+    return '<section class="ending-review-invite afterward-invite"><span class="section-kicker">A LATER WAR</span><h2>后来，战争走到了这里。</h2>' +
+      '<p>这是战役结束后的历史：2023 年的莫斯科与别尔哥罗德、瓦格纳的三十六小时、2024 年的库尔斯克。它们不属于 2022 年 2—4 月你能知道的信息，也不是你在本局做出的决定造成的。</p>' +
+      '<button type="button" class="btn btn-primary" id="btn-afterward">打开历史档案</button></section>';
+  }
+
   function recordsHtml() {
     const runs = L.getRecords ? L.getRecords().runs.slice(-5).reverse() : [];
     if (!runs.length) return '';
@@ -1866,13 +1980,22 @@
       '<section class="ending-section"><h2>完整决策链</h2>' + timeline + '</section><section class="ending-section"><h2>延迟后果链</h2>' + chainHtml + '</section></div>' +
       '<aside class="ending-column"><section class="ending-section"><h2>七项最终状态</h2><div class="ending-stats">' + endingStatsHtml(stats) + '</div><div class="ending-pressure"><span>战争压力</span><strong>' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + ' / 100</strong></div></section>' +
       (campaignEnd ? campaignEndingSideHtml(ending) : '') + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
+      (campaignEnd ? afterwardTeaserHtml() : '') +
       '<section class="ending-review-invite"><span class="section-kicker">SEALED UNTIL THE END</span><h2>现在，打开事后才能看见的资料。</h2><p>完整模拟参数、逐日事实、当时认知、后来确认、争议与资料来源已独立归档，不再接在结局正文之后。</p><button type="button" class="btn btn-primary" id="btn-history">进入历史复盘</button></section>' +
       '<div class="ending-disclaimer"><strong>模拟说明：</strong>' + escapeHtml(ending.disclaimer || L.meta.disclaimer || '') + '<br>本结局只描述本局模拟参数下的国家状态，不评价真实历史人物。<br>版本 ' + escapeHtml(L.meta.version || '') + ' · 所有数值均为模拟设计参数。</div>' +
       '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-replay-room-end">决策推演室</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-poster">生成纪念海报</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
     document.getElementById('btn-history').addEventListener('click', openHistoryReview);
+    const afterBtn = document.getElementById('btn-afterward');
+    if (afterBtn) afterBtn.addEventListener('click', openAfterward);
     const roomEnd = document.getElementById('btn-replay-room-end');
     if (roomEnd) roomEnd.addEventListener('click', openReplayRoom);
     document.getElementById('btn-replay').addEventListener('click', function () { startNewGame(true, scenarioOf()); });
+    const newSeedBtn = document.getElementById('btn-new-seed');
+    if (newSeedBtn) newSeedBtn.addEventListener('click', startNewSeedCampaign);
+    const sameSeedBtn = document.getElementById('btn-same-seed');
+    if (sameSeedBtn) sameSeedBtn.addEventListener('click', replayLastSeed);
+    const roomArchive = document.getElementById('btn-replay-room-archive');
+    if (roomArchive) roomArchive.addEventListener('click', openReplayRoom);
     document.getElementById('btn-back-cover').addEventListener('click', renderIntro);
     document.getElementById('btn-print').addEventListener('click', function () { window.print(); });
     document.getElementById('btn-poster').addEventListener('click', function () { openPosterModal(ending); });
@@ -2162,14 +2285,61 @@
       const template = (dynApi && dynApi.byId) ? dynApi.byId(id) : null;
       return template ? template.title : id;
     });
-    return '<section class="ending-section exploration"><h2>战役探索记录</h2><p class="stat-hint">记录你在这台设备上走过的路线、出现过的条件事件与做过哪些推演。没有经验值、等级或胜利积分。</p>' +
-      '<dl class="exploration-facts"><dt>完成战役</dt><dd>' + completed + ' 次</dd><dt>本局条件事件</dt><dd>' + firedIds.length + ' / ' + (summary ? summary.total : firedIds.length) + '</dd><dt>跨周目事件</dt><dd>' + ((archive && archive.eventsSeenCount) || 0) + ' 条</dd><dt>已完成推演</dt><dd>' + (replaySum ? replaySum.totalRuns : 0) + ' 次</dd></dl>' +
+    /* v1.2：故事线探索。只说「经历过 / 没经历过」和走到第几步，不剧透没经历过的内容。 */
+    const STORY_STATE = { unexplored: '尚未经历', partial: '经历过一部分', explored: '走过完整' };
+    const lineLines = (archive && archive.lines && archive.lines.length) ? archive.lines.map(function (line) {
+      return '<li class="branch-hint is-' + (line.state === 'unexplored' ? 'unexplored' : (line.state === 'explored' ? 'explored' : 'partial')) + '">' +
+        '<span>' + escapeHtml(line.title) + '</span><strong>' + escapeHtml(STORY_STATE[line.state] || line.state) + '</strong>' +
+        '<small>' + (line.times ? '出现过 ' + line.times + ' 次 · 最长走到第 ' + line.seenMax + '/' + line.steps + ' 步' : escapeHtml(line.hint || '') + ' · 还没在本机出现过') + '</small></li>';
+    }).join('') : '';
+    /* v1.2：相邻两局到底哪里不一样——只陈述差异，不评价好坏。 */
+    const compareLines = (archive && archive.compare && archive.compare.length) ? archive.compare.map(function (pair) {
+      const lineName = function (id) { return (window.LZS_STORYLINES && window.LZS_STORYLINES.byId(id)) ? window.LZS_STORYLINES.byId(id).title : id; };
+      const bits = [];
+      if (pair.onlyA.length) bits.push('上一局展开、这一局没有：' + pair.onlyA.map(lineName).join('、'));
+      if (pair.onlyB.length) bits.push('这一局新展开：' + pair.onlyB.map(lineName).join('、'));
+      if (pair.newEvents.length) bits.push('新出现的条件事件 ' + pair.newEvents.length + ' 条');
+      if (pair.sameSeed) bits.push('用的是同一个种子，差异全部来自你的决定');
+      if (!bits.length) bits.push('两局的主线组合相同，差异体现在具体分支与选择');
+      return '<li><span>' + escapeHtml((pair.endings[0] || '?') + ' → ' + (pair.endings[1] || '?')) + '</span><p>' + escapeHtml(bits.join('；')) + '。</p></li>';
+    }).join('') : '';
+    return '<section class="ending-section exploration"><h2>战役探索记录</h2><p class="stat-hint">记录你在这台设备上走过的路线、展开过的故事线、出现过的条件事件与做过的推演。没有经验值、等级或胜利积分。</p>' +
+      '<dl class="exploration-facts"><dt>完成战役</dt><dd>' + completed + ' 次</dd><dt>本局条件事件</dt><dd>' + firedIds.length + ' / ' + (summary ? summary.total : firedIds.length) + '</dd><dt>故事线已历</dt><dd>' + ((archive && archive.linesExplored) || 0) + ' / ' + ((archive && archive.lines && archive.lines.length) || 8) + '</dd><dt>跨周目事件</dt><dd>' + ((archive && archive.eventsSeenCount) || 0) + ' 条</dd><dt>已完成推演</dt><dd>' + (replaySum ? replaySum.totalRuns : 0) + ' 次</dd></dl>' +
+      (lineLines ? '<h3>故事线</h3><ul class="branch-hints story-line-list">' + lineLines + '</ul><p class="stat-hint">同一场战役每局只会展开 3—4 条主轴与 2 条辅线；换一个种子，展开的会是另外几条。</p>' : '') +
+      (compareLines ? '<h3>这几局之间最大的区别</h3><ul class="exploration-compare">' + compareLines + '</ul>' : '') +
       '<h3>已经过的路线</h3><ol class="exploration-routes">' + routeLines + '</ol>' +
       (hintLines ? '<h3>重大决策分支</h3><ul class="branch-hints">' + hintLines + '</ul><p class="stat-hint">这里只说「走过 / 没走过」，不提前告诉你没走过的内容。</p>' : '') +
       (unexploredLines ? '<h3>还没经历的路线</h3><ul class="branch-hints">' + unexploredLines + '</ul>' : '') +
       (replayLines ? '<h3>决策推演</h3><ul class="exploration-replay">' + replayLines + '</ul>' : '') +
+      '<div class="exploration-actions"><button type="button" class="btn btn-primary" id="btn-new-seed">开始新一轮战役（新种子）</button>' +
+      ((archive && Number.isInteger(archive.lastSeed)) ? '<button type="button" class="btn btn-ghost" id="btn-same-seed">复现上一局（种子 ' + archive.lastSeed + '）</button>' : '') +
+      '<button type="button" class="btn btn-ghost" id="btn-replay-room-archive">继续决策推演</button></div>' +
       '<p class="stat-hint">触发过的条件事件：' + (seenEvents.length ? escapeHtml(seenEvents.slice(0, 10).join('；')) + (seenEvents.length > 10 ? ' 等' : '') : '还没有触发条件事件。') + '</p>' +
       (archive && archive.broken ? '<p class="stat-hint">上次的探索记录无法解析，原文已经另存一份备份，现有记录没有被覆盖。</p>' : '') + '</section>';
+  }
+
+  /* 档案柜里的两个重开入口：同一个历史起点，不同的种子。 */
+  function startNewSeedCampaign() {
+    openConfirm({
+      kicker: '新的一轮',
+      title: '用新的种子重新开始？',
+      message: '<p>仍然是 2022 年 2 月 24 日、同一场基辅防御战役。新的种子会让另外几条故事线成为主轴。</p><p>当前战役进度会被清除。</p>',
+      confirmLabel: '开始新一轮',
+      onConfirm: function () { startNewGame(true, 'campaign'); }
+    });
+  }
+
+  function replayLastSeed() {
+    const A = archiveApi();
+    const seed = A && A.summary ? A.summary().lastSeed : null;
+    if (!Number.isInteger(seed)) { toast('还没有可复现的上一局。', true); return; }
+    openConfirm({
+      kicker: '复现上一局',
+      title: '用种子 ' + seed + ' 再来一次？',
+      message: '<p>同一个种子、同一场战役。如果你做出不同的决定，故事线会走向不同的分支；相同的决定会得到相同的结果。</p>',
+      confirmLabel: '用这个种子开始',
+      onConfirm: function () { startNewGame(true, 'campaign', seed); }
+    });
   }
 
   function init() {
@@ -2186,6 +2356,7 @@
     if (el.continueCampaign) el.continueCampaign.addEventListener('click', function () { loadGame('campaign'); });
     el.how.addEventListener('click', openHowToPlay);
     if (el.replayRoom) el.replayRoom.addEventListener('click', openReplayRoom);
+    if (el.afterwardIntro) el.afterwardIntro.addEventListener('click', openAfterward);
     el.disclaimer.addEventListener('click', openDisclaimer);
     el.helpBtn.addEventListener('click', openHowToPlay);
     el.audioBtn.addEventListener('click', openAudioSettings);

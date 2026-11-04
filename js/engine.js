@@ -20,8 +20,9 @@
   const CAMPAIGN = root.LZS_CAMPAIGN || null;
   const CAMPAIGN_EVENTS = CAMPAIGN ? CAMPAIGN.events : [];
   const WRAP_EVENTS = CAMPAIGN && CAMPAIGN.wrapupEvents ? CAMPAIGN.wrapupEvents : [];
-  const CAMPAIGN_VERSION = 6; /* v1.1：新增 seed / dyn（动态事件）；仍可读取 v0.6 的 4 与 v1.0 的 5 */
+  const CAMPAIGN_VERSION = 7; /* v1.2：新增 story（故事线指针与路径）/ feed（局势动态与因果回报）；仍可读取 v0.6 的 4、v1.0 的 5、v1.1 的 6 */
   const DYN = root.LZS_DYNAMIC || null;
+  const STORY = root.LZS_STORYLINES || null;
 
   function isCampaign(state) { return !!(state && state.scenario === 'campaign' && CAMPAIGN); }
   function eventsFor(state) { return isCampaign(state) ? (state.wrapup && state.wrapup.started ? CAMPAIGN_EVENTS.concat(WRAP_EVENTS) : CAMPAIGN_EVENTS) : EVENTS; }
@@ -586,6 +587,12 @@
       /* v1.1：本局随机种子写入存档，用于复盘与复现（同种子 + 同决策 → 同样的事件集合）。 */
       state.campaign.seed = (options && Number.isInteger(options.seed) && options.seed > 0) ? options.seed : (DYN ? DYN.makeSeed() : ((Date.now() >>> 0) || 1));
       state.campaign.dyn = { fired: {}, log: [] };
+      /* v1.2：故事线由种子决定激活哪几条；feed 是本窗口的免费内容（局势动态 / 因果回报）。 */
+      state.campaign.feed = [];
+      if (STORY) {
+        STORY.activate(state);
+        pushFeed(state, STORY.opening(state));
+      }
     }
     recordTimeline(state);
     addLog(state, 'system', '行动开始', '2月24日凌晨，最高统帅部进入战时状态。你有 ' + state.ap + ' 点注意力，用来决定这个国家先处理什么。' + (campaignMode ? '例行公文由各部门按授权自行办理，总统的注意力留给重大决定、批准方案和出面协调。' : '信息可以免费阅读，追问与协调会占用注意力。'));
@@ -1314,6 +1321,10 @@
         });
       });
     }
+    /* v1.2：故事线决策记下本局走的是哪条分支（复盘与档案柜要用）。 */
+    if (item.storyId && option.branchLabel && STORY) {
+      STORY.recordPath(state, item.storyId, option.branchLabel, option.branchNote || '');
+    }
     item.resolved = true;
     item.outcome = { optionId: option.id, label: option.label, automatic: !!automatic, deltas: result.deltas, coordination: option.coordination || 0 };
     addLog(state, 'dispatch', (automatic ? '默认处理：' : '处理事务：') + item.title,
@@ -1474,7 +1485,76 @@
         }
       });
     }
+    /* v1.2：故事线（长事件链）。决策文件进事务盘（要总统过手）；局势动态与因果回报进免费信息流。 */
+    if (isCampaign(state) && STORY && !(state.wrapup && state.wrapup.started)) {
+      const pack = STORY.advance(state);
+      (pack.files || []).forEach(function (file) {
+        const options = file.options || [];
+        const d = addDispatch(state, 'story', {
+          key: file.stepId,
+          storyId: file.lineId,
+          storyStepId: file.stepId,
+          storyTitle: file.lineTitle,
+          storyTheme: file.theme,
+          node: file.node,
+          kicker: '故事线 · ' + file.lineTitle,
+          title: file.title,
+          body: file.body,
+          source: file.source,
+          history: file.history,
+          historyLabel: (DYN && DYN.historyKinds && DYN.historyKinds[file.history]) || '',
+          historyNote: file.historyNote,
+          dramatic: true,
+          options: options,
+          defaultOption: options.length ? options[options.length - 1].id : 'ack'
+        });
+        if (d) {
+          STORY.recordFile(state, file, d.id);
+          addLog(state, 'story', '故事线推进：' + file.lineTitle, file.title);
+          made.push(d);
+        }
+      });
+      if (pack.feed && pack.feed.length) pushFeed(state, pack.feed);
+    }
     return made;
+  }
+
+  /* v1.2：免费内容（局势动态 / 因果回报）。不进工作台，不进 AP 账；只挂在当前窗口的信息流上。 */
+  function pushFeed(state, items) {
+    if (!isCampaign(state)) return [];
+    if (!Array.isArray(state.campaign.feed)) state.campaign.feed = [];
+    const added = [];
+    items.forEach(function (item) {
+      const id = 'f' + state.round + ':' + (item.lineId || '') + ':' + item.stepId;
+      if (state.campaign.feed.some(function (entry) { return entry.id === id; })) return;
+      const entry = {
+        id: id,
+        round: state.round,
+        kind: item.kind,
+        lineId: item.lineId,
+        lineTitle: item.lineTitle,
+        theme: item.theme,
+        node: item.node,
+        stepId: item.stepId,
+        title: item.title,
+        body: item.body,
+        source: item.source,
+        history: item.history,
+        historyLabel: (DYN && DYN.historyKinds && DYN.historyKinds[item.history]) || '',
+        historyNote: item.historyNote
+      };
+      state.campaign.feed.push(entry);
+      added.push(entry);
+    });
+    if (state.campaign.feed.length > 60) state.campaign.feed = state.campaign.feed.slice(-60);
+    if (added.length && STORY) STORY.recordFeed(state, added);
+    return added;
+  }
+
+  function getFeed(state, round) {
+    if (!state || !state.campaign || !Array.isArray(state.campaign.feed)) return [];
+    const target = round == null ? state.round : round;
+    return state.campaign.feed.filter(function (entry) { return entry.round === target; });
   }
 
   /*
@@ -2948,7 +3028,7 @@
       if (!raw) return null;
       const data = JSON.parse(raw);
       /* 七日存档与战役存档分键保存：旧七日存档不会被当作 38 天战役读入。 */
-      if (!data || !data.state || (campaignKey ? [4, 5, CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
+      if (!data || !data.state || (campaignKey ? [4, 5, 6, CAMPAIGN_VERSION] : [1, 2, 3]).indexOf(data.version) === -1) return null;
       if (campaignKey && data.state.scenario !== 'campaign') return null;
       if (!campaignKey && data.state.scenario === 'campaign') return null;
       const state = normalizeLoadedState(data.state, data.version);
@@ -3076,7 +3156,22 @@
         dyn: {
           fired: c.dyn && c.dyn.fired && typeof c.dyn.fired === 'object' ? c.dyn.fired : {},
           log: c.dyn && Array.isArray(c.dyn.log) ? c.dyn.log.slice(-80) : []
-        }
+        },
+        /* v1.2：旧存档没有故事线指针与信息流。若存档里已有就原样保留；
+           没有就按本存档已有的种子重新激活（种子相同 → 主线集合相同），但不伪造已经发生过的步骤。 */
+        feed: Array.isArray(c.feed) ? c.feed.filter(function (entry) { return entry && typeof entry.id === 'string'; }) : [],
+        story: c.story && typeof c.story === 'object' && c.story.activated
+          ? {
+            seed: Number.isInteger(c.story.seed) && c.story.seed > 0 ? c.story.seed : (Number.isInteger(c.seed) && c.seed > 0 ? c.seed : 1),
+            active: Array.isArray(c.story.active) ? c.story.active.slice() : [],
+            aux: Array.isArray(c.story.aux) ? c.story.aux.slice() : [],
+            pointers: c.story.pointers && typeof c.story.pointers === 'object' ? c.story.pointers : {},
+            paths: c.story.paths && typeof c.story.paths === 'object' ? c.story.paths : {},
+            files: Number.isInteger(c.story.files) ? c.story.files : 0,
+            log: Array.isArray(c.story.log) ? c.story.log.slice(-120) : [],
+            activated: true
+          }
+          : null
       };
       if (typeof input.collapseId === 'string') state.collapseId = input.collapseId;
       /* v0.6 存档没有援助线与收束字段；缺省为空，不伪造过去。 */
@@ -3093,6 +3188,8 @@
         }
       });
       if (state.phase === 'wrapup_offer' && !(state.wrapup && state.wrapup.pending)) { state.phase = 'briefing'; state.wrapup = null; }
+      /* v1.2：v1.1 及更早的存档没有故事线；按已有种子激活，从当前窗口开始推进，不回放过去的步骤。 */
+      if (STORY && (!state.campaign.story || !state.campaign.story.activated)) STORY.activate(state);
     }
     if (state.phase === 'interlude' && !state.interlude) {
       state.phase = 'briefing';
@@ -3196,6 +3293,19 @@
     getDynamicEvents: getDynamicEvents,
     getDynamicSummary: function (state) { return DYN ? DYN.summary(state) : null; },
     getBranchHints: function (state) { return DYN ? DYN.branchHints(state) : []; },
+    /* v1.2：故事线与免费信息流。 */
+    storylines: STORY,
+    afterward: root.LZS_AFTERWARD || null,
+    getFeed: getFeed,
+    getStorySummary: function (state) { return STORY ? STORY.summary(state) : null; },
+    getStoryNarrative: function (state) { return STORY ? STORY.narrative(state) : ''; },
+    getStoryEvents: function (state, includeResolved) {
+      return (state && state.dispatches || []).filter(function (item) {
+        if (item.type !== 'story') return false;
+        if (item.round !== state.round && !includeResolved) return false;
+        return includeResolved || !item.resolved;
+      });
+    },
     getGovernanceProfile: getGovernanceProfile,
     getTurningPoints: getTurningPoints,
     getRecords: getRecords,
