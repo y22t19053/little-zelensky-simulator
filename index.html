@@ -7,6 +7,7 @@
   <meta name="description" content="小泽模拟器：一款总统视角的战争危机决策模拟。2022年2月24日，你能顶住几天？">
   <title>小泽模拟器 · 你能顶住几天？</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/archive-serif.woff2" as="font" type="font/woff2">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -26,6 +27,10 @@
           <h1 id="intro-title" class="game-title">小泽模拟器</h1>
           <p class="game-subtitle">Little Zelensky Simulator</p>
           <p class="tagline">你能顶住几天？</p>
+          <figure class="cover-plate">
+            <img src="assets/visual/v13/cover-desk.svg" alt="原创矢量插画：战时总统办公室的一角，清晨的窗外是基辅天际线，桌上放着文件、电话与折叠的国旗" width="1600" height="640" decoding="async">
+            <figcaption><span>原创编辑插画 · 不是历史照片</span><span>基辅 · 2022 年 2 月</span></figcaption>
+          </figure>
           <p class="intro-lead">2022年2月24日凌晨，全面入侵开始。你坐在总统办公室里，面对的不是一张完整战况图，而是有限注意力、不完整情报，以及必须有人承担的决定。</p>
           <p class="intro-position">你不是将军。你分配 AP、签发总统命令，并承担它们在国家机器中留下的连锁后果。</p>
           <div class="intro-actions">
@@ -44,7 +49,7 @@
             <button id="btn-clear-save" class="text-btn is-muted" type="button" hidden>清除存档</button>
           </div>
           <p id="save-summary" class="save-summary" hidden></p>
-          <p class="intro-version"><span id="intro-version">v1.2.0</span> · 多周目叙事、故事线与历史回声</p>
+          <p class="intro-version"><span id="intro-version">v1.3.0</span> · 战争档案视觉重制</p>
           <ul class="intro-facts" aria-label="游戏概览">
             <li><strong>38 天</strong><span>四幕基辅战役 · 13 个决策窗口</span></li>
             <li><strong>3—5 AP</strong><span>每个决策窗口的总统注意力</span></li>
@@ -99,6 +104,21 @@
       </div>
 
       <div class="game-grid">
+        <aside class="rail-column" aria-label="战场态势、战役时间线与本局故事线">
+          <details id="rail-map" class="rail-block" open>
+            <summary class="rail-head"><h2>战场态势</h2><span>situation</span></summary>
+            <div class="rail-body" id="rail-map-body"></div>
+          </details>
+          <details id="rail-timeline" class="rail-block" open>
+            <summary class="rail-head"><h2>战役时间线</h2><span>timeline</span></summary>
+            <div class="rail-body" id="rail-timeline-body"></div>
+          </details>
+          <details id="rail-story" class="rail-block" open>
+            <summary class="rail-head"><h2>本局故事线</h2><span>storylines</span></summary>
+            <div class="rail-body" id="rail-story-body"></div>
+            <p class="rail-note">每局只有三到四条主线。你这局没走到的线，下一局可能就在。</p>
+          </details>
+        </aside>
         <div class="primary-column">
           <section id="workbench" class="workbench" aria-labelledby="wb-title"></section>
           <main id="event-main" class="event-column" aria-live="polite"></main>
@@ -138,6 +158,7 @@
   <script src="js/storylines.js"></script>
   <script src="js/replay.js"></script>
   <script src="js/archive.js"></script>
+  <script src="js/visual.js"></script>
   <script src="js/workbench.js"></script>
   <script src="js/afterward.js"></script>
   <script src="js/engine.js"></script>

@@ -163,6 +163,7 @@
       if (!status || status.state === 'issued') return;
       var preview = L.getCommandPreview ? L.getCommandPreview(state, choice.id) : null;
       var needsIntel = !!(preview && preview.requiresIntel && !preview.intelSatisfied);
+      var apLabel = choice.ap ? (choice.ap + ' AP') : '0 AP';
       if (status.canIssue) {
         push(out, {
           kind: 'decision', key: 'choice:' + choice.id, ref: { choiceId: choice.id },
@@ -172,7 +173,7 @@
           meta: choice.ap + ' 点注意力' + (choice.keyDecision && choice.keyDecision.irreversible ? ' · 签发后不可逆' : '') + (choice.delayed && choice.delayed.length ? ' · 含延迟后果' : ''),
           urgent: false,
           ap: choice.ap,
-          actions: [{ type: 'choice', label: '展开这份文件评估 · 再决定签不签', choiceId: choice.id, primary: true, disabled: !briefing }]
+          actions: [{ type: 'choice', label: '打开文件评估 · ' + apLabel, choiceId: choice.id, primary: true, disabled: !briefing }]
         });
         return;
       }

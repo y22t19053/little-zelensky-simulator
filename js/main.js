@@ -38,6 +38,10 @@
     apPips: document.getElementById('ap-pips'),
     apNote: document.getElementById('ap-note'),
     workbench: document.getElementById('workbench'),
+    gameGrid: document.querySelector('.game-grid'),
+    railMap: document.getElementById('rail-map-body'),
+    railTimeline: document.getElementById('rail-timeline-body'),
+    railStory: document.getElementById('rail-story-body'),
     eventMain: document.getElementById('event-main'),
     choicesPanel: document.getElementById('choices-panel'),
     commandPanel: document.getElementById('command-panel'),
@@ -503,6 +507,7 @@
     const event = L.getEvent(ui.game);
     if (!event) { toast('事件数据缺失，无法继续。', true); return; }
     renderTop();
+    renderRail();
     renderWorkbench();
     renderEvent();
     renderCommandPanel();
@@ -514,6 +519,48 @@
     renderOrder();
     bindWorkbenchJumps();
     if (ui.wbReturn) { ui.wbReturn = false; returnToWorkbench(); }
+  }
+
+  /* ---------- v1.3：视觉表现层（地图 / 时间线 / 故事线栏） ---------- */
+  function visApi() { return window.LZS_VISUAL || null; }
+
+  /* 战役模式才显示三区左栏；七日经典模式保持原来的单列文件界面。 */
+  /* 窄屏上左栏三块会变成很长的纵向列表，所以时间线与故事线默认折叠，
+     态势图保持展开（它是这一屏最需要一眼看清的东西）。用户手动展开后
+     不再被强行折叠：只在断点变化时同步一次。 */
+  function syncRailOpen() {
+    const narrow = !!(window.matchMedia && window.matchMedia('(max-width: 700px)').matches);
+    if (ui.railNarrow === narrow) return;
+    ui.railNarrow = narrow;
+    const map = document.getElementById('rail-map');
+    const timeline = document.getElementById('rail-timeline');
+    const story = document.getElementById('rail-story');
+    if (map) map.open = true;
+    if (timeline) timeline.open = !narrow;
+    if (story) story.open = !narrow;
+  }
+
+  function renderRail() {
+    const show = !!(ui.game && isCampaignGame());
+    if (el.gameGrid) el.gameGrid.classList.toggle('no-rail', !show);
+    if (!show) {
+      if (el.railMap) el.railMap.innerHTML = '';
+      if (el.railTimeline) el.railTimeline.innerHTML = '';
+      if (el.railStory) el.railStory.innerHTML = '';
+      return;
+    }
+    const V = visApi();
+    if (!V) return;
+    try {
+      if (el.railMap) el.railMap.innerHTML = V.mapHtml(ui.game, L);
+      if (el.railTimeline) el.railTimeline.innerHTML = V.timelineHtml(ui.game, L);
+      if (el.railStory) el.railStory.innerHTML = V.storyRailHtml(ui.game);
+      syncRailOpen();
+    } catch (error) {
+      /* 视觉层出错不能影响决策界面本身。 */
+      if (el.railMap) el.railMap.innerHTML = '<p class="rail-note">态势示意暂时无法绘制，数值状态不受影响。</p>';
+      if (window.console && console.warn) console.warn('[visual]', error);
+    }
   }
 
   function renderTop() {
@@ -584,8 +631,11 @@
 
   function feedItemHtml(item) {
     const label = FEED_KIND_LABEL[item.kind] || '局势动态';
-    const lineName = item.lineTitle ? '<span class="feed-line">' + escapeHtml(item.lineTitle) + '</span>' : '';
-    return '<li class="feed-item type-' + escapeHtml(item.kind || 'brief') + '">' +
+    const V = visApi();
+    const line = V ? V.lineOfItem(item) : (item.lineId || '');
+    const meta = V && line ? V.lineMeta(line) : null;
+    const lineName = item.lineTitle ? '<span class="feed-line">' + escapeHtml(item.lineTitle) + (meta ? ' · ' + escapeHtml(meta.form) : '') + '</span>' : '';
+    return '<li class="feed-item ' + (V ? V.docMeta({ type: item.kind === 'echo' ? 'story' : 'late_report' }).className : '') + ' type-' + escapeHtml(item.kind || 'brief') + '"' + (line ? ' data-line="' + escapeHtml(line) + '"' : '') + '>' +
       '<div class="feed-head"><span class="feed-kind">' + escapeHtml(label) + '</span>' + lineName + '</div>' +
       '<strong>' + escapeHtml(item.title) + '</strong>' +
       '<p>' + escapeHtml(item.body) + '</p>' +
@@ -703,10 +753,12 @@
   function aidHtml(data) {
     const events = data.aid || [];
     const status = (ui.game && L.getAidStatus) ? L.getAidStatus(ui.game).filter(function (s) { return !s.done; }) : [];
-    if (!events.length && !status.length) return '';
+    const V = visApi();
+    const flow = V && ui.game ? V.aidFlowHtml(ui.game, L) : '';
+    if (!events.length && !status.length && !flow) return '';
     const evHtml = events.map(function (ev) { return '<li><div><strong>' + escapeHtml((ev.title ? ev.title + '：' : '') + ev.label) + '</strong><span>' + (ev.slipped ? '推迟' : ev.stalled ? '停滞' : '进展') + '</span></div><p>' + escapeHtml(ev.note || '') + '</p><div class="effect-row">' + (effectChips(ev.deltas || {}, 0) || '') + '</div></li>'; }).join('');
     const stHtml = status.map(function (s) { return '<li class="aid-state"><strong>' + escapeHtml(s.title) + '</strong><span>' + escapeHtml(s.status) + (s.stage > 0 ? ' · 第 ' + s.stage + '/' + s.total + ' 步' : '') + (s.next ? ' · 下一步：' + escapeHtml(s.next) + (s.etaRounds != null ? '，约 ' + Math.max(1, s.etaRounds) + ' 个窗口后' : '') : '') + '</span></li>'; }).join('');
-    return '<li class="campaign-step"><span class="settlement-index">援</span><section><h3>外部援助 · 进展</h3>' + (evHtml ? '<ul class="settlement-list">' + evHtml + '</ul>' : '') + (stHtml ? '<ul class="aid-states">' + stHtml + '</ul>' : '') + '</section></li>';
+    return '<li class="campaign-step"><span class="settlement-index">援</span><section><h3>外部援助 · 从请求到用上</h3>' + flow + (evHtml ? '<ul class="settlement-list">' + evHtml + '</ul>' : '') + (stHtml ? '<ul class="aid-states">' + stHtml + '</ul>' : '') + '</section></li>';
   }
   function officeHtml(data) {
     const o = data.office;
@@ -791,7 +843,9 @@
       const ev = eventsOf().filter(function (item) { return item.id === w.eventId; })[0];
       return '<li' + (w.interrupted ? ' class="is-interrupted"' : '') + '><span>' + escapeHtml(L.campaignDateLabel(Math.floor(w.fromDay)) + ' → ' + L.campaignDateLabel(Math.floor(w.toDay))) + '</span><strong>' + escapeHtml(ev ? ev.title : w.eventId) + '</strong><small>' + escapeHtml('内部模拟 ' + spanText(w.simulated) + (w.interrupted ? ' · 紧急中断' : '')) + '</small></li>';
     }).join('') + '</ol>' : '';
+    const V = visApi();
     return '<section class="ending-section"><span class="section-kicker">KEY ORDERS</span><h2>重大决策如何走向战役结果</h2>' + keyHtml + '</section>' + storySectionHtml() +
+      (V && ui.game ? V.causalChainHtml(ui.game, ending, L) : '') +
       '<section class="ending-section"><h2>你的时间线与历史基线</h2><p class="stat-hint">' + escapeHtml(first ? '最早的偏离：' + (NODE_LABELS[first.node] || first.node) + (first.round ? '（窗口 ' + first.round + '）' : '') + '。偏离之后的差异包含模型内部推演，不等于历史事实。' : '本局关键节点与历史基线大体一致；差异来自数值与执行过程，也属于模型推演。') + '</p>' + divHtml + '</section>' +
       (winHtml ? '<section class="ending-section"><h2>38 天的时间推进</h2>' + winHtml + '</section>' : '');
   }
@@ -897,15 +951,18 @@
   function dispatchRowHtml(item) {
     const g = ui.game;
     const isStory = item.type === 'story';
+    const V = visApi();
+    const doc = V ? V.docMeta(item) : { className: 'doc-wire', label: '电报' };
+    const line = V ? V.lineOfItem(item) : '';
+    const lineName = isStory && item.storyTitle ? ' · ' + item.storyTitle : '';
     const actions = item.resolved ? '<p class="dispatch-outcome">已处理：' + escapeHtml(item.outcome && item.outcome.label ? item.outcome.label : '已阅') + '</p>' :
       '<div class="dispatch-actions">' + (item.options || []).map(function (option) {
         const cost = option.ap ? option.ap + ' AP' : '不耗 AP';
         const isDefault = option.id === item.defaultOption;
         return '<button type="button" class="mini-action' + (option.ap ? ' is-primary' : '') + '" data-dispatch="' + escapeHtml(item.id) + '" data-option="' + escapeHtml(option.id) + '"' + ((option.ap || 0) > g.ap || g.phase !== 'briefing' ? ' disabled' : '') + '>' + escapeHtml(option.label) + (option.label.indexOf('AP') === -1 ? ' · ' + cost : '') + (isDefault && (item.options || []).length > 1 ? ' · 不处理则默认' : '') + '</button>';
       }).join('') + '</div>';
-    return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '">' +
-      '<span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span>' +
-      (isStory ? '<span class="story-line-badge">' + escapeHtml(item.storyTitle || '') + '</span>' : '') +
+    return '<li class="dispatch-item ' + doc.className + ' type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"' + (line ? ' data-line="' + escapeHtml(line) + '"' : '') + '>' +
+      '<div class="dispatch-head"><span class="doc-type-mark">' + escapeHtml(doc.label) + escapeHtml(lineName) + '</span><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span></div>' +
       '<strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' +
       (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + historyTagHtml(item) + actions + '</li>';
   }
@@ -975,7 +1032,7 @@
   function wbItemHtml(item) {
     const actions = (item.actions || []).map(wbActionHtml).join('');
     const foot = [item.source, item.meta].filter(function (part) { return !!part; }).join(' · ');
-    return '<li class="wb-item is-' + escapeHtml(item.kind) + (item.urgent ? ' is-urgent' : '') + '">' +
+    return '<li class="wb-item is-' + escapeHtml(item.kind) + (item.urgent ? ' is-urgent' : '') + '" data-kind="' + escapeHtml(item.kind) + '">' +
       '<div class="wb-item-grid"><div class="wb-item-text">' +
         '<h3 class="wb-item-title"><span class="wb-tag tag-' + escapeHtml(item.kind) + '">' + escapeHtml(item.tag) + '</span>' + escapeHtml(item.title) + '</h3>' +
         (item.body ? '<p class="wb-item-body">' + escapeHtml(item.body) + '</p>' : '') +
@@ -1026,7 +1083,10 @@
     const blockers = view.blockers.length
       ? '<ul class="wb-blockers">' + view.blockers.map(function (item) { return '<li>' + escapeHtml(item.text) + '</li>'; }).join('') + '</ul>'
       : '';
-    const foot = '<footer class="wb-foot"><p>' + escapeHtml(WB.endWindowNote(view)) + '</p>' +
+    const footNote = view.blockers.length
+      ? '结束本窗口前要先处理上面这几件事。'
+      : WB.endWindowNote(view);
+    const foot = '<footer class="wb-foot"><p>' + escapeHtml(footNote) + '</p>' +
       '<div class="wb-foot-actions">' +
         '<button type="button" class="wb-btn is-primary" data-wb-end' + (view.blockers.length ? ' disabled' : '') + '>结束本窗口</button>' +
         '<button type="button" class="wb-btn is-quiet" data-wb-jump="choices-panel">待签文件</button>' +
@@ -1168,6 +1228,29 @@
     }).join('');
   }
 
+  /* v1.3：决策文件按它所属的故事线取纸张与强调色，让同一类问题读起来是一类文件。 */
+  const NODE_LINE = {
+    airfield: 'line_airfield', capital: 'line_gov', bridges: 'line_civil', flood: 'line_civil',
+    reserve: 'line_reserve', signal: 'line_withdraw', return: 'line_withdraw'
+  };
+  function lineOfChoice(choice) {
+    if (!choice) return '';
+    if (choice.lineId) return choice.lineId;
+    const node = choice.keyDecision && choice.keyDecision.node;
+    if (node && NODE_LINE[node]) return NODE_LINE[node];
+    const id = String(choice.id || '');
+    if (/^c_(deny_runway|keep_airfield|counter_airfield|interdict|airfield|lale_deny)/.test(id)) return 'line_airfield';
+    if (/^c_(stay_capital|split_succession|relocate)/.test(id)) return 'line_gov';
+    if (/^c_(blow_bridges|keep_bridges|flood_valley|repair)/.test(id)) return 'line_civil';
+    if (/^c_(reserve_|brovary_ambush)/.test(id)) return 'line_reserve';
+    if (/^c_(first_appeal|wishlist|air_defense_aid|talks_channel)/.test(id)) return 'line_aid';
+    if (/^c_(trust_redeploy|stay_alert|pursue|verify_signal|cautious_message|fast_return|staged_return)/.test(id)) return 'line_withdraw';
+    if (/^c_(arm_volunteers|martial|curfew|disperse|decentralize)/.test(id)) return 'line_mobilize';
+    if (/^c_(counterintel|rumor_rules|info_rules|honest_briefing)/.test(id)) return 'line_intel';
+    // 其余文件是跨部门的行政事务，不属于八条故事线，用中性的档案色。
+    return 'line_admin';
+  }
+
   function renderChoices(event) {
     const g = ui.game;
     const cards = (event.choices || []).map(function (choice, index) {
@@ -1189,7 +1272,8 @@
       const stateText = executed ? '已签发' : conflict ? '互斥锁定' : status.state === 'locked' ? '条件未满足' : status.state === 'ap' ? 'AP 不足' : selected ? '已选择' : '选择';
       const lockNote = locked && !executed ? '<p class="choice-locked-note' + (conflict ? ' is-conflict-note' : '') + '"><strong>' + (conflict ? '命令冲突' : status.state === 'locked' ? '前序条件未满足' : '注意力不足') + '：</strong>' + escapeHtml(status.message) + '</p>' : '';
       const expanded = selected || executed;
-      return '<article class="' + classes.join(' ') + '" data-choice-id="' + escapeHtml(choice.id) + '" role="button" tabindex="0" aria-pressed="' + (selected ? 'true' : 'false') + '" aria-disabled="' + (locked ? 'true' : 'false') + '" aria-label="' + escapeHtml(choice.title + '，' + choice.ap + ' AP，' + stateText) + '">' +
+      const choiceLine = lineOfChoice(choice);
+      return '<article class="' + classes.join(' ') + ' doc-order" data-choice-id="' + escapeHtml(choice.id) + '" data-doc-index="' + 'No.' + String(index + 1).padStart(2, '0') + '"' + (choiceLine ? ' data-line="' + escapeHtml(choiceLine) + '"' : '') + ' role="button" tabindex="0" aria-pressed="' + (selected ? 'true' : 'false') + '" aria-disabled="' + (locked ? 'true' : 'false') + '" aria-label="' + escapeHtml(choice.title + '，' + choice.ap + ' AP，' + stateText) + '">' +
         '<span class="choice-num" aria-hidden="true">' + String(index + 1).padStart(2, '0') + '</span>' +
         '<div class="choice-topline"><h3 class="choice-title">' + escapeHtml(choice.title) + '</h3><span class="choice-ap">' + choice.ap + ' AP</span></div>' +
         (choice.keyDecision ? '<p class="choice-key"><strong>重大决策</strong>' + (choice.keyDecision.irreversible ? ' · 签发后不可逆' : '') + '</p>' : '') +
@@ -1941,8 +2025,15 @@
   function recordsHtml() {
     const runs = L.getRecords ? L.getRecords().runs.slice(-5).reverse() : [];
     if (!runs.length) return '';
-    return '<section class="ending-section run-records"><h2>本机记录</h2><p class="stat-hint">只保存在这台设备上：结局、主要倾向和路线。没有积分或排行。</p><ol>' + runs.map(function (run) {
-      return '<li><strong>' + escapeHtml(run.endingTitle || run.endingId) + '</strong><span>' + escapeHtml((run.scenario === 'campaign' ? '基辅战役 · ' : '七日开局 · ') + (run.styleLabel || '')) + ' · 第 ' + run.round + (run.scenario === 'campaign' ? ' 窗口' : ' 回合') + '</span></li>';
+    return '<section class="ending-section run-records"><h2>本机战役档案袋</h2><p class="stat-hint">只保存在这台设备上：结局、主要倾向和路线。没有积分或排行。</p><ol class="run-records-list folder-grid">' + runs.map(function (run, index) {
+      const when = run.endedAt ? new Date(run.endedAt) : null;
+      const stamp = when && !isNaN(when.getTime()) ? (when.getMonth() + 1) + '.' + when.getDate() : '';
+      return '<li class="folder-card">' +
+        '<span class="folder-tab">' + escapeHtml(run.scenario === 'campaign' ? '战役档案' : '开局记录') + '</span>' +
+        '<h3>' + escapeHtml(run.endingTitle || run.endingId) + '</h3>' +
+        '<p class="folder-meta">' + escapeHtml((run.scenario === 'campaign' ? '基辅战役 · ' : '七日开局 · ') + (run.styleLabel || '')) + ' · 第 ' + escapeHtml(run.round) + (run.scenario === 'campaign' ? ' 窗口' : ' 回合') + (stamp ? ' · ' + escapeHtml(stamp) : '') + '</p>' +
+        (index === 0 ? '<span class="folder-stamp">最近一局</span>' : '') +
+        '</li>';
     }).join('') + '</ol></section>';
   }
 
@@ -2370,6 +2461,14 @@
     el.issue.addEventListener('click', issueSelected);
     if (el.issueDelegate) el.issueDelegate.addEventListener('click', openIssueDelegateModal);
     el.endRound.addEventListener('click', requestEndRound);
+  // 断点变化时同步左栏折叠状态；只在真正跨过 700px 时才动一次。
+  window.addEventListener('resize', function () { if (document.body.classList.contains('is-campaign')) syncRailOpen(); });
+  if (window.matchMedia) {
+    const narrowQuery = window.matchMedia('(max-width: 700px)');
+    const onNarrowChange = function () { if (document.body.classList.contains('is-campaign')) syncRailOpen(); };
+    if (narrowQuery.addEventListener) narrowQuery.addEventListener('change', onNarrowChange);
+    else if (narrowQuery.addListener) narrowQuery.addListener(onNarrowChange);
+  }
     if (el.opsBtn) el.opsBtn.addEventListener('click', function () { openOperations('intel'); });
     renderIntro();
   }

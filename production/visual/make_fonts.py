@@ -58,6 +58,9 @@ def main():
     subsetter = subset.Subsetter(options=options)
     subsetter.populate(text=text)
     subsetter.subset(font)
+    # 注意：options.flavor 只对命令行入口生效，直接 save() 时必须把 flavor
+    # 写在 font 上，否则写出来的是未压缩的 OpenType（浏览器按 woff2 解析会失败）。
+    font.flavor = "woff2"
     font.save(OUT)
     size_kb = os.path.getsize(OUT) / 1024.0
     print("写出 %s（%.1f KB）" % (OUT, size_kb))

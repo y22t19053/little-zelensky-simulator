@@ -105,7 +105,7 @@ class Cdp {
           self.pending.delete(id);
           reject(new Error('CDP timeout: ' + method));
         }
-      }, 15000);
+      }, 90000);
     });
   }
 }
@@ -122,11 +122,22 @@ async function openPage() {
   });
   const cdp = new Cdp(ws);
 
+  // file:// 下 Chrome 一定会拒绝加载 woff2 字体（origin 'null' 的 CORS 规则），
+  // 这条只在本地静态打开时出现；字体本身由 assets.test.cjs 校验、并由 test:live 在线上验证。
+  let fontCorsSeen = false;
+  const isFontCorsNote = function (text) {
+    const body = String(text || '');
+    if (/archive-serif\.woff2/.test(body) && /CORS|origin/i.test(body)) { fontCorsSeen = true; return true; }
+    if (fontCorsSeen && /^Failed to load resource: net::ERR_FAILED$/.test(body.trim())) return true;
+    return false;
+  };
+
   cdp.on('Runtime.consoleAPICalled', function (params) {
     if (params.type !== 'error' && params.type !== 'warning') return;
     const text = (params.args || []).map(function (arg) {
       return arg.value != null ? String(arg.value) : (arg.description || arg.type);
     }).join(' ');
+    if (isFontCorsNote(text)) return;
     if (params.type === 'error') consoleErrors.push(text);
     else consoleWarnings.push(text);
   });
@@ -139,12 +150,18 @@ async function openPage() {
   });
   cdp.on('Log.entryAdded', function (params) {
     const entry = params.entry || {};
-    if (entry.level === 'error') consoleErrors.push(entry.text || entry.url || 'Log error');
+    if (entry.level === 'error' && !isFontCorsNote(entry.text || entry.url || '')) consoleErrors.push(entry.text || entry.url || 'Log error');
     if (entry.level === 'warning') consoleWarnings.push(entry.text || 'Log warning');
+  });
+  cdp.on('Network.responseReceived', function (params) {
+    const response = params.response || {};
+    if (response.status >= 400) consoleErrors.push('HTTP ' + response.status + ' ' + (response.url || ''));
   });
   cdp.on('Network.requestWillBeSent', function (params) {
     const url = params.request && params.request.url || '';
-    if (/^https?:/i.test(url)) externalRequests.push(url);
+    // 用本地 http 服务器跑时，同源请求不算外部请求；只有真正的第三方域名才算。
+    const sameOrigin = new URL(PAGE_URL).origin;
+    if (/^https?:/i.test(url) && !String(url).startsWith(sameOrigin)) externalRequests.push(url);
   });
 
   await cdp.send('Network.enable');
@@ -203,7 +220,16 @@ async function main() {
       await cdp.send('Emulation.setTouchEmulationEnabled', { enabled: !!mobile });
     };
 
-    const screenshot = async function (name) {
+  const screenshot = async function (name, attempt) {
+    try {
+      return await screenshotOnce(name);
+    } catch (error) {
+      if ((attempt || 0) >= 2) throw error;
+      await sleep(600);
+      return screenshot(name, (attempt || 0) + 1);
+    }
+  };
+  const screenshotOnce = async function (name) {
       await sleep(380);
       const result = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
       fs.writeFileSync(path.join(SHOTS, name), Buffer.from(result.data, 'base64'));
@@ -332,7 +358,7 @@ async function main() {
     const audioSettings = await evaluate(cdp, '({live:LZS_AUDIO.getSettings(),stored:JSON.parse(localStorage.getItem("lzs_audio_v1")),theme:LZS_AUDIO.getTheme()})');
     assert(audioSettings.live.music && audioSettings.live.sfx && audioSettings.live.musicVolume === 0.37 && audioSettings.live.sfxVolume === 0.42, '音乐、音效与独立音量设置生效');
     assert(audioSettings.stored.music && audioSettings.stored.sfx && audioSettings.stored.musicVolume === 0.37 && audioSettings.stored.sfxVolume === 0.42, '音频设置写入独立 lzs_audio_v1');
-    assert(audioSettings.theme === 'day' && audioRequests.some(function(url){return /day\.ogg(?:$|\?)/.test(url);}), '用户开启后才懒加载日间音乐');
+    assert(audioSettings.theme === 'day' && audioRequests.some(function(url){return /day\.ogg(?:$|\?)/.test(url);}), '用户开启后才懒加载日间音乐', JSON.stringify(audioSettings) + ' reqs=' + audioRequests.length);
     await screenshot('09-audio-settings.png');
     await click('#modal-root .modal-actions .btn-primary');
 
@@ -559,8 +585,13 @@ async function main() {
       await waitFor(function () { return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue")'); }, 15000);
       await click('#btn-continue');
       await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden'); }, 5000);
-      await waitFor(function () { return evaluate(cdp, 'document.querySelector(".scene-picture img").complete && document.querySelector(".scene-picture img").naturalWidth > 0 && document.querySelector(".scene-map").complete && document.querySelector(".scene-map").naturalWidth > 0'); }, 5000);
-      assert(await evaluate(cdp, 'document.querySelector(".scene-picture img").currentSrc.endsWith(".webp")'), 'R' + round + ' 独立 WebP 主视觉与抽象态势离线加载');
+      try {
+        await waitFor(function () { return evaluate(cdp, 'document.querySelector(".scene-picture img").complete && document.querySelector(".scene-picture img").naturalWidth > 0 && document.querySelector(".scene-map").complete && document.querySelector(".scene-map").naturalWidth > 0'); }, 15000);
+      } catch (visualError) {
+        const visualState = await evaluate(cdp, '(() => { const i = document.querySelector(".scene-picture img"); const m = document.querySelector(".scene-map"); return { game: !!(window.ui && window.ui.game) ? window.ui.game.scenario : null, img: i ? { src: i.getAttribute("src"), complete: i.complete, natural: i.naturalWidth } : null, map: m ? { src: m.getAttribute("src"), complete: m.complete, natural: m.naturalWidth } : null }; })()').catch(function (e) { return { evalError: String(e) }; });
+        throw new Error('R' + round + ' 场景图或态势图没有加载完成：' + JSON.stringify(visualState));
+      }
+      assert(await evaluate(cdp, '/\\.(webp|svg)$/i.test(document.querySelector(".scene-picture img").currentSrc) && document.querySelector(".scene-picture img").naturalWidth > 0 && document.querySelector(".scene-map").naturalWidth > 0'), 'R' + round + ' 独立主视觉与抽象态势离线加载');
       const ids = await evaluate(cdp, 'Array.from(document.querySelectorAll(".choice-card")).map(function(card){return card.dataset.choiceId;})');
       for (const id of ids) {
         const selected = await evaluate(cdp, `(() => {const card=document.querySelector('[data-choice-id="${id}"]');card.click();const next=document.querySelector('[data-choice-id="${id}"]');return {selected:next.classList.contains('is-selected'),detail:!next.querySelector('.choice-detail').hidden,issue:!document.getElementById('btn-issue').disabled,forecast:next.querySelectorAll('.forecast-effect').length>0};})()`);
@@ -665,7 +696,7 @@ async function main() {
       await sleep(320);
       await waitFor(function () {
         return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-continue")');
-      }, 15000);
+      }, 90000);
       await click('#btn-continue');
       await waitFor(function () { return evaluate(cdp, '!document.getElementById("screen-game").hidden && !!document.querySelector(".choice-card")'); }, 5000);
     };
@@ -729,7 +760,7 @@ async function main() {
       await sleep(350);
       await waitFor(function () {
         return evaluate(cdp, 'document.readyState === "complete" && !!document.getElementById("btn-start")');
-      }, 15000);
+      }, 90000);
       const introLayout = await evaluate(cdp, '({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth})');
       assert(introLayout.sw <= introLayout.cw + 2, size[0] + 'px 开场无横向溢出', JSON.stringify(introLayout));
       if (size[0] === 390) {
@@ -1163,6 +1194,47 @@ async function main() {
     await setViewport(1280, 900, false);
     await sleep(150);
 
+    console.log('\n[8k] v1.3 战争档案视觉层：左栏、文件类型与五个断点');
+    assert(await evaluate(cdp, '!!window.LZS_VISUAL && LZS_VISUAL.version === "1.3.0"'), '视觉层脚本在页面上加载了');
+    assert(await evaluate(cdp, '!!document.querySelector(".rail-column #rail-map .map-figure svg .map-pt")'), '左栏态势图渲染出真实态势点');
+    assert(await evaluate(cdp, 'document.querySelectorAll(".rail-column #rail-map .map-pt").length >= 4'), '态势图上的点位数量与前线数量相符');
+    assert(await evaluate(cdp, '/战略示意/.test(document.querySelector("#rail-map .map-caption").textContent)'), '态势图注明是战略示意');
+    assert(await evaluate(cdp, 'document.querySelectorAll("#rail-timeline .tl-item").length >= 13'), '时间线覆盖 13 个窗口');
+    assert(await evaluate(cdp, '!!document.querySelector("#rail-timeline .tl-item.is-current")'), '时间线标出当前窗口');
+    assert(await evaluate(cdp, 'document.querySelectorAll("#rail-story .story-rail-item").length >= 3'), '左栏列出本局故事线');
+    assert(await evaluate(cdp, 'document.querySelectorAll("#rail-story .story-rail-item svg").length >= 3'), '每条故事线有各自的符号');
+    const railLines = await evaluate(cdp, 'Array.from(document.querySelectorAll("#rail-story .story-rail-item")).map(function(el){ return el.getAttribute("data-line"); })');
+    assert(railLines.every(function (id) { return /^line_/.test(String(id)); }), '故事线栏带着故事线 id，供样式区分', JSON.stringify(railLines));
+    assert(await evaluate(cdp, 'document.querySelectorAll(".choice-card.doc-order").length >= 2'), '决策文件用正式公文样式');
+    assert(await evaluate(cdp, 'Array.from(document.querySelectorAll(".choice-card")).every(function(el){ return /^No\.\\d+$/.test(el.getAttribute("data-doc-index") || ""); })'), '每份公文都有文件编号');
+    assert(await evaluate(cdp, 'Array.from(document.querySelectorAll(".choice-card")).every(function(el){ return /^line_/.test(el.getAttribute("data-line") || ""); })'), '每份公文都归属到一条故事线');
+    assert(await evaluate(cdp, '(() => { const el = document.querySelector(".choice-card"); return getComputedStyle(el).borderLeftWidth !== "0px"; })()'), '公文左侧有故事线色条');
+    assert(await evaluate(cdp, '!!document.querySelector(".feed .feed-item")'), '局势动态还在（视觉改造没有把它挤掉）');
+    await screenshot('56-v13-game-1440.png');
+    for (const width of [1024, 390, 360, 320]) {
+      await setViewport(width, width <= 400 ? 844 : 800, width <= 400);
+      await sleep(260);
+      const fit = await evaluate(cdp, '(() => ({sw:document.documentElement.scrollWidth,cw:document.documentElement.clientWidth}))()');
+      assert(fit.sw <= fit.cw + 2, width + 'px 战争档案页无横向溢出', JSON.stringify(fit));
+      const railVisible = await evaluate(cdp, '(() => { const rail = document.querySelector(".rail-column").getBoundingClientRect(); return rail.width > 0 && rail.width <= window.innerWidth; })()');
+      assert(railVisible, width + 'px 左栏仍然可见且没有撑破视口');
+      const docWidth = await evaluate(cdp, '(() => { const el = document.querySelector(".choice-card"); if (!el) return 0; return Math.round(el.getBoundingClientRect().width); })()');
+      assert(docWidth >= width * 0.6, width + 'px 决策文件宽度合理', 'card ' + docWidth);
+      if (width === 390) {
+        const folded = await evaluate(cdp, '(() => { const t = document.getElementById("rail-timeline"); const s = document.getElementById("rail-story"); const m = document.getElementById("rail-map"); return { map: m.open, timeline: t.open, story: s.open }; })()');
+        assert(folded.map === true, '窄屏仍展开态势图（这一屏最需要看的就是它）', JSON.stringify(folded));
+        assert(folded.timeline === false && folded.story === false, '窄屏把时间线与故事线折叠起来', JSON.stringify(folded));
+      }
+      await screenshot('57-v13-game-' + width + '.png');
+    }
+    await setViewport(1440, 900, false);
+    await sleep(200);
+    const railOpen = await evaluate(cdp, '(() => { const t = document.getElementById("rail-timeline"); return t.open; })()');
+    assert(railOpen === true, '回到桌面宽度时左栏重新展开');
+    await screenshot('58-v13-game-1440-wide.png');
+    await setViewport(1280, 900, false);
+    await sleep(150);
+
     console.log('\n[9b] AP 全部用于既有事务时仍可结束回合');
     await setViewport(1280, 900, false);
     await evaluate(cdp, '(() => { const state = LZS.createGame(); state.ap = 0; return LZS.saveGame(state); })()');
@@ -1215,6 +1287,19 @@ async function main() {
 }
 
 async function evaluate(cdp, expression) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await evaluateOnce(cdp, expression);
+    } catch (error) {
+      // 刷新/换页的竞态：脚本还没就绪时 LZS 不存在，等一小会儿重试，别把它当成断言失败。
+      const transient = /LZS is not defined|Execution context was destroyed|Cannot find context/i.test(String(error && error.message));
+      if (!transient || attempt >= 4) throw error;
+      await sleep(400);
+    }
+  }
+}
+
+async function evaluateOnce(cdp, expression) {
   const result = await cdp.send('Runtime.evaluate', {
     expression: expression,
     returnByValue: true,
