@@ -1,4 +1,5 @@
-﻿require('../js/events.js');
+require('../js/events.js');
+require('../js/dynamic.js');
 require('../js/engine.js');
 const L = globalThis.LZS;
 const ids = {};

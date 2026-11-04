@@ -22,6 +22,7 @@
     continueCampaign: document.getElementById('btn-continue-campaign'),
     clearSave: document.getElementById('btn-clear-save'),
     how: document.getElementById('btn-how'),
+    replayRoom: document.getElementById('btn-replay-room'),
     disclaimer: document.getElementById('btn-disclaimer'),
     saveSummary: document.getElementById('save-summary'),
     gameDate: document.getElementById('game-date'),
@@ -72,7 +73,9 @@
     toastTimer: null,
     statesOpen: !window.matchMedia('(max-width: 700px)').matches,
     intelCategory: 'military',
-    opsTab: 'intel'
+    opsTab: 'intel',
+    replaySession: null,
+    replayInfoMode: 'then'
   };
 
   const LOG_TYPE_LABEL = {
@@ -184,6 +187,12 @@
       lines.push('基辅战役：<strong>' + escapeHtml(campaign.dateLabel) + '</strong> · 窗口 ' + campaign.round + ' / ' + campaign.finalRound + ' · 第 ' + (campaign.day || 1) + ' / 38 天 · ' + escapeHtml(saveStateText(campaign)));
     }
     el.saveSummary.innerHTML = lines.length ? '本机存档：' + lines.join('<br>') : '';
+    if (el.replayRoom) {
+      const R = replayApi();
+      const unlocked = R ? R.summary().unlocked : false;
+      el.replayRoom.textContent = unlocked ? '决策推演室' : '决策推演室（通关后解锁）';
+      el.replayRoom.classList.toggle('is-muted', !unlocked);
+    }
   }
 
   function scenarioArg(value) { return value === 'campaign' ? 'campaign' : 'classic'; }
@@ -814,6 +823,13 @@
     return '<section class="echoes" aria-label="此前决定的回响"><h2>此前决定的回响</h2><ul>' + rows.slice(0, 5).map(function (row) { return '<li class="' + row.cls + '">' + escapeHtml(row.text) + '</li>'; }).join('') + '</ul><p class="echo-note">只列出由你此前签发、授权或放弃的事务引起的变化。</p></section>';
   }
 
+  /* 动态事件：显示这条报告的属性（历史事实 / 资料支持的合理决策 / 模拟推演 / 机制假设），
+     不显示内部编号，也不假装它是确凿事实。 */
+  function historyTagHtml(item) {
+    if (!item || item.type !== 'dynamic' || !item.historyLabel) return '';
+    return '<small class="dispatch-history"><span class="history-kind">' + escapeHtml(item.historyLabel) + '</span>' + (item.historyNote ? ' · ' + escapeHtml(item.historyNote) : '') + '</small>';
+  }
+
   function dispatchTrayHtml() {
     const g = ui.game;
     if (!L.getDispatches) return '';
@@ -826,7 +842,7 @@
           const isDefault = option.id === item.defaultOption;
           return '<button type="button" class="mini-action' + (option.ap ? ' is-primary' : '') + '" data-dispatch="' + escapeHtml(item.id) + '" data-option="' + escapeHtml(option.id) + '"' + ((option.ap || 0) > g.ap || g.phase !== 'briefing' ? ' disabled' : '') + '>' + escapeHtml(option.label) + (option.label.indexOf('AP') === -1 ? ' · ' + cost : '') + (isDefault && (item.options || []).length > 1 ? ' · 不处理则默认' : '') + '</button>';
         }).join('') + '</div>';
-      return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' + (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + actions + '</li>';
+      return '<li class="dispatch-item type-' + escapeHtml(item.type) + (item.resolved ? ' is-resolved' : '') + '"><span class="dispatch-kicker">' + escapeHtml(item.kicker || '模拟反馈') + '</span><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.body) + '</p>' + (item.source ? '<small>' + escapeHtml(item.source) + '</small>' : '') + historyTagHtml(item) + actions + '</li>';
     }).join('') + '</ol></section>';
   }
 
@@ -1638,21 +1654,23 @@
     el.ending.innerHTML = '<header class="ending-masthead"><span>总统办公室 / ' + (campaignEnd ? '战役档案' : '阶段档案') + '</span><span>' + (campaignEnd ? '2022.02.24 — ' + (ending.aftermath ? ending.aftermath.endLabel : '04.02') : '2022.02.24 — 03.02') + '</span></header>' +
       '<div class="ending-hero tone-' + escapeHtml(ending.tone || 'danger') + '"><span class="ending-stamp">' + escapeHtml(campaignEnd ? '结局 ' + (ending.code || '') : toneLabel) + '</span><p class="ending-kicker">' + escapeHtml(ending.kicker) + '</p><h1 class="ending-title">' + escapeHtml(ending.title) + '</h1><p class="ending-verdict">' + escapeHtml(ending.verdict) + '</p><div class="ending-meta">' + (campaignEnd ? (ending.aftermath ? '<span>基辅战役 38 天，加收束 ' + ending.aftermath.days + ' 天 · ' : '<span>第 ' + (ending.day || '?') + ' / 38 天 · ') + (ending.finalRound || ui.game.round) + ' 个决策窗口</span>' : '<span>第 ' + (ending.finalRound || ui.game.round) + ' / ' + L.finalRound + ' 回合</span>') + '<span>最终压力 ' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + '</span><span>签发 ' + choices.length + ' 项</span><span>触发 ' + chain.length + ' 项延迟</span></div></div>' +
       '<div class="ending-layout"><div class="ending-column"><section class="ending-section"><span class="section-kicker">AFTER ACTION</span><h2>阶段记录</h2><div class="ending-copy">' + (ending.epilogue || []).map(function (p) { return '<p>' + escapeHtml(p) + '</p>'; }).join('') + '</div></section>' +
-      (campaignEnd ? campaignEndingMainHtml(ending) : '') + aftermathHtml(ending) + governanceHtml(ending) + turningPointsHtml(ending) +
+      (campaignEnd ? campaignEndingMainHtml(ending) : '') + aftermathHtml(ending) + governanceHtml(ending) + turningPointsHtml(ending) + (campaignEnd ? explorationHtml() : '') +
       '<section class="ending-section"><h2>命令如何走向后果</h2><p class="stat-hint">这里优先展示失效、阻塞、撤回与等待核验的命令：总统注意力、机构容量和窗口如何改变结果。</p>' + commandChainHtml + '</section>' +
       '<section class="ending-section"><h2>完整决策链</h2>' + timeline + '</section><section class="ending-section"><h2>延迟后果链</h2>' + chainHtml + '</section></div>' +
       '<aside class="ending-column"><section class="ending-section"><h2>七项最终状态</h2><div class="ending-stats">' + endingStatsHtml(stats) + '</div><div class="ending-pressure"><span>战争压力</span><strong>' + (ending.finalPressure != null ? ending.finalPressure : ui.game.pressure) + ' / 100</strong></div></section>' +
       (campaignEnd ? campaignEndingSideHtml(ending) : '') + trendHtml(ending) + '<section class="ending-section"><h2>判定依据</h2><ul class="ending-reasons">' + (ending.reasons || []).map(function (r) { return '<li>' + escapeHtml(r) + '</li>'; }).join('') + '</ul><p class="stat-hint">结局同时参考多项状态、战争压力与决策链，不是单一分数。</p></section>' + recordsHtml() + '</aside></div>' +
       '<section class="ending-review-invite"><span class="section-kicker">SEALED UNTIL THE END</span><h2>现在，打开事后才能看见的资料。</h2><p>完整模拟参数、逐日事实、当时认知、后来确认、争议与资料来源已独立归档，不再接在结局正文之后。</p><button type="button" class="btn btn-primary" id="btn-history">进入历史复盘</button></section>' +
       '<div class="ending-disclaimer"><strong>模拟说明：</strong>' + escapeHtml(ending.disclaimer || L.meta.disclaimer || '') + '<br>本结局只描述本局模拟参数下的国家状态，不评价真实历史人物。<br>版本 ' + escapeHtml(L.meta.version || '') + ' · 所有数值均为模拟设计参数。</div>' +
-      '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-poster">生成纪念海报</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
+      '<div class="ending-actions"><button type="button" class="btn btn-primary" id="btn-replay">再玩一局</button><button type="button" class="btn btn-ghost" id="btn-replay-room-end">决策推演室</button><button type="button" class="btn btn-ghost" id="btn-back-cover">回到封面</button><button type="button" class="btn btn-ghost" id="btn-poster">生成纪念海报</button><button type="button" class="btn btn-ghost" id="btn-print">打印 / 保存本页</button></div>';
     document.getElementById('btn-history').addEventListener('click', openHistoryReview);
+    const roomEnd = document.getElementById('btn-replay-room-end');
+    if (roomEnd) roomEnd.addEventListener('click', openReplayRoom);
     document.getElementById('btn-replay').addEventListener('click', function () { startNewGame(true, scenarioOf()); });
     document.getElementById('btn-back-cover').addEventListener('click', renderIntro);
     document.getElementById('btn-print').addEventListener('click', function () { window.print(); });
     document.getElementById('btn-poster').addEventListener('click', function () { openPosterModal(ending); });
   }
-
+
   /* 纪念海报：canvas 本地绘制，不上传 */
   function openPosterModal(ending) {
     const P = window.LZS_POSTER;
@@ -1713,6 +1731,240 @@
     });
   }
 
+  /* ---------------------------------------------------------------- 决策推演室
+     视觉是总统办公室里的历史决策档案柜：抽屉、标签、日期，不是关卡大厅。
+     所有推演内容都带「决策推演」标识与「模型推演，不代表真实历史」。 */
+
+  function replayApi() { return window.LZS_REPLAY || null; }
+
+  function replayRoomHtml() {
+    const R = replayApi();
+    if (!R) return '<p class="empty-note">推演档案暂时不可用，请刷新页面。</p>';
+    const sum = R.summary();
+    if (!sum.unlocked) {
+      return '<div class="replay-locked"><p class="replay-locked-title">档案柜还没有解锁。</p><p>先在「2022 · 基辅防御战役」里完整走完一次战役，抽屉才会打开。推演不是另一条由你选择的架空历史，而是回到真实决策点，重新看当时的条件。</p>' +
+        '<p class="stat-hint">已完成的战役：' + sum.completedCampaigns + ' 次。</p>' +
+        '<div class="replay-locked-list"><span>' + R.modules.map(function (m) { return escapeHtml(m.dateLabel.split(' — ')[0] + ' · ' + m.title.split('：')[0]); }).join('</span><span>') + '</span></div></div>';
+    }
+    return '<div class="replay-room">' +
+      '<p class="replay-lead">这里保存的是这场战役里真实存在过的决策点。每个抽屉只模拟与该决策直接相关的后续，并且区分历史事实、资料支持的决策、模拟推演与机制假设。</p>' +
+      '<p class="replay-warn">所有推演内容都标注「决策推演」。结论是模型推演，不代表真实历史。</p>' +
+      '<div class="replay-cabinet">' + sum.modules.map(function (m) {
+        const used = m.attempts ? '已推演 ' + m.attempts + ' 次' : '尚未推演';
+        return '<article class="replay-drawer" data-replay-drawer="' + escapeHtml(m.id) + '">' +
+          '<header><span class="replay-date">' + escapeHtml(m.dateLabel) + '</span><span class="replay-badge">决策推演</span></header>' +
+          '<h3>' + escapeHtml(m.title) + '</h3><p>' + escapeHtml(m.subtitle) + '</p>' +
+          '<dl class="replay-meta"><dt>模拟范围</dt><dd>' + escapeHtml(m.durationLabel) + '</dd><dt>长度</dt><dd>' + escapeHtml(m.lengthLabel) + '</dd><dt>记录</dt><dd>' + escapeHtml(used) + '</dd></dl>' +
+          '<button type="button" class="btn btn-ghost replay-open" data-replay-open="' + escapeHtml(m.id) + '">打开抽屉</button></article>';
+      }).join('') + '</div>' +
+      '<p class="stat-hint">推演记录与真实战役记录分开保存，不会覆盖你的战役存档与结局记录。</p></div>';
+  }
+
+  function bindReplayRoom(card) {
+    Array.prototype.forEach.call(card.querySelectorAll('[data-replay-open]'), function (button) {
+      button.addEventListener('click', function () { openReplayModule(button.getAttribute('data-replay-open')); });
+    });
+  }
+
+  function openReplayRoom() {
+    const R = replayApi();
+    if (!R) { toast('推演档案暂时不可用。', true); return; }
+    openModal({
+      kicker: '总统办公室 / 历史决策档案柜',
+      title: '决策推演室',
+      wide: true,
+      className: 'replay-modal',
+      body: replayRoomHtml(),
+      actions: [{ label: '合上档案柜', className: 'btn btn-ghost' }],
+      onMount: bindReplayRoom
+    });
+  }
+
+  function replayStartHtml(module, infoMode) {
+    const R = replayApi();
+    return '<div class="replay-start">' +
+      '<p class="replay-warn">决策推演 · 模型推演，不代表真实历史</p>' +
+      '<dl class="replay-meta replay-meta-wide">' +
+      '<dt>时间</dt><dd>' + escapeHtml(module.dateLabel) + '</dd>' +
+      '<dt>模拟范围</dt><dd>' + escapeHtml(module.durationLabel) + '（' + escapeHtml(R.lengthLabel(module)) + '）</dd></dl>' +
+      '<h3>真实历史背景</h3><p>' + escapeHtml(module.background) + '</p>' +
+      '<h3>当时决策者能得到的信息</h3>' + listHtml(module.knownThen) +
+      '<h3>当时实际存在的选择</h3><ul class="replay-option-list">' + module.optionsThen.map(function (option) {
+        return '<li><strong>' + escapeHtml(option.label) + '</strong><span class="history-kind kind-' + escapeHtml(option.kind) + '">' + escapeHtml(R.kinds[option.kind] || R.kinds.simulated) + '</span><p>' + escapeHtml(option.note) + '</p></li>';
+      }).join('') + '</ul>' +
+      '<h3>信息限制说明</h3><p>' + escapeHtml(module.infoLimitNote) + '</p>' +
+      '<fieldset class="replay-mode"><legend>选择推演视角</legend>' +
+      '<label><input type="radio" name="replay-mode" value="then"' + (infoMode === 'then' ? ' checked' : '') + '><span><strong>当时视角</strong>：只显示当时合理可得的信息，隐藏后来才确认的内容。这是信息限制，不代表你真的不知道。</span></label>' +
+      '<label><input type="radio" name="replay-mode" value="all"' + (infoMode === 'all' ? ' checked' : '') + '><span><strong>完整视角</strong>：同时显示事后确认的信息，方便对照。</span></label></fieldset>' +
+      '<p class="stat-hint">推演只模拟与这个决策直接相关的后续，不会重放整场战役；任何一条结论都不是已经发生过的事。</p></div>';
+  }
+
+  function openReplayModule(moduleId) {
+    const R = replayApi();
+    const module = R && R.moduleOf(moduleId);
+    if (!module) { toast('没有找到这份档案。', true); return; }
+    ui.replaySession = null;
+    openModal({
+      kicker: '决策推演 · 档案封面',
+      title: module.title,
+      wide: true,
+      className: 'replay-modal',
+      body: replayStartHtml(module, 'then'),
+      actions: [
+        { label: '开始推演', className: 'btn btn-primary', close: false, onClick: function () { startReplaySession(moduleId); } },
+        { label: '放回档案柜', className: 'btn btn-ghost', close: true, onClick: openReplayRoom }
+      ],
+      onMount: function (card) {
+        Array.prototype.forEach.call(card.querySelectorAll('input[name="replay-mode"]'), function (input) {
+          input.addEventListener('change', function () { ui.replayInfoMode = input.value; });
+        });
+        ui.replayInfoMode = (card.querySelector('input[name="replay-mode"]:checked') || {}).value || 'then';
+      }
+    });
+  }
+
+  function startReplaySession(moduleId) {
+    const R = replayApi();
+    if (!R) return;
+    const session = R.createSession(moduleId, { infoMode: ui.replayInfoMode || 'then' });
+    if (!session) { toast('这份档案没有可用的推演内容。', true); return; }
+    ui.replaySession = session;
+    renderReplayStep();
+  }
+
+  function replayStepHtml(session) {
+    const R = replayApi();
+    const module = R.moduleOf(session.moduleId);
+    const step = session.visibleStep;
+    if (!step) return '<p class="empty-note">推演内容缺失。</p>';
+    const progress = session.path.length + 1;
+    return '<div class="replay-step"><p class="replay-warn">决策推演 · ' + escapeHtml(session.infoModeLabel || (session.infoMode === 'then' ? '当时视角' : '完整视角')) + '</p>' +
+      '<header class="replay-step-head"><span>' + escapeHtml(step.date) + ' · 第 ' + progress + ' / ' + session.stepCount + ' 个决策点</span><h3>' + escapeHtml(step.title) + '</h3></header>' +
+      '<p>' + escapeHtml(step.situation) + '</p>' +
+      '<h4>你现在能得到的</h4>' + listHtml(step.intel.map(function (item) { return item.text; })) +
+      (step.hiddenCount ? '<p class="stat-hint">按当时视角，另有 ' + step.hiddenCount + ' 条事后才确认的信息不显示。</p>' : '') +
+      '<h4>可选行动</h4><div class="replay-actions">' + step.choices.map(function (choice) {
+        return '<button type="button" class="replay-choice" data-replay-choice="' + escapeHtml(choice.id) + '"><strong>' + escapeHtml(choice.label) + '</strong><span class="history-kind kind-' + escapeHtml(choice.kind) + '">' + escapeHtml(choice.kindLabel) + '</span>' + (choice.note ? '<small>' + escapeHtml(choice.note) + '</small>' : '') + '</button>';
+      }).join('') + '</div>' +
+      '<p class="stat-hint">这些选项里，有的与公开资料一致，有的只是为了让条件可比较而设的对照。开始后不能退回上一个决策点。</p></div>';
+  }
+
+  function renderReplayStep() {
+    const R = replayApi();
+    const session = ui.replaySession;
+    if (!R || !session) { openReplayRoom(); return; }
+    const module = R.moduleOf(session.moduleId);
+    openModal({
+      kicker: '决策推演 · 进行中',
+      title: module.title,
+      wide: true,
+      className: 'replay-modal',
+      body: replayStepHtml(session),
+      actions: [{ label: '中止推演', className: 'btn btn-ghost', close: true, onClick: openReplayRoom }],
+      onMount: function (card) {
+        Array.prototype.forEach.call(card.querySelectorAll('[data-replay-choice]'), function (button) {
+          button.addEventListener('click', function () { chooseReplay(button.getAttribute('data-replay-choice')); });
+        });
+      }
+    });
+  }
+
+  function chooseReplay(choiceId) {
+    const R = replayApi();
+    const session = ui.replaySession;
+    if (!R || !session) { openReplayRoom(); return; }
+    const result = R.choose(session, choiceId);
+    if (!result.ok) { toast(result.reason || '这一步无法继续。', true); return; }
+    if (A) A.playSfx('file');
+    if (result.finished) {
+      R.recordRun(session);
+      renderReplayResult(session);
+      return;
+    }
+    renderReplayStep();
+  }
+
+  function renderReplayResult(session) {
+    const R = replayApi();
+    const module = R.moduleOf(session.moduleId);
+    const result = session.result;
+    const diverge = result.divergences.length ? result.divergences.map(function (item) {
+      return '<li><span>' + escapeHtml(item.step) + '</span><strong>你的选择：' + escapeHtml(item.player) + '</strong><p>历史基准线：' + escapeHtml(item.baseline) + ' · ' + (item.same ? '与历史进程方向一致' : '与历史进程不同') + '</p></li>';
+    }).join('') : '<li><span>—</span><strong>这一步没有可对照的历史基准线</strong></li>';
+    const lines = result.lines.map(function (line) {
+      return '<tr><td>' + escapeHtml(line.date) + '<br><small>' + escapeHtml(line.choice) + '</small></td><td>' + escapeHtml(line.gain) + '</td><td>' + escapeHtml(line.risk) + '</td><td>' + escapeHtml(line.need) + '</td><td>' + escapeHtml(line.enemy) + '</td><td>' + escapeHtml(line.later) + '</td><td>' + escapeHtml(line.uncertainty) + '</td></tr>';
+    }).join('');
+    openModal({
+      kicker: '决策推演 · 结束',
+      title: module.title + ' · 推演记录',
+      wide: true,
+      className: 'replay-modal',
+      body: '<div class="replay-result"><p class="replay-warn">' + escapeHtml(result.disclaimer) + ' · ' + escapeHtml(result.infoModeLabel) + '</p>' +
+        '<h3>你的推演路径</h3><ol class="replay-path">' + result.path.map(function (label) { return '<li>' + escapeHtml(label) + '</li>'; }).join('') + '</ol>' +
+        '<h3>与历史基准线的差异</h3><ul class="replay-diff">' + diverge + '</ul><p class="stat-hint">' + escapeHtml(result.baselineNote) + '</p>' +
+        '<h3>反事实分析</h3><div class="replay-table-wrap"><table class="replay-table"><thead><tr><th>决策点</th><th>可能收益</th><th>潜在风险</th><th>资源要求</th><th>敌方应对</th><th>对后续决策的影响</th><th>模型不确定性</th></tr></thead><tbody>' + lines + '</tbody></table></div>' +
+        '<p class="stat-hint">以上每一格都是模型推演，不是确定事件，也不代表真实历史中的选择。</p>' +
+        '<h3>哪些无法用现有资料确认</h3>' + listHtml(result.uncertainty) +
+        '<h3>这个决策点最终留下了什么</h3><p>' + escapeHtml(result.ending.text) + '</p>' +
+        '<p class="stat-hint">推演记录已单独保存，不会改写你的战役存档与结局记录。</p></div>',
+      actions: [
+        { label: '再推演一次', className: 'btn btn-primary', close: false, onClick: function () { openReplayModule(module.id); } },
+        { label: '回到档案柜', className: 'btn btn-ghost', close: true, onClick: openReplayRoom }
+      ]
+    });
+  }
+
+  /* 战役探索记录：完成次数、关键路线、已触发的条件事件、分支探索情况、已完成的推演、尚未经历的路线。
+     数据来自独立的多周目档案（lzs_archive_v1），没有经验值、等级或胜利积分。 */
+  function archiveApi() { return window.LZS_ARCHIVE || null; }
+
+  function explorationHtml() {
+    const R = replayApi();
+    const A = archiveApi();
+    const records = L.getRecords ? (L.getRecords().runs || []).filter(function (r) { return r.scenario === 'campaign'; }) : [];
+    if (!records.length) return '';
+    const game = ui.game;
+    const dyn = (game && game.campaign && game.campaign.dyn) ? game.campaign.dyn : { fired: {}, log: [] };
+    const firedIds = Object.keys(dyn.fired || {});
+    const dynApi = window.LZS_DYNAMIC || null;
+    const summary = (dynApi && dynApi.summary) ? dynApi.summary(game) : null;
+    const hints = (dynApi && dynApi.branchHints) ? dynApi.branchHints(game) : [];
+    const replaySum = R ? R.summary() : null;
+    const archive = (A && A.summary) ? A.summary() : null;
+    const completed = archive ? archive.completed : records.length;
+    const routeLines = (archive && archive.runs.length ? archive.runs : records.slice(-6).reverse()).map(function (run) {
+      const decisions = (run.route || []).length;
+      const events = (run.events || []).length;
+      return '<li><strong>' + escapeHtml(run.endingTitle || run.endingId) + '</strong><span>' +
+        (run.styleLabel ? escapeHtml(run.styleLabel) + ' · ' : '') +
+        (run.days ? escapeHtml(String(run.days)) + ' 天 · ' : (run.round ? '窗口 ' + run.round + ' · ' : '')) +
+        (decisions ? decisions + ' 项决定' : '') +
+        (events ? ' · ' + events + ' 条条件事件' : '') + '</span></li>';
+    }).join('');
+    const hintLines = hints.map(function (hint) {
+      const stateText = hint.state === 'explored' ? '已走过' : hint.state === 'partial' ? '走过一部分' : '尚未探索';
+      return '<li class="branch-hint is-' + escapeHtml(hint.state) + '"><span>' + escapeHtml(hint.label) + '</span><strong>' + escapeHtml(stateText) + '</strong><small>' + hint.seen + ' / ' + hint.total + ' 条相关事件</small></li>';
+    }).join('');
+    const replayLines = replaySum ? replaySum.modules.map(function (m) {
+      return '<li class="' + (m.attempts ? 'is-done' : 'is-todo') + '"><span>' + escapeHtml(m.title.split('：')[0]) + '</span><strong>' + (m.attempts ? '已完成 ' + m.attempts + ' 次' : (replaySum.unlocked ? '可以开始' : '通关后解锁')) + '</strong></li>';
+    }).join('') : '';
+    const unexploredLines = (archive && archive.unexplored && archive.unexplored.length) ? archive.unexplored.map(function (item) {
+      return '<li class="branch-hint is-unexplored"><span>' + escapeHtml(item.label) + '</span><strong>尚未探索</strong><small>不提前说明内容</small></li>';
+    }).join('') : '';
+    const seenEvents = (archive && archive.eventsSeen && archive.eventsSeen.length ? archive.eventsSeen : firedIds).map(function (id) {
+      const template = (dynApi && dynApi.byId) ? dynApi.byId(id) : null;
+      return template ? template.title : id;
+    });
+    return '<section class="ending-section exploration"><h2>战役探索记录</h2><p class="stat-hint">记录你在这台设备上走过的路线、出现过的条件事件与做过哪些推演。没有经验值、等级或胜利积分。</p>' +
+      '<dl class="exploration-facts"><dt>完成战役</dt><dd>' + completed + ' 次</dd><dt>本局条件事件</dt><dd>' + firedIds.length + ' / ' + (summary ? summary.total : firedIds.length) + '</dd><dt>跨周目事件</dt><dd>' + ((archive && archive.eventsSeenCount) || 0) + ' 条</dd><dt>已完成推演</dt><dd>' + (replaySum ? replaySum.totalRuns : 0) + ' 次</dd></dl>' +
+      '<h3>已经过的路线</h3><ol class="exploration-routes">' + routeLines + '</ol>' +
+      (hintLines ? '<h3>重大决策分支</h3><ul class="branch-hints">' + hintLines + '</ul><p class="stat-hint">这里只说「走过 / 没走过」，不提前告诉你没走过的内容。</p>' : '') +
+      (unexploredLines ? '<h3>还没经历的路线</h3><ul class="branch-hints">' + unexploredLines + '</ul>' : '') +
+      (replayLines ? '<h3>决策推演</h3><ul class="exploration-replay">' + replayLines + '</ul>' : '') +
+      '<p class="stat-hint">触发过的条件事件：' + (seenEvents.length ? escapeHtml(seenEvents.slice(0, 10).join('；')) + (seenEvents.length > 10 ? ' 等' : '') : '还没有触发条件事件。') + '</p>' +
+      (archive && archive.broken ? '<p class="stat-hint">上次的探索记录无法解析，原文已经另存一份备份，现有记录没有被覆盖。</p>' : '') + '</section>';
+  }
+
   function init() {
     document.addEventListener('click', function (ev) {
       const b = ev.target && ev.target.closest ? ev.target.closest('[data-wrap-finish]') : null;
@@ -1726,6 +1978,7 @@
     if (el.campaign) el.campaign.addEventListener('click', function () { requestStart('campaign'); });
     if (el.continueCampaign) el.continueCampaign.addEventListener('click', function () { loadGame('campaign'); });
     el.how.addEventListener('click', openHowToPlay);
+    if (el.replayRoom) el.replayRoom.addEventListener('click', openReplayRoom);
     el.disclaimer.addEventListener('click', openDisclaimer);
     el.helpBtn.addEventListener('click', openHowToPlay);
     el.audioBtn.addEventListener('click', openAudioSettings);
