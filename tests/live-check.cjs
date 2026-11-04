@@ -120,20 +120,34 @@ async function main() {
       return evaluate(cdp, 'document.readyState === "complete" && !!window.LZS && !!document.getElementById("btn-start")');
     }, 30000);
 
-    const info = await evaluate(cdp, 'JSON.stringify({ver: (window.EVENTS_DATA && window.EVENTS_DATA.ui && window.EVENTS_DATA.ui.version) || (window.LZS && window.LZS.META && window.LZS.META.version) || null, dyn: !!window.LZS_DYNAMIC, rep: !!window.LZS_REPLAY, arc: !!window.LZS_ARCHIVE, wb: !!window.LZS_WORKBENCH, story: !!window.LZS_STORYLINES, aw: !!window.LZS_AFTERWARD, dynCount: window.LZS_DYNAMIC ? window.LZS_DYNAMIC.count : null, repCount: window.LZS_REPLAY ? window.LZS_REPLAY.count : null, storyCount: window.LZS_STORYLINES ? window.LZS_STORYLINES.count : null, awCount: window.LZS_AFTERWARD ? window.LZS_AFTERWARD.count : null, btn: (document.getElementById("btn-replay-room")||{}).textContent, awBtn: (document.getElementById("btn-afterward-intro")||{}).textContent, wbNote: (document.getElementById("intro-version")||{}).textContent, fatal: !!document.querySelector(".fatal")})');
+    const info = await evaluate(cdp, 'JSON.stringify({ver: (window.EVENTS_DATA && window.EVENTS_DATA.ui && window.EVENTS_DATA.ui.version) || (window.LZS && window.LZS.META && window.LZS.META.version) || null, dyn: !!window.LZS_DYNAMIC, rep: !!window.LZS_REPLAY, arc: !!window.LZS_ARCHIVE, wb: !!window.LZS_WORKBENCH, story: !!window.LZS_STORYLINES, aw: !!window.LZS_AFTERWARD, vis: !!window.LZS_VISUAL, visVer: window.LZS_VISUAL ? window.LZS_VISUAL.version : null, dynCount: window.LZS_DYNAMIC ? window.LZS_DYNAMIC.count : null, repCount: window.LZS_REPLAY ? window.LZS_REPLAY.count : null, storyCount: window.LZS_STORYLINES ? window.LZS_STORYLINES.count : null, awCount: window.LZS_AFTERWARD ? window.LZS_AFTERWARD.count : null, lines: window.LZS_VISUAL ? window.LZS_VISUAL.lines.length : null, btn: (document.getElementById("btn-replay-room")||{}).textContent, awBtn: (document.getElementById("btn-afterward-intro")||{}).textContent, wbNote: (document.getElementById("intro-version")||{}).textContent, cover: !!document.querySelector(".cover-plate img"), fatal: !!document.querySelector(".fatal")})');
     const parsed = JSON.parse(info);
     console.log('  live: ' + info);
     assert(!parsed.fatal, '线上页面没有载入失败');
     assert(parsed.dyn && parsed.rep && parsed.arc, '三个 v1.1 脚本都在线上加载');
     assert(parsed.wb, 'v1.1.1 的总统工作台脚本在线上加载');
     assert(parsed.story && parsed.aw, 'v1.2 的故事线与历史回声脚本都在线上加载');
+    assert(parsed.vis && parsed.visVer === '1.3.0', 'v1.3 的视觉层脚本在线上加载', info);
+    assert(parsed.lines === 8, '线上视觉层认识八条故事线', info);
     assert(parsed.dynCount === 37 && parsed.repCount === 6, '线上事件模板 37 条、推演模块 6 个', info);
     assert(parsed.storyCount === 8 && parsed.awCount === 4, '线上故事线 8 条、历史回声 4 条', info);
     assert(/决策推演室/.test(parsed.btn || ''), '封面有推演室入口', parsed.btn);
     assert(/通关后解锁/.test(parsed.btn || ''), '没有战役记录时显示解锁条件', parsed.btn);
     assert(/后来，战争走到了这里/.test(parsed.awBtn || ''), '封面有历史回声入口', parsed.awBtn);
-    const hasVer = await evaluate(cdp, 'document.body.innerText.indexOf("1.2.0") !== -1');
-    assert(hasVer, '页面文案里能读到 1.2.0');
+    assert(parsed.cover, '线上封面插画元素存在');
+    const hasVer = await evaluate(cdp, 'document.body.innerText.indexOf("1.3.0") !== -1');
+    assert(hasVer, '页面文案里能读到 1.3.0');
+
+    const assets = await evaluate(cdp, '(async function () { const urls = ["assets/fonts/archive-serif.woff2", "assets/visual/paper-fiber.webp", "assets/visual/wall-grain.webp", "assets/visual/v13/cover-desk.svg", "css/style.css"]; const out = []; for (const u of urls) { try { const r = await fetch(u, { method: "GET" }); out.push({ url: u, status: r.status, bytes: (await r.arrayBuffer()).byteLength }); } catch (e) { out.push({ url: u, status: 0, bytes: 0 }); } } return JSON.stringify(out); })()');
+    const assetList = JSON.parse(assets);
+    console.log('  assets: ' + JSON.stringify(assetList.map(function (a) { return a.url + ':' + a.status + '/' + a.bytes; })));
+    assetList.forEach(function (a) {
+      assert(a.status === 200 && a.bytes > 0, '线上资源可加载：' + a.url, JSON.stringify(a));
+    });
+    const fontAsset = assetList.find(function (a) { return /archive-serif/.test(a.url); });
+    assert(fontAsset && fontAsset.bytes > 200000 && fontAsset.bytes < 900000, '线上字体子集体积合理', JSON.stringify(fontAsset));
+    const fontOk = await evaluate(cdp, '(function () { if (!document.fonts) return false; const s = document.createElement("span"); s.style.font = \'700 40px "Archive Serif"\'; s.textContent = "档"; document.body.appendChild(s); const m = document.fonts.check(\'700 40px "Archive Serif"\'); s.remove(); return m; })()');
+    assert(fontOk === true, '线上标题字体真的加载了（不是只写了 @font-face）');
 
     await evaluate(cdp, 'document.getElementById("btn-replay-room").click()');
     await sleep(800);
