@@ -13,6 +13,7 @@
     "check": "node --check js/events.js && node --check js/intel.js && node --check js/strategy.js && node --check js/campaign.js && node --check js/dynamic.js && node --check js/replay.js && node --check js/archive.js && node --check js/engine.js && node --check js/history.js && node --check js/review.js && node --check js/audio.js && node --check js/qr.js && node --check js/poster.js && node --check js/main.js",
     "test:campaign": "node tests/campaign.test.cjs && node tests/governance.test.cjs && node tests/poster.test.cjs",
     "test:v11": "node tests/dynamic.test.cjs && node tests/replay.test.cjs && node tests/archive.test.cjs && node tests/routes.test.cjs",
+    "test:live": "node tests/live-check.cjs",
     "campaign:audit": "node tests/campaign-sim.cjs",
     "campaign:strategy": "node tests/campaign-audit.cjs"
   },
