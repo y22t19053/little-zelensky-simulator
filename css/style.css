@@ -1088,3 +1088,5 @@ p.campaign-day { color: var(--text); font: 12px var(--mono); }
   .replay-table { min-width: 0; font-size: .76rem; }
   .replay-step-head { flex-direction: column; gap: 2px; }
 }
+.intro-version { margin: 10px 0 0; color: #8b9184; font-size: .74rem; letter-spacing: .04em; }
+.intro-version span { color: #c8b273; }

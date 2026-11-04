@@ -25,6 +25,7 @@
     replayRoom: document.getElementById('btn-replay-room'),
     disclaimer: document.getElementById('btn-disclaimer'),
     saveSummary: document.getElementById('save-summary'),
+    introVersion: document.getElementById('intro-version'),
     gameDate: document.getElementById('game-date'),
     gamePhase: document.getElementById('game-phase'),
     pressureValue: document.getElementById('pressure-value'),
@@ -192,6 +193,9 @@
       const unlocked = R ? R.summary().unlocked : false;
       el.replayRoom.textContent = unlocked ? '决策推演室' : '决策推演室（通关后解锁）';
       el.replayRoom.classList.toggle('is-muted', !unlocked);
+    }
+    if (el.introVersion && L.meta && L.meta.version) {
+      el.introVersion.textContent = 'v' + L.meta.version;
     }
   }
 
